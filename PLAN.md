@@ -346,10 +346,10 @@ Executed in order. Each group ends at a **gate** that must pass before moving on
 
 - **E1:** verified.
 - **E4:** deferred to Group F.
-- **Email confirmation:** disabled for development.
+- **Email confirmation:** disabled for development (verified: provider on, sign-ups allowed, `mailer_autoconfirm: true`).
 - **Gate E:** not passed pending formal E4 deferral reconciliation.
 
-**Group E — as built (v8):**
+**Group E — as built (v9):**
 
 - **E1 done and verified.** The owner created the `mbc-arena` project and filled `frontend/.env.local` (gitignored,
   never committed). `npm run check:supabase` probes the live project without printing secrets and reports:
@@ -372,11 +372,10 @@ Executed in order. Each group ends at a **gate** that must pass before moving on
 - **Gate E evidence.** Connectivity and key rejection are covered by `npm run check:supabase`; env validation and
   the clear `SupabaseConfigError` are covered by 13 unit tests. The error path has not been exercised through the
   running app because nothing consumes the client until Group G — wiring the session provider belongs there.
-- **Email confirmation (development).** The owner has disabled email confirmation for the development project. A
-  live probe at the time of writing still returned `mailer_autoconfirm: false` together with `external.email: false`,
-  and `signInWithPassword` returned `email_provider_disabled`. That means the **Email provider itself is currently
-  off**, which blocks all email sign-in and sign-up. Re-enable Authentication → Providers → Email and leave
-  "Confirm email" off before Group G; confirmation being off is the intended state, disabling the provider is not.
+- **Email confirmation (development) — verified.** The Email provider is enabled, sign-ups are allowed
+  (`disable_signup: false`), and `mailer_autoconfirm: true`, so confirmation is off. A live `signInWithPassword`
+  probe returns `invalid_credentials` instead of `email_provider_disabled`, confirming email authentication is
+  active. This configuration is for development only: production must require confirmation.
 - **Not started (belongs to F–H, and explicitly out of this authorisation):** migrations, identity tables, RLS,
   registration approval, and the real auth provider. The development persona adapter is still the only session
   source, so nothing about authentication is being presented as real.
@@ -531,9 +530,9 @@ of `dist/`. No club module renders data yet — each later-phase route shows a "
 `frontend/.env.local` (gitignored), the client reaches GoTrue v2.197.0 and the database API, accepts the
 `sb_publishable_…` key, starts with no stored session, and finds an empty `public` schema — as expected before
 Group F. `npm run check:supabase` reproduces this check without printing the key. No migration, policy, generated
-type, or real authentication exists yet. Email confirmation is disabled for development; however, the live probe
-currently returns `email_provider_disabled`, so the Email provider itself must be re-enabled (with confirmation
-left off) before Group G. E4 is deferred to Group F and Gate E stays open until that deferral is formally reconciled.
+type, or real authentication exists yet. Email confirmation is disabled for development and verified
+(`mailer_autoconfirm: true` with the Email provider enabled); production must re-enable confirmation. E4 is
+deferred to Group F and Gate E stays open until that deferral is formally reconciled.
 
 **Design note (Group C):** `--color-text-faint` was raised from `#61707F` to `#7A8998` because the original
 measured 3.64:1 and failed WCAG AA for small text. It now measures 4.83:1 on the darkest surface and 5.43:1 on `bg`.
@@ -551,7 +550,7 @@ registration-approval, and RLS work is tracked as Groups F–H and has not been 
 
 - Create the Supabase project and keep the credentials (Group E1) — **done**.
 - Copy `frontend/.env.example` to `frontend/.env.local` and paste `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from Project Settings → API — **done**. Never put the service-role or secret key in a `VITE_` variable; `.env.local` is gitignored and must stay uncommitted.
-- Email confirmation is disabled for development (owner action). The live probe still reports the Email provider off (`email_provider_disabled`); re-enable Authentication → Providers → Email with "Confirm email" off before Group G.
+- Email confirmation is disabled for development and verified (`mailer_autoconfirm: true`, sign-ups allowed). Production must require confirmation.
 - Approve the start of Group F when you are ready. Type generation will run there once the schema exists.
 
 **Resolved:** first Super Admin bootstrap method (D8), Round Robin tie-break (D9), Mixed Doubles pairing (D10). Remaining open items are the SP and season rules in §7.
@@ -570,4 +569,5 @@ registration-approval, and RLS work is tracked as Groups F–H and has not been 
 | v6 | 2026-10-30 | Group E started. E2/E3/E5 implemented and tested (env validation rejects service-role keys; single lazy client). E1/E4 blocked: no Supabase project or credentials exist and no CLI/Docker is available. Gate E not attempted; F–H remain unstarted. |
 | v7 | 2026-10-30 | E1 verified against the live `mbc-arena` project (GoTrue v2.197.0, publishable key accepted, empty `public` schema, no stored session) and `npm run check:supabase` added. E4 remains blocked: no CLI/access token and no tables yet, so types are deferred to F. Gate E not passed. Recorded that email confirmation is still enabled (`mailer_autoconfirm: false`) despite the development decision. |
 | v8 | 2026-10-30 | Email confirmation disabled for development. Status fixed as: E1 verified, E4 deferred to Group F, email confirmation disabled for development, Gate E not passed pending formal E4 deferral reconciliation. A live probe still reports the Email provider off (`email_provider_disabled`), recorded as a pre-G check. Group F remains blocked on explicit approval. |
+| v9 | 2026-10-30 | Email provider re-enabled with confirmation off. Live verification: `mailer_autoconfirm: true`, sign-ups allowed, and a sign-in probe returns `invalid_credentials` rather than `email_provider_disabled`. Email configuration marked verified for development; production must require confirmation. Gate E still open on the E4 deferral; Group F still awaits explicit approval. |
 
