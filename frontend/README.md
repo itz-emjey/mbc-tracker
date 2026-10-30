@@ -46,8 +46,9 @@ npm run check:supabase       # prints PASS/FAIL, never the key
 - `src/lib/supabase.ts` creates the single client, typed with the generated `Database` type (session persistence and
   token refresh enabled).
 - `npm run check:supabase` probes GoTrue and the database API with the configured key and reports PASS/FAIL without
-  printing secrets. The database probe queries a deliberately missing table, so `PGRST205` is the expected success
-  signal.
+  printing secrets. It also checks that all nine Phase 1 tables exist and that `anon` receives `42501` from each
+  one; the deliberately missing probe table should still return `PGRST205`. If the Auth health request fails with a
+  transient network error, re-run once.
 - Never place the service-role key in a `VITE_` variable: Vite inlines those values into the public bundle.
 - **Database types** live in `src/types/database.ts` and are generated with `supabase gen types`; never edit them by
   hand. Regenerate after every migration (see `../backend/README.md` for the command).

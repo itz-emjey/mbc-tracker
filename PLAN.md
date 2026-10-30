@@ -2,7 +2,7 @@
 
 > **Source of truth for requirements:** `AGENT.md`
 > **This document:** the approved working plan — architecture, design system, schema, phases, Phase 1 checklist, and open business rules.
-> **Status:** v10 — architecture, stack, design, and roadmap approved. Groups A–E are complete; Group F (identity schema, RLS policies, local SQL tests, generated types) is implemented and locally verified. The hosted Supabase schema still needs the committed SQL applied. Group G is not started and awaits explicit approval.
+> **Status:** v11 — architecture, stack, design, and roadmap approved. Groups A–E are complete. Group F (identity schema, RLS policies, local SQL tests, generated types) is implemented, locally verified, and applied to the hosted Supabase project. Group G is not started and awaits explicit approval.
 
 ### Approved decisions
 
@@ -366,8 +366,7 @@ Executed in order. Each group ends at a **gate** that must pass before moving on
   only matches are documentation and tests that reject such keys.
 - **E4 completed in Group F.** `frontend/src/types/database.ts` was generated with the Supabase CLI from the
   migration schema (nine tables plus `has_role`), and `src/lib/supabase.ts` now uses `SupabaseClient<Database>`.
-  Regenerate the file against the hosted project once the migrations are applied there, and after every later
-  migration.
+  Regenerate the file against the hosted project for the authoritative refresh, and after every later migration.
 - **Gate E evidence.** Connectivity and key rejection are covered by `npm run check:supabase`; env validation and
   the clear `SupabaseConfigError` are covered by 13 unit tests. The error path reaches the running app only when
   Group G wires the session provider; the E4 deferral is now reconciled.
@@ -386,7 +385,7 @@ Executed in order. Each group ends at a **gate** that must pass before moving on
 - [x] F4. `has_role(uuid, role)` as `security definer`, `search_path` pinned.
 - [x] F5. RLS enabled on **every** table in the migration, with policies in `backend/policies/`.
 - [x] F6. Column privileges: players cannot write `sp_accounts` or role tables — no policy grants it, and no `INSERT`/`UPDATE` grant exists.
-- **Gate F:** migration applies from an empty database without manual dashboard edits; re-running it fails loudly rather than silently. **Verified locally: 41/41 checks. Hosted project application is the remaining manual step.**
+- **Gate F:** migration applies from an empty database without manual dashboard edits; re-running it fails loudly rather than silently. **Passed:** all five files applied to the hosted project; local harness 41/41; a PostgREST probe with the publishable key now returns `42501 permission denied` for all nine tables to `anon` (tables exist, anon grants are revoked).
 
 **Group F — as built (v10):**
 
@@ -415,10 +414,10 @@ Executed in order. Each group ends at a **gate** that must pass before moving on
 - **E4 closed.** `frontend/src/types/database.ts` is generated with `supabase gen types typescript` from the
   migration schema, and `src/lib/supabase.ts` is now `SupabaseClient<Database>`. Typecheck and lint pass. The types
   must be regenerated against the hosted project after the migrations are applied there.
-- **Known limitations.** The hosted `public` schema is still empty until the developer runs the five SQL files in
-  the Supabase SQL Editor; no credentials are stored or requested to do this automatically. `app_settings` has no
-  seed rows. Approval/linking/starting-SP RPCs and the real session provider remain Group G. The SP bootstrap is
-  schema only — no formula or engine.
+- **Known limitations.** `app_settings` has no seed rows. Approval/linking/starting-SP RPCs and the real session
+  provider remain Group G. The SP bootstrap is schema only — no formula or engine. The committed types were
+  generated from the same migrations against a local Postgres; they match the hosted schema, but regenerating them
+  against the hosted project is still the authoritative refresh.
 
 #### Group G — Auth lifecycle
 - [ ] G1. Sign up form (email, password, full name) with Zod validation shared with the server check.
@@ -548,20 +547,21 @@ Payment gateway integration, ELO ratings, public API, native mobile app, light t
 | C — Design system foundation | ✅ Complete (19 primitives, 8 shared components, `/dev/ui` gallery at `dev-gallery.html`) |
 | D — App shell and routing | ✅ Complete and approved (shell, role-aware nav, guards, 403/404/loading/error, dev-only session) |
 | E — Supabase wiring | ✅ Complete (E1–E5; E4 closed in F; client typed; Gate E reconciled) |
-| F — Identity migration | 🟡 Implemented and locally verified (41/41); hosted application and type refresh pending; awaiting approval for G |
+| F — Identity migration | ✅ Complete — local 41/41; five SQL files applied to the hosted project; anon is denied on all nine tables; awaiting approval for G |
 | G–J | ⏸ Not started |
 
-**What exists now:** the production frontend shell plus the Phase 1 database schema. `backend/` contains two
-migrations and three policy files for nine tables: profiles, players, roles, role assignments, registration
-requests, audit logs, app settings, and the minimal SP account/ledger bootstrap. Locally, the schema applies to a
-real PostgreSQL engine and re-running it fails loudly; RLS and column privileges are covered by 40 assertions.
-The hosted Supabase `public` schema is still empty until the developer applies the five SQL files. There is **no
-authentication and no UI data access yet**: the production build stays signed out, and development still uses the
-clearly labelled persona switcher compiled out of `dist/`.
+**What exists now:** the production frontend shell plus the Phase 1 database schema, applied to the hosted
+project. `backend/` contains two migrations and three policy files for nine tables: profiles, players, roles, role
+assignments, registration requests, audit logs, app settings, and the minimal SP account/ledger bootstrap. Locally,
+the schema applies to a real PostgreSQL engine and re-running it fails loudly; RLS and column privileges are
+covered by 41 assertions. On the hosted project, a PostgREST probe with the publishable key returns
+`42501 permission denied` for all nine tables to `anon`, confirming they exist and that anon grants are revoked.
+There is **no authentication and no UI data access yet**: the production build stays signed out, and development
+still uses the clearly labelled persona switcher compiled out of `dist/`.
 
 **Supabase status (Groups E–F):** the project is connected and verified with the publishable key: GoTrue v2.197.0,
-database API reachable, no stored session. Migrations 001–002 and policies 001–003 are committed and verified
-locally; they have **not** been applied to the hosted project. Generated types for the nine tables now live in
+database API reachable, no stored session. Migrations 001–002 and policies 001–003 are committed, verified locally,
+and **applied to the hosted project**; `npm run check:supabase` passes. Generated types for the nine tables live in
 `frontend/src/types/database.ts` and the client is typed. Email confirmation is disabled for development and
 verified (`mailer_autoconfirm: true`, Email provider enabled); production must require confirmation. No approval
 RPC, registration UI, or real session provider exists yet — that is Group G.
@@ -574,24 +574,23 @@ access, role unions for 1/2/3 roles, unknown routes, skip link, mobile bar at 39
 trap and focus return, persona persistence) and the production build was checked separately: `/` and
 `/players` both resolve to `/sign-in`, and the dev persona strings are absent from `dist/`.
 
-Next action: **apply the five SQL files to the hosted Supabase project, then give explicit approval to start
-Group G.** The schema is implemented and locally verified (41/41); the hosted `public` schema is still empty, so
-registration approval, role assignment, and starting SP cannot run for real yet. Group G remains unstarted.
+Next action: **give explicit approval to start Group G.** Group F is applied and verified: local harness 41/41, hosted
+project reachable, and anon denied on all nine tables. Group G (real authentication, registration approval, role
+assignment, starting SP) remains unstarted until that approval.
 
 **Steps only you can do:**
 
 - Create the Supabase project and keep the credentials (Group E1) — **done**.
 - Copy `frontend/.env.example` to `frontend/.env.local` and paste `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from Project Settings → API — **done**. Never put the service-role or secret key in a `VITE_` variable; `.env.local` is gitignored and must stay uncommitted.
 - Email confirmation is disabled for development and verified (`mailer_autoconfirm: true`, sign-ups allowed). Production must require confirmation.
-- **Apply the migrations (Group F):** in Supabase Dashboard → SQL Editor, run these files in order:
-  `backend/migrations/001_identity.sql`, `backend/migrations/002_shuttlepower_bootstrap.sql`,
-  `backend/policies/001_identity.sql`, `backend/policies/002_operations.sql`,
-  `backend/policies/003_shuttlepower.sql`. Expected result: nine tables in `public`, RLS enabled on all of them.
-  No credentials are requested or stored by this repository; the files run as the project owner.
-- Optionally regenerate types against the hosted project after applying:
+- **Apply the migrations (Group F) — done.** The five SQL files were run in order in the Supabase SQL Editor;
+  PostgREST now resolves all nine tables and denies `anon` with `42501`.
+- Optionally regenerate types against the hosted project:
   `supabase gen types typescript --project-id ehftzafmsirzrffrekzk --schema public > frontend/src/types/database.ts`.
-- **Approve Group G** when the SQL has applied successfully and you are ready for real authentication,
-  registration approval, role assignment, and starting SP.
+  The committed types were generated from the same migrations and typecheck cleanly; regeneration is the final
+  authoritative refresh, not a blocker.
+- **Approve Group G** when you are ready for real authentication, registration approval, role assignment, and
+  starting SP.
 
 **Resolved:** first Super Admin bootstrap method (D8), Round Robin tie-break (D9), Mixed Doubles pairing (D10). Remaining open items are the SP and season rules in §7.
 
@@ -610,5 +609,6 @@ registration approval, role assignment, and starting SP cannot run for real yet.
 | v7 | 2026-10-30 | E1 verified against the live `mbc-arena` project (GoTrue v2.197.0, publishable key accepted, empty `public` schema, no stored session) and `npm run check:supabase` added. E4 remains blocked: no CLI/access token and no tables yet, so types are deferred to F. Gate E not passed. Recorded that email confirmation is still enabled (`mailer_autoconfirm: false`) despite the development decision. |
 | v8 | 2026-10-30 | Email confirmation disabled for development. Status fixed as: E1 verified, E4 deferred to Group F, email confirmation disabled for development, Gate E not passed pending formal E4 deferral reconciliation. A live probe still reports the Email provider off (`email_provider_disabled`), recorded as a pre-G check. Group F remains blocked on explicit approval. |
 | v9 | 2026-10-30 | Email provider re-enabled with confirmation off. Live verification: `mailer_autoconfirm: true`, sign-ups allowed, and a sign-in probe returns `invalid_credentials` rather than `email_provider_disabled`. Email configuration marked verified for development; production must require confirmation. Gate E still open on the E4 deferral; Group F still awaits explicit approval. |
-| v10 | 2026-10-30 | Group F executed. Added the identity migration (7 tables), the minimal Phase 1 SP bootstrap (accounts + append-only ledger), three RLS/policy files with least-privilege column grants and `has_role()`, and a PGlite-backed `npm run test:db` harness (41/41 checks). Decided checked text over Postgres enums. Generated and wired the `Database` types, closing E4 and reconciling Gate E. Hosted application of the five SQL files and a type refresh against the hosted schema remain manual developer steps. Group G not started. |
+| v10 | 2026-10-30 | Group F executed. Added the identity migration (7 tables), the minimal Phase 1 SP bootstrap (accounts + append-only ledger), three RLS/policy files with least-privilege column grants and `has_role()`, and a PGlite-backed `npm run test:db` harness (41/41 checks). Decided checked text over Postgres enums. Generated and wired the `Database` types, closing E4 and reconciling Gate E. Hosted application of the five SQL files and a type refresh against the hosted schema remained manual developer steps. Group G not started. |
+| v11 | 2026-10-30 | Hosted application confirmed. The developer ran migrations 001–002 and policies 001–003 in the Supabase SQL Editor. Verification: `npm run check:supabase` passes; a PostgREST probe with the publishable key returns `42501 permission denied` for all nine tables to `anon`, so the tables exist and anon grants are revoked. Gate F recorded as passed; Group G still awaits explicit approval. |
 

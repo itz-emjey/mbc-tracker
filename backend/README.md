@@ -29,8 +29,11 @@ order, as the project owner. No dashboard schema edits are required, and no
 service-role key or database password is involved. Confirm afterwards that
 `public` contains nine tables and every one has RLS enabled.
 
-The developer must do this once; the repository intentionally does not store
-credentials that would let an agent apply it automatically.
+**Status:** the five files have been applied to the hosted `mbc-arena` project
+(2026-10-30). `npm run check:supabase` passes, and a PostgREST probe with the
+publishable key returns `42501 permission denied` for all nine tables to
+`anon` — they exist, and anon grants are revoked. The repository intentionally
+stores no credentials that would let an agent apply migrations automatically.
 
 ## Local verification
 
@@ -62,9 +65,10 @@ supabase gen types typescript --project-id <project-ref> --schema public \
 ```
 
 The current `frontend/src/types/database.ts` was generated from migrations
-001 and 002 (via the CLI against a local Postgres with the same schema). It
-must be regenerated against the hosted project once the migrations are applied
-there, and after every later migration. Never edit the generated file by hand.
+001 and 002 (via the CLI against a local Postgres with the same schema). They
+match the applied hosted schema and typecheck cleanly; regenerate them against
+the hosted project for the authoritative refresh, and after every later
+migration. Never edit the generated file by hand.
 
 ## Security notes
 
