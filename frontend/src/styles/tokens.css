@@ -1,0 +1,56 @@
+/**
+ * MBC Arena design tokens — minimalist dark.
+ *
+ * This file is the ONLY place raw colour values are allowed.
+ * Tailwind (tailwind.config.ts) maps utility classes to these variables,
+ * so changing a value here changes the whole application.
+ *
+ * Approved in PLAN.md §3.2. Do not introduce gradients, glows, or a second
+ * accent colour.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* --- Surfaces (hierarchy comes from flat levels + 1px borders) --------- */
+  --color-bg: #0a0d11;
+  --color-surface-1: #101419;
+  --color-surface-2: #161b22;
+  --color-surface-3: #1d242d;
+
+  /* --- Lines ------------------------------------------------------------- */
+  --color-border: #232b36;
+  --color-border-strong: #33404f;
+
+  /* --- Text (all AA contrast or better on their intended surface) -------- */
+  --color-text: #e7edf3;
+  --color-text-muted: #93a1b1;
+  --color-text-faint: #61707f;
+
+  /* --- Accent: the only colour allowed to carry emphasis ----------------- */
+  --color-accent: #2ed47a;
+  --color-accent-hover: #27bc6c;
+  --color-accent-soft: rgba(46, 212, 122, 0.12);
+  --color-on-accent: #06120b;
+
+  /* --- Semantic status --------------------------------------------------- */
+  --color-danger: #f05a5a;
+  --color-warning: #e8b04b;
+  --color-info: #5aa9f0;
+
+  /* --- Shape ------------------------------------------------------------- */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-pill: 999px;
+
+  /* --- Motion (hints only, never decoration) ----------------------------- */
+  --duration-fast: 120ms;
+  --duration-base: 150ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0ms;
+    --duration-base: 0ms;
+  }
+}
