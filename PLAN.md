@@ -342,6 +342,22 @@ Executed in order. Each group ends at a **gate** that must pass before moving on
 - [ ] E5. Verify no service-role key exists anywhere in `frontend/` or Git history.
 - **Gate E:** app boots against the real project; a failed env var produces a clear error, not a blank screen.
 
+**Group E — as built / blocked (v6):**
+
+- **E2 done.** `frontend/.env.example` contains only `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`, both empty;
+  `.env.*` is gitignored with an explicit `!.env.example` exception.
+- **E3 done (client + validation).** `src/lib/env.ts` validates both variables, rejects malformed URLs, rejects
+  service-role JWTs and `sb_secret_…` keys, and throws a readable `SupabaseConfigError`. `src/lib/supabase.ts`
+  exposes one lazily created client with session persistence and token refresh. **The generated `Database`
+  generic is not applied yet** because types cannot be generated until E1 exists.
+- **E5 verified.** `git grep` finds no service-role key, secret key, or JWT anywhere in tracked files or history;
+  the only matches are documentation telling people not to add one.
+- **E1 and E4 blocked.** No Supabase project, `.env.local`, CLI, or Docker is available in this environment, so the
+  client cannot be booted against a real backend and types cannot be generated. **Gate E has not been attempted.**
+- **Not started (belongs to F–H, and explicitly out of this authorisation):** migrations, identity tables, RLS,
+  registration approval, and the real auth provider. The development persona adapter is still the only session
+  source, so nothing about authentication is being presented as real.
+
 #### Group F — Migration 001 (identity)
 - [ ] F1. `backend/migrations/001_identity.sql`: `profiles`, `players`, `roles`, `user_roles`, `registration_requests`, `audit_logs`, `app_settings`.
 - [ ] F2. UUID PKs, `created_at`/`updated_at` + trigger, FKs, `CHECK` constraints on status enums (as Postgres enums or checked text — pick one and be consistent).
@@ -478,7 +494,8 @@ Payment gateway integration, ELO ratings, public API, native mobile app, light t
 | B — Frontend scaffold | ✅ Complete (Vite + React + TS, Tailwind, tokens, ESLint, Vitest) |
 | C — Design system foundation | ✅ Complete (19 primitives, 8 shared components, `/dev/ui` gallery at `dev-gallery.html`) |
 | D — App shell and routing | ✅ Complete — awaiting approval (shell, role-aware nav, guards, 403/404/loading/error, dev-only session) |
-| E–J | ⏸ Not started |
+| E — Supabase wiring | 🟡 Partial — E2/E3/E5 done; E1 + E4 blocked on project credentials; Gate E not attempted |
+| F–J | ⏸ Not started |
 
 **What exists now:** a production build (`dist/`) with the real application shell: desktop sidebar,
 mobile bottom navigation, role-aware module navigation for multi-role accounts, guarded routes,
@@ -486,6 +503,11 @@ and loading / unauthenticated / pending / access-denied / not-found / error stat
 database and no authentication**: the production build is permanently signed out and says so. Development
 builds use a clearly labelled local persona switcher (`features/auth/dev-session.tsx`) that is compiled out
 of `dist/`. No club module renders data yet — each later-phase route shows a "not built yet" state.
+
+**Supabase status (Group E):** the project is not connected. The environment template, the validated
+configuration reader, and the single-client factory exist and are unit tested, but nothing consumes them yet
+and no migration or policy has been written. `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are unset in this
+environment, so the client has never been created against a live project.
 
 **Design note (Group C):** `--color-text-faint` was raised from `#61707F` to `#7A8998` because the original
 measured 3.64:1 and failed WCAG AA for small text. It now measures 4.83:1 on the darkest surface and 5.43:1 on `bg`.
@@ -495,12 +517,13 @@ access, role unions for 1/2/3 roles, unknown routes, skip link, mobile bar at 39
 trap and focus return, persona persistence) and the production build was checked separately: `/` and
 `/players` both resolve to `/sign-in`, and the dev persona strings are absent from `dist/`.
 
-Next action on approval: **Group E only** (Supabase project wiring), then stop at Gate E and report.
+Next action: **waiting on the Supabase project** (E1) before E4 and Gate E. The requested database, authentication,
+registration-approval, and RLS work is tracked as Groups F–H and has not been started.
 
 **Steps only you can do:**
 
 - Create the Supabase project and keep the credentials (Group E1).
-- Paste `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` into `frontend/.env.local`. I will supply the exact values and will never ask you to commit them.
+- Copy `frontend/.env.example` to `frontend/.env.local` and paste `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from Project Settings → API. Never put the service-role or secret key in a `VITE_` variable; `.env.local` is gitignored and must stay uncommitted.
 
 **Resolved:** first Super Admin bootstrap method (D8), Round Robin tie-break (D9), Mixed Doubles pairing (D10). Remaining open items are the SP and season rules in §7.
 
@@ -515,4 +538,5 @@ Next action on approval: **Group E only** (Supabase project wiring), then stop a
 | v3 | 2026-10-30 | D8 (first Super Admin via one-time SQL bootstrap), D9 (Round Robin tie-break chain + mini-table rule), D10 (Mixed Doubles one male + one female) approved. §4 gains `players.gender` and Mixed Doubles integrity rules; §7 register drops the two resolved rows into a "Resolved since v2" table; Phase 3 scope updated; Phase 1 Group J4 now specifies the bootstrap script. Group A executed. |
 | v4 | 2026-10-30 | Groups B and C executed. `text-faint` token raised to meet AA. Component library and dev-only gallery recorded in §9. |
 | v5 | 2026-10-30 | Group D executed. §6.1 gains a "Group D — as built" note recording guarded placeholder routes for later modules, the single navigation/permission config, and the development-only session adapter. §9 status updated with verification evidence. |
+| v6 | 2026-10-30 | Group E started. E2/E3/E5 implemented and tested (env validation rejects service-role keys; single lazy client). E1/E4 blocked: no Supabase project or credentials exist and no CLI/Docker is available. Gate E not attempted; F–H remain unstarted. |
 

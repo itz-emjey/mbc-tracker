@@ -24,6 +24,29 @@ npm test           # vitest run
 npm run test:watch # vitest watch
 ```
 
+## Supabase configuration
+
+The Supabase client is wired but **authentication and the database are not implemented yet** (Groups F–G).
+Until a project is connected, the production build stays signed out.
+
+```bash
+cp .env.example .env.local   # then fill in the two values
+```
+
+| Variable                 | Source                                          |
+| ------------------------ | ----------------------------------------------- |
+| `VITE_SUPABASE_URL`      | Project Settings → API → Project URL            |
+| `VITE_SUPABASE_ANON_KEY` | Project Settings → API → anon / publishable key |
+
+- `.env.local` is gitignored; `.env.example` stays tracked with empty values.
+- `src/lib/env.ts` validates both variables on first use, rejects service-role JWTs and `sb_secret_…` keys, and
+  throws a readable `SupabaseConfigError` instead of failing silently.
+- `src/lib/supabase.ts` creates the single client (session persistence and token refresh enabled).
+- Never place the service-role key in a `VITE_` variable: Vite inlines those values into the public bundle.
+- After the project exists, generate the committed types with
+  `npx supabase gen types typescript --project-id <ref> --schema public > src/types/database.ts` and parameterise
+  the client with the `Database` generic.
+
 ## Design system
 
 - **`src/styles/tokens.css` is the only place raw colour values may appear.** Every utility in
