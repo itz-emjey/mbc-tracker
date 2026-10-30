@@ -1,0 +1,13 @@
+{
+  "name": "mbc-arena",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "MBC Arena — club management platform for Matag-ob Badminton Club",
+  "scripts": {
+    "test:db": "node backend/tests/run.mjs"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.13"
+  }
+}

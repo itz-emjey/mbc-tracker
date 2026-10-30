@@ -43,15 +43,14 @@ npm run check:supabase       # prints PASS/FAIL, never the key
 - `.env.local` is gitignored; `.env.example` stays tracked with empty values.
 - `src/lib/env.ts` validates both variables on first use, rejects service-role JWTs and `sb_secret_…` keys, and
   throws a readable `SupabaseConfigError` instead of failing silently.
-- `src/lib/supabase.ts` creates the single client (session persistence and token refresh enabled).
+- `src/lib/supabase.ts` creates the single client, typed with the generated `Database` type (session persistence and
+  token refresh enabled).
 - `npm run check:supabase` probes GoTrue and the database API with the configured key and reports PASS/FAIL without
-  printing secrets. The `public` schema is currently empty, so the database probe expects "table not found".
+  printing secrets. The database probe queries a deliberately missing table, so `PGRST205` is the expected success
+  signal.
 - Never place the service-role key in a `VITE_` variable: Vite inlines those values into the public bundle.
-- **Database types are not generated yet (Group E4 deferred).** The hosted schema is still empty because
-  migrations belong to Group F, and `supabase gen types` needs either an access token or a database URL. Run the
-  generator once Group F creates the tables:
-  `npx supabase gen types typescript --project-id <ref> --schema public > src/types/database.ts`, then
-  parameterise the client with the `Database` generic.
+- **Database types** live in `src/types/database.ts` and are generated with `supabase gen types`; never edit them by
+  hand. Regenerate after every migration (see `../backend/README.md` for the command).
 
 ## Design system
 

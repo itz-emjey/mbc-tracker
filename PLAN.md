@@ -2,7 +2,7 @@
 
 > **Source of truth for requirements:** `AGENT.md`
 > **This document:** the approved working plan — architecture, design system, schema, phases, Phase 1 checklist, and open business rules.
-> **Status:** v2 — architecture, stack, design, and roadmap **approved 2026-10-30**. Phase 1 checklist finalized and awaiting go-ahead. No code has been scaffolded.
+> **Status:** v10 — architecture, stack, design, and roadmap approved. Groups A–E are complete; Group F (identity schema, RLS policies, local SQL tests, generated types) is implemented and locally verified. The hosted Supabase schema still needs the committed SQL applied. Group G is not started and awaits explicit approval.
 
 ### Approved decisions
 
@@ -25,13 +25,13 @@
 
 | Item | Finding |
 | --- | --- |
-| Git | Initialized, branch `main`, **zero commits** |
-| Tracked files | None |
-| Untracked | `AGENT.md` |
-| `frontend/` | Empty directory |
-| `backend/` | Empty directory |
+| Git | Initialized, branch `main`; Groups A–E committed, Group F ready for its commit |
+| Tracked files | `AGENT.md`, `PLAN.md`, `frontend/`, `backend/`, root test tooling |
+| `frontend/` | React + TS + Vite app: design system, shell, routing, guards, Supabase client and generated types |
+| `backend/` | SQL migrations 001–002, policies 001–003, and the PGlite verification harness |
 
-**Conclusion:** this is a greenfield project. There is no existing work to preserve, so no migration or rewrite risk. Everything below is a proposal, not a constraint.
+**Conclusion:** the greenfield scaffold and the Phase 1 schema now exist. The hosted database still needs the
+committed migrations applied by the project owner (see §9).
 
 ---
 
@@ -264,7 +264,7 @@ Every row above needs a matching RLS policy **and** a server-side guard, plus a 
 Each phase must ship something usable end-to-end (schema → policy → UI → test), not a mockup. A phase is done only by the `AGENT.md` §11 definition of done.
 
 ### Phase 0 — Planning ✅ Approved
-- Repo inspection complete: greenfield, zero commits, `frontend/` and `backend/` empty.
+- Repo inspection complete at planning time: greenfield, zero commits, `frontend/` and `backend/` empty.
 - D1–D7 approved 2026-10-30 (see the decisions table at the top).
 - Remaining §7 items are **club business rules**, not architecture. They block Phase 3 onward where noted, never Phase 1.
 - **Deliverable:** this document (v2).
@@ -338,18 +338,18 @@ Executed in order. Each group ends at a **gate** that must pass before moving on
 - [x] E1. Supabase project created (**manual step: developer creates it and holds credentials**). Verified: `.env.local` configured locally, GoTrue and the database API reachable.
 - [x] E2. `.env.example` with `VITE_SUPABASE_URL=` and `VITE_SUPABASE_ANON_KEY=` placeholders only; `.env.local` gitignored.
 - [x] E3. `lib/supabase.ts` — single lazy client; the `Database` generic lands with E4.
-- [ ] E4. `supabase gen types typescript` wired to a script and committed output. **Deferred to Group F** (formal deferral reconciliation pending).
+- [x] E4. `supabase gen types typescript` wired to a script and committed output. **Completed in Group F** (see the Group F as-built note).
 - [x] E5. Verify no service-role key exists anywhere in `frontend/` or Git history.
-- **Gate E:** app boots against the real project; a failed env var produces a clear error, not a blank screen. **Not passed pending formal E4 deferral reconciliation.**
+- **Gate E:** app boots against the real project; a failed env var produces a clear error, not a blank screen. **Passed** once E4 closed in F; the in-app error path is exercised when Group G wires the session provider.
 
-**Group E status (v8):**
+**Group E status (v10):**
 
 - **E1:** verified.
-- **E4:** deferred to Group F.
-- **Email confirmation:** disabled for development (verified: provider on, sign-ups allowed, `mailer_autoconfirm: true`).
-- **Gate E:** not passed pending formal E4 deferral reconciliation.
+- **E4:** completed in Group F — types generated and the client typed.
+- **Email confirmation:** disabled for development (verified).
+- **Gate E:** passed — E1–E5 complete and the E4 deferral reconciled.
 
-**Group E — as built (v9):**
+**Group E — as built (v10):**
 
 - **E1 done and verified.** The owner created the `mbc-arena` project and filled `frontend/.env.local` (gitignored,
   never committed). `npm run check:supabase` probes the live project without printing secrets and reports:
@@ -360,34 +360,65 @@ Executed in order. Each group ends at a **gate** that must pass before moving on
   `.env.*` is gitignored with an explicit `!.env.example` exception.
 - **E3 done (client + validation).** `src/lib/env.ts` validates both variables, rejects malformed URLs, rejects
   service-role JWTs and `sb_secret_…` keys, and throws a readable `SupabaseConfigError`. `src/lib/supabase.ts`
-  exposes one lazily created client with session persistence and token refresh. **The generated `Database` generic
-  is not applied yet** because type generation is deferred to Group F, after the schema exists.
+  exposes one lazily created client with session persistence and token refresh, typed with the generated `Database`
+  type.
 - **E5 verified.** `git grep` finds no service-role key, secret key, or JWT value in tracked files or history; the
   only matches are documentation and tests that reject such keys.
-- **E4 deferred.** The hosted schema is empty (migrations belong to F), so generated output would be an empty stub;
-  `supabase gen types` additionally needs a Supabase access token or a database URL. The CLI is not installed here
-  (`npx supabase` did not finish installing within 5 minutes) and no Docker stack is available. Type generation now
-  moves into Group F, after the schema exists, using the command documented in `frontend/README.md`. **Gate E remains
-  open until the deferral itself is formally reconciled.**
+- **E4 completed in Group F.** `frontend/src/types/database.ts` was generated with the Supabase CLI from the
+  migration schema (nine tables plus `has_role`), and `src/lib/supabase.ts` now uses `SupabaseClient<Database>`.
+  Regenerate the file against the hosted project once the migrations are applied there, and after every later
+  migration.
 - **Gate E evidence.** Connectivity and key rejection are covered by `npm run check:supabase`; env validation and
-  the clear `SupabaseConfigError` are covered by 13 unit tests. The error path has not been exercised through the
-  running app because nothing consumes the client until Group G — wiring the session provider belongs there.
+  the clear `SupabaseConfigError` are covered by 13 unit tests. The error path reaches the running app only when
+  Group G wires the session provider; the E4 deferral is now reconciled.
 - **Email confirmation (development) — verified.** The Email provider is enabled, sign-ups are allowed
   (`disable_signup: false`), and `mailer_autoconfirm: true`, so confirmation is off. A live `signInWithPassword`
   probe returns `invalid_credentials` instead of `email_provider_disabled`, confirming email authentication is
   active. This configuration is for development only: production must require confirmation.
-- **Not started (belongs to F–H, and explicitly out of this authorisation):** migrations, identity tables, RLS,
-  registration approval, and the real auth provider. The development persona adapter is still the only session
-  source, so nothing about authentication is being presented as real.
+- **Group G not started:** approval RPCs, registration UI, role assignment, and the real session provider remain
+  outstanding. The development persona adapter is still the only session source, so nothing about authentication is
+  being presented as real.
 
-#### Group F — Migration 001 (identity)
-- [ ] F1. `backend/migrations/001_identity.sql`: `profiles`, `players`, `roles`, `user_roles`, `registration_requests`, `audit_logs`, `app_settings`.
-- [ ] F2. UUID PKs, `created_at`/`updated_at` + trigger, FKs, `CHECK` constraints on status enums (as Postgres enums or checked text — pick one and be consistent).
-- [ ] F3. Uniqueness: one account per player (`players.profile_id` unique), one role assignment per (profile, role), one open registration request per email.
-- [ ] F4. `has_role(uuid, role)` as `security definer`, `search_path` pinned.
-- [ ] F5. RLS enabled on **every** table in the migration, with policies in `backend/policies/`.
-- [ ] F6. Column privileges: players cannot write `sp_accounts` or role tables — no policy grants it, and no `INSERT`/`UPDATE` grant exists.
-- **Gate F:** migration applies from an empty database without manual dashboard edits; re-running it fails loudly rather than silently.
+#### Group F — Migrations and policies (identity + SP bootstrap)
+- [x] F1. `backend/migrations/001_identity.sql`: `profiles`, `players`, `roles`, `user_roles`, `registration_requests`, `audit_logs`, `app_settings`. A second migration, `002_shuttlepower_bootstrap.sql`, adds the minimal `sp_accounts` + append-only `sp_transactions` required by F6 and G6.
+- [x] F2. UUID PKs, `created_at`/`updated_at` + trigger, FKs, `CHECK` constraints on status enums (checked text chosen consistently; see as-built note).
+- [x] F3. Uniqueness: one account per player (`players.profile_id` unique), one role assignment per (profile, role), one open registration request per email.
+- [x] F4. `has_role(uuid, role)` as `security definer`, `search_path` pinned.
+- [x] F5. RLS enabled on **every** table in the migration, with policies in `backend/policies/`.
+- [x] F6. Column privileges: players cannot write `sp_accounts` or role tables — no policy grants it, and no `INSERT`/`UPDATE` grant exists.
+- **Gate F:** migration applies from an empty database without manual dashboard edits; re-running it fails loudly rather than silently. **Verified locally: 41/41 checks. Hosted project application is the remaining manual step.**
+
+**Group F — as built (v10):**
+
+- **Migrations.** `001_identity.sql` creates the seven identity/operations tables; `002_shuttlepower_bootstrap.sql`
+  adds the minimal Phase 1 SP account cache and append-only ledger needed by F6 and G6. Neither includes the Phase 4
+  SP formula, seasons, or match references. Both are non-idempotent by design: re-running fails at the first
+  `CREATE`. Roles are the only seeded rows.
+- **Constraint choice (F2).** Statuses are checked `text` columns, not Postgres enums. This keeps future status
+  additions migration-only and produces stable generated TypeScript; every allowed value is still enforced by a
+  named `CHECK`. UUID keys default to `gen_random_uuid()`.
+- **Uniqueness (F3).** `players.profile_id` is unique; `user_roles` is keyed by `(profile_id, role_id)`; partial
+  unique indexes enforce one pending registration per email (case-normalised) and per profile. Approving a request
+  frees the email for a later request.
+- **Role predicate (F4).** `public.has_role(p_profile_id, p_role_key)` is `security definer`, `stable`, with
+  `search_path = ''`; execute is granted only to `authenticated` and `service_role`. It requires the profile to be
+  `active`, so suspension/deactivation revokes role-based access immediately at the database layer, not just in the UI.
+- **RLS and grants (F5/F6).** RLS is enabled on all nine tables. `anon` has no table access. `authenticated` gets
+  narrow grants: own-name update on `profiles`, staff writes on `players`, read-only role/registration/audit/settings
+  access, and select-only SP. There is no client `INSERT`/`UPDATE`/`DELETE` on `roles`, `user_roles`,
+  `registration_requests`, `audit_logs`, or `sp_*`. `sp_transactions` additionally rejects UPDATE, DELETE, and
+  TRUNCATE through triggers.
+- **Verification.** `npm run test:db` runs a real PostgreSQL engine (PGlite) with `auth.users`/`auth.uid()` stubbed
+  to Supabase's shape, applies both migrations and all three policy files, and passes 41/41 checks: schema, RLS
+  coverage, idempotency failure, constraints, column privileges, and positive/negative cases for player, pending,
+  staff, admin, anon, and the SP ledger. No Docker, hosted database, or database password is used.
+- **E4 closed.** `frontend/src/types/database.ts` is generated with `supabase gen types typescript` from the
+  migration schema, and `src/lib/supabase.ts` is now `SupabaseClient<Database>`. Typecheck and lint pass. The types
+  must be regenerated against the hosted project after the migrations are applied there.
+- **Known limitations.** The hosted `public` schema is still empty until the developer runs the five SQL files in
+  the Supabase SQL Editor; no credentials are stored or requested to do this automatically. `app_settings` has no
+  seed rows. Approval/linking/starting-SP RPCs and the real session provider remain Group G. The SP bootstrap is
+  schema only — no formula or engine.
 
 #### Group G — Auth lifecycle
 - [ ] G1. Sign up form (email, password, full name) with Zod validation shared with the server check.
@@ -515,24 +546,25 @@ Payment gateway integration, ELO ratings, public API, native mobile app, light t
 | A — Baseline | ✅ Complete (one initial commit, `.gitignore`, `.gitattributes`) |
 | B — Frontend scaffold | ✅ Complete (Vite + React + TS, Tailwind, tokens, ESLint, Vitest) |
 | C — Design system foundation | ✅ Complete (19 primitives, 8 shared components, `/dev/ui` gallery at `dev-gallery.html`) |
-| D — App shell and routing | ✅ Complete — awaiting approval (shell, role-aware nav, guards, 403/404/loading/error, dev-only session) |
-| E — Supabase wiring | 🟡 Partial — E1 verified; E4 deferred to Group F; Gate E not passed pending formal E4 deferral reconciliation |
-| F–J | ⏸ Not started |
+| D — App shell and routing | ✅ Complete and approved (shell, role-aware nav, guards, 403/404/loading/error, dev-only session) |
+| E — Supabase wiring | ✅ Complete (E1–E5; E4 closed in F; client typed; Gate E reconciled) |
+| F — Identity migration | 🟡 Implemented and locally verified (41/41); hosted application and type refresh pending; awaiting approval for G |
+| G–J | ⏸ Not started |
 
-**What exists now:** a production build (`dist/`) with the real application shell: desktop sidebar,
-mobile bottom navigation, role-aware module navigation for multi-role accounts, guarded routes,
-and loading / unauthenticated / pending / access-denied / not-found / error states. There is **no
-database and no authentication**: the production build is permanently signed out and says so. Development
-builds use a clearly labelled local persona switcher (`features/auth/dev-session.tsx`) that is compiled out
-of `dist/`. No club module renders data yet — each later-phase route shows a "not built yet" state.
+**What exists now:** the production frontend shell plus the Phase 1 database schema. `backend/` contains two
+migrations and three policy files for nine tables: profiles, players, roles, role assignments, registration
+requests, audit logs, app settings, and the minimal SP account/ledger bootstrap. Locally, the schema applies to a
+real PostgreSQL engine and re-running it fails loudly; RLS and column privileges are covered by 40 assertions.
+The hosted Supabase `public` schema is still empty until the developer applies the five SQL files. There is **no
+authentication and no UI data access yet**: the production build stays signed out, and development still uses the
+clearly labelled persona switcher compiled out of `dist/`.
 
-**Supabase status (Group E):** the project is created by the owner and the local configuration is verified. Using
-`frontend/.env.local` (gitignored), the client reaches GoTrue v2.197.0 and the database API, accepts the
-`sb_publishable_…` key, starts with no stored session, and finds an empty `public` schema — as expected before
-Group F. `npm run check:supabase` reproduces this check without printing the key. No migration, policy, generated
-type, or real authentication exists yet. Email confirmation is disabled for development and verified
-(`mailer_autoconfirm: true` with the Email provider enabled); production must re-enable confirmation. E4 is
-deferred to Group F and Gate E stays open until that deferral is formally reconciled.
+**Supabase status (Groups E–F):** the project is connected and verified with the publishable key: GoTrue v2.197.0,
+database API reachable, no stored session. Migrations 001–002 and policies 001–003 are committed and verified
+locally; they have **not** been applied to the hosted project. Generated types for the nine tables now live in
+`frontend/src/types/database.ts` and the client is typed. Email confirmation is disabled for development and
+verified (`mailer_autoconfirm: true`, Email provider enabled); production must require confirmation. No approval
+RPC, registration UI, or real session provider exists yet — that is Group G.
 
 **Design note (Group C):** `--color-text-faint` was raised from `#61707F` to `#7A8998` because the original
 measured 3.64:1 and failed WCAG AA for small text. It now measures 4.83:1 on the darkest surface and 5.43:1 on `bg`.
@@ -542,16 +574,24 @@ access, role unions for 1/2/3 roles, unknown routes, skip link, mobile bar at 39
 trap and focus return, persona persistence) and the production build was checked separately: `/` and
 `/players` both resolve to `/sign-in`, and the dev persona strings are absent from `dist/`.
 
-Next action: **wait for explicit approval to start Group F.** E4 is deferred to Group F; the deferral still needs
-formal reconciliation before Gate E can be recorded as passed. The requested database, authentication,
-registration-approval, and RLS work is tracked as Groups F–H and has not been started.
+Next action: **apply the five SQL files to the hosted Supabase project, then give explicit approval to start
+Group G.** The schema is implemented and locally verified (41/41); the hosted `public` schema is still empty, so
+registration approval, role assignment, and starting SP cannot run for real yet. Group G remains unstarted.
 
 **Steps only you can do:**
 
 - Create the Supabase project and keep the credentials (Group E1) — **done**.
 - Copy `frontend/.env.example` to `frontend/.env.local` and paste `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from Project Settings → API — **done**. Never put the service-role or secret key in a `VITE_` variable; `.env.local` is gitignored and must stay uncommitted.
 - Email confirmation is disabled for development and verified (`mailer_autoconfirm: true`, sign-ups allowed). Production must require confirmation.
-- Approve the start of Group F when you are ready. Type generation will run there once the schema exists.
+- **Apply the migrations (Group F):** in Supabase Dashboard → SQL Editor, run these files in order:
+  `backend/migrations/001_identity.sql`, `backend/migrations/002_shuttlepower_bootstrap.sql`,
+  `backend/policies/001_identity.sql`, `backend/policies/002_operations.sql`,
+  `backend/policies/003_shuttlepower.sql`. Expected result: nine tables in `public`, RLS enabled on all of them.
+  No credentials are requested or stored by this repository; the files run as the project owner.
+- Optionally regenerate types against the hosted project after applying:
+  `supabase gen types typescript --project-id ehftzafmsirzrffrekzk --schema public > frontend/src/types/database.ts`.
+- **Approve Group G** when the SQL has applied successfully and you are ready for real authentication,
+  registration approval, role assignment, and starting SP.
 
 **Resolved:** first Super Admin bootstrap method (D8), Round Robin tie-break (D9), Mixed Doubles pairing (D10). Remaining open items are the SP and season rules in §7.
 
@@ -570,4 +610,5 @@ registration-approval, and RLS work is tracked as Groups F–H and has not been 
 | v7 | 2026-10-30 | E1 verified against the live `mbc-arena` project (GoTrue v2.197.0, publishable key accepted, empty `public` schema, no stored session) and `npm run check:supabase` added. E4 remains blocked: no CLI/access token and no tables yet, so types are deferred to F. Gate E not passed. Recorded that email confirmation is still enabled (`mailer_autoconfirm: false`) despite the development decision. |
 | v8 | 2026-10-30 | Email confirmation disabled for development. Status fixed as: E1 verified, E4 deferred to Group F, email confirmation disabled for development, Gate E not passed pending formal E4 deferral reconciliation. A live probe still reports the Email provider off (`email_provider_disabled`), recorded as a pre-G check. Group F remains blocked on explicit approval. |
 | v9 | 2026-10-30 | Email provider re-enabled with confirmation off. Live verification: `mailer_autoconfirm: true`, sign-ups allowed, and a sign-in probe returns `invalid_credentials` rather than `email_provider_disabled`. Email configuration marked verified for development; production must require confirmation. Gate E still open on the E4 deferral; Group F still awaits explicit approval. |
+| v10 | 2026-10-30 | Group F executed. Added the identity migration (7 tables), the minimal Phase 1 SP bootstrap (accounts + append-only ledger), three RLS/policy files with least-privilege column grants and `has_role()`, and a PGlite-backed `npm run test:db` harness (41/41 checks). Decided checked text over Postgres enums. Generated and wired the `Database` types, closing E4 and reconciling Gate E. Hosted application of the five SQL files and a type refresh against the hosted schema remain manual developer steps. Group G not started. |
 
