@@ -317,7 +317,7 @@ Executed in order. Each group ends at a **gate** that must pass before moving on
 
 - **Routes:** `/sign-in`, `/pending`, `/unauthorized`, and a guarded shell at `/` containing `/` (Overview),
   every module in `app/navigation.ts` as a guarded placeholder, and a nested `*` 404. `/register` and
-  `/profile` are deliberately absent until Group E/G can make them real.
+  `/profile` are deliberately absent until Group G can make them real.
   This extends D3: later-phase modules get a **guarded placeholder** so role filtering and direct-URL
   blocking can be exercised, but they render a "not built yet" state and contain no data or fake
   business logic.
@@ -329,31 +329,44 @@ Executed in order. Each group ends at a **gate** that must pass before moving on
   suspended account), 404, and a route-level `errorElement`.
 - **Auth placeholder:** development only. `features/auth/dev-session.tsx` stores a persona id in
   `localStorage` and is compiled out of production builds (verified: none of its strings appear in
-  `dist/`). Production renders as signed-out with "Sign-in is not configured" until Group E. No mock
+  `dist/`). Production renders as signed-out with "Sign-in is not configured" until Group G. No mock
   session is presented as authentication.
 - **Shell:** 240px sidebar with persisted icon-rail collapse, mobile bottom bar (4 modules + More
   sheet), skip link, scroll-to-top and `document.title` on route change.
 
 #### Group E — Supabase wiring
-- [ ] E1. Supabase project created (**manual step: developer creates it and holds credentials**).
-- [ ] E2. `.env.example` with `VITE_SUPABASE_URL=` and `VITE_SUPABASE_ANON_KEY=` placeholders only; `.env.local` gitignored.
-- [ ] E3. `lib/supabase.ts` — single client, typed with `Database` generic.
-- [ ] E4. `supabase gen types typescript` wired to a script and committed output.
-- [ ] E5. Verify no service-role key exists anywhere in `frontend/` or Git history.
-- **Gate E:** app boots against the real project; a failed env var produces a clear error, not a blank screen.
+- [x] E1. Supabase project created (**manual step: developer creates it and holds credentials**). Verified: `.env.local` configured locally, GoTrue and the database API reachable.
+- [x] E2. `.env.example` with `VITE_SUPABASE_URL=` and `VITE_SUPABASE_ANON_KEY=` placeholders only; `.env.local` gitignored.
+- [x] E3. `lib/supabase.ts` — single lazy client; the `Database` generic lands with E4.
+- [ ] E4. `supabase gen types typescript` wired to a script and committed output. **Blocked — see below.**
+- [x] E5. Verify no service-role key exists anywhere in `frontend/` or Git history.
+- **Gate E:** app boots against the real project; a failed env var produces a clear error, not a blank screen. **Not passed: E4 is open.**
 
-**Group E — as built / blocked (v6):**
+**Group E — as built (v7):**
 
+- **E1 done and verified.** The owner created the `mbc-arena` project and filled `frontend/.env.local` (gitignored,
+  never committed). `npm run check:supabase` probes the live project without printing secrets and reports:
+  GoTrue v2.197.0 reachable, the anon/publishable key accepted by the database API, no stored session, and an empty
+  `public` schema (the probe table correctly returns `PGRST205`). The key is a `sb_publishable_…` key, not a
+  service-role or secret key.
 - **E2 done.** `frontend/.env.example` contains only `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`, both empty;
   `.env.*` is gitignored with an explicit `!.env.example` exception.
 - **E3 done (client + validation).** `src/lib/env.ts` validates both variables, rejects malformed URLs, rejects
   service-role JWTs and `sb_secret_…` keys, and throws a readable `SupabaseConfigError`. `src/lib/supabase.ts`
-  exposes one lazily created client with session persistence and token refresh. **The generated `Database`
-  generic is not applied yet** because types cannot be generated until E1 exists.
-- **E5 verified.** `git grep` finds no service-role key, secret key, or JWT anywhere in tracked files or history;
-  the only matches are documentation telling people not to add one.
-- **E1 and E4 blocked.** No Supabase project, `.env.local`, CLI, or Docker is available in this environment, so the
-  client cannot be booted against a real backend and types cannot be generated. **Gate E has not been attempted.**
+  exposes one lazily created client with session persistence and token refresh. **The generated `Database` generic
+  is not applied yet** because types cannot be generated until E4.
+- **E5 verified.** `git grep` finds no service-role key, secret key, or JWT value in tracked files or history; the
+  only matches are documentation and tests that reject such keys.
+- **E4 blocked.** The hosted schema is empty (migrations belong to F), so generated output would be an empty stub;
+  `supabase gen types` additionally needs a Supabase access token or a database URL. The CLI is not installed here
+  (`npx supabase` did not finish installing within 5 minutes) and no Docker stack is available. The command is
+  documented in `frontend/README.md` and should run after F creates the tables. **Gate E cannot pass while E4 is open.**
+- **Gate E evidence.** Connectivity and key rejection are covered by `npm run check:supabase`; env validation and
+  the clear `SupabaseConfigError` are covered by 13 unit tests. The error path has not been exercised through the
+  running app because nothing consumes the client until Group G — wiring the session provider belongs there.
+- **Observed setting discrepancy (for Group G).** The project reports `mailer_autoconfirm: false`, i.e. email
+  confirmation is **still enabled**, even though the decision was to disable it for development. Either flip
+  Authentication → Providers → Email before G, or keep it on and adjust the registration test plan.
 - **Not started (belongs to F–H, and explicitly out of this authorisation):** migrations, identity tables, RLS,
   registration approval, and the real auth provider. The development persona adapter is still the only session
   source, so nothing about authentication is being presented as real.
@@ -494,7 +507,7 @@ Payment gateway integration, ELO ratings, public API, native mobile app, light t
 | B — Frontend scaffold | ✅ Complete (Vite + React + TS, Tailwind, tokens, ESLint, Vitest) |
 | C — Design system foundation | ✅ Complete (19 primitives, 8 shared components, `/dev/ui` gallery at `dev-gallery.html`) |
 | D — App shell and routing | ✅ Complete — awaiting approval (shell, role-aware nav, guards, 403/404/loading/error, dev-only session) |
-| E — Supabase wiring | 🟡 Partial — E2/E3/E5 done; E1 + E4 blocked on project credentials; Gate E not attempted |
+| E — Supabase wiring | 🟡 Partial — E1/E2/E3/E5 done and verified against the live project; E4 blocked (types); Gate E not passed |
 | F–J | ⏸ Not started |
 
 **What exists now:** a production build (`dist/`) with the real application shell: desktop sidebar,
@@ -504,10 +517,12 @@ database and no authentication**: the production build is permanently signed out
 builds use a clearly labelled local persona switcher (`features/auth/dev-session.tsx`) that is compiled out
 of `dist/`. No club module renders data yet — each later-phase route shows a "not built yet" state.
 
-**Supabase status (Group E):** the project is not connected. The environment template, the validated
-configuration reader, and the single-client factory exist and are unit tested, but nothing consumes them yet
-and no migration or policy has been written. `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are unset in this
-environment, so the client has never been created against a live project.
+**Supabase status (Group E):** the project is created by the owner and the local configuration is verified. Using
+`frontend/.env.local` (gitignored), the client reaches GoTrue v2.197.0 and the database API, accepts the
+`sb_publishable_…` key, starts with no stored session, and finds an empty `public` schema — as expected before
+Group F. `npm run check:supabase` reproduces this check without printing the key. No migration, policy, generated
+type, or real authentication exists yet. The project still reports `mailer_autoconfirm: false`, so email confirmation
+is enabled despite the development decision to disable it; resolve that before Group G.
 
 **Design note (Group C):** `--color-text-faint` was raised from `#61707F` to `#7A8998` because the original
 measured 3.64:1 and failed WCAG AA for small text. It now measures 4.83:1 on the darkest surface and 5.43:1 on `bg`.
@@ -517,13 +532,15 @@ access, role unions for 1/2/3 roles, unknown routes, skip link, mobile bar at 39
 trap and focus return, persona persistence) and the production build was checked separately: `/` and
 `/players` both resolve to `/sign-in`, and the dev persona strings are absent from `dist/`.
 
-Next action: **waiting on the Supabase project** (E1) before E4 and Gate E. The requested database, authentication,
+Next action: **decide E4**, then approve Group F. The requested database, authentication,
 registration-approval, and RLS work is tracked as Groups F–H and has not been started.
 
 **Steps only you can do:**
 
-- Create the Supabase project and keep the credentials (Group E1).
-- Copy `frontend/.env.example` to `frontend/.env.local` and paste `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from Project Settings → API. Never put the service-role or secret key in a `VITE_` variable; `.env.local` is gitignored and must stay uncommitted.
+- Create the Supabase project and keep the credentials (Group E1) — **done**.
+- Copy `frontend/.env.example` to `frontend/.env.local` and paste `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from Project Settings → API — **done**. Never put the service-role or secret key in a `VITE_` variable; `.env.local` is gitignored and must stay uncommitted.
+- **Choose how E4 is closed:** either (a) defer type generation into Group F, when the schema exists (recommended), or (b) supply a Supabase personal access token through your own environment so `supabase gen types` can run. A database URL/password is not requested.
+- If development registration should work without confirmation emails, turn off Authentication → Providers → Email → "Confirm email"; the project currently has it **on**.
 
 **Resolved:** first Super Admin bootstrap method (D8), Round Robin tie-break (D9), Mixed Doubles pairing (D10). Remaining open items are the SP and season rules in §7.
 
@@ -539,4 +556,5 @@ registration-approval, and RLS work is tracked as Groups F–H and has not been 
 | v4 | 2026-10-30 | Groups B and C executed. `text-faint` token raised to meet AA. Component library and dev-only gallery recorded in §9. |
 | v5 | 2026-10-30 | Group D executed. §6.1 gains a "Group D — as built" note recording guarded placeholder routes for later modules, the single navigation/permission config, and the development-only session adapter. §9 status updated with verification evidence. |
 | v6 | 2026-10-30 | Group E started. E2/E3/E5 implemented and tested (env validation rejects service-role keys; single lazy client). E1/E4 blocked: no Supabase project or credentials exist and no CLI/Docker is available. Gate E not attempted; F–H remain unstarted. |
+| v7 | 2026-10-30 | E1 verified against the live `mbc-arena` project (GoTrue v2.197.0, publishable key accepted, empty `public` schema, no stored session) and `npm run check:supabase` added. E4 remains blocked: no CLI/access token and no tables yet, so types are deferred to F. Gate E not passed. Recorded that email confirmation is still enabled (`mailer_autoconfirm: false`) despite the development decision. |
 
