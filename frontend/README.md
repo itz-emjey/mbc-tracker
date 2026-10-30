@@ -37,11 +37,25 @@ npm run test:watch # vitest watch
 
 | Path                     | Purpose                                                                                                                                   |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/app/`               | Application shell: router, layouts, guards, navigation config, page-level states.                                                         |
+| `src/features/auth/`     | Session contract, roles, and the development-only persona adapter (compiled out of production).                                           |
 | `src/components/ui/`     | shadcn-style primitives, re-themed to the tokens. Owned code, no kit dependency.                                                          |
 | `src/components/shared/` | Composed pieces: `PageHeader`, `StatusBadge`, `EmptyState`, `LoadingState`, `ErrorState`, `ConfirmDialog`, `FormField`, `PlayerIdentity`. |
 | `src/lib/`               | `cn()`, pure helpers (`format`, `status`), and future query/client utilities.                                                             |
 | `src/domain/`            | Pure business logic (brackets, standings, SP). No React, no Supabase.                                                                     |
 | `src/dev/`               | Development-only component gallery. Never imported by the app entry.                                                                      |
+
+### Application shell and roles
+
+- `src/app/navigation.ts` is the single source of truth for modules, their icons, their phases, and the roles
+  allowed to open them. The sidebar, mobile bar, and route table are generated from it.
+- Role checks use `hasAnyRole` and are **any-of**, because one account can hold several roles at once
+  (for example Tournament Manager + Trainer). There is no role hierarchy.
+- Guards (`RequireAuth`, `RequireApproved`, `RequireRole`) only shape navigation. Supabase RLS and database
+  functions remain the authority for real data.
+- **There is no real authentication yet.** Development builds show a persona switcher labelled "Not
+  authentication"; a production build is signed out, `/sign-in` explains that authentication is not configured,
+  and protected routes stay closed. `features/auth/dev-session.tsx` is removed from production bundles.
 
 ### Status colours
 

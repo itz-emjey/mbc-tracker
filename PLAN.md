@@ -313,6 +313,27 @@ Executed in order. Each group ends at a **gate** that must pass before moving on
 - [ ] D6. Error boundary + 404 page in the same visual language.
 - **Gate D:** keyboard-only navigation works; mobile layout usable at 360px width; no layout shift on load.
 
+**Group D — as built (v5):**
+
+- **Routes:** `/sign-in`, `/pending`, `/unauthorized`, and a guarded shell at `/` containing `/` (Overview),
+  every module in `app/navigation.ts` as a guarded placeholder, and a nested `*` 404. `/register` and
+  `/profile` are deliberately absent until Group E/G can make them real.
+  This extends D3: later-phase modules get a **guarded placeholder** so role filtering and direct-URL
+  blocking can be exercised, but they render a "not built yet" state and contain no data or fake
+  business logic.
+- **Permissions:** the single module list in `frontend/src/app/navigation.ts` drives the sidebar, the
+  mobile bar, and the generated route table, so navigation and guards cannot drift. Role matching is
+  `hasAnyRole` in `frontend/src/features/auth/types.ts` (any-of, never role hierarchy), which is what
+  makes one account with several roles work.
+- **States:** `AppLoading`, `/sign-in` (authentication-required), `/pending`, `/unauthorized` (403 +
+  suspended account), 404, and a route-level `errorElement`.
+- **Auth placeholder:** development only. `features/auth/dev-session.tsx` stores a persona id in
+  `localStorage` and is compiled out of production builds (verified: none of its strings appear in
+  `dist/`). Production renders as signed-out with "Sign-in is not configured" until Group E. No mock
+  session is presented as authentication.
+- **Shell:** 240px sidebar with persisted icon-rail collapse, mobile bottom bar (4 modules + More
+  sheet), skip link, scroll-to-top and `document.title` on route change.
+
 #### Group E — Supabase wiring
 - [ ] E1. Supabase project created (**manual step: developer creates it and holds credentials**).
 - [ ] E2. `.env.example` with `VITE_SUPABASE_URL=` and `VITE_SUPABASE_ANON_KEY=` placeholders only; `.env.local` gitignored.
@@ -456,17 +477,25 @@ Payment gateway integration, ELO ratings, public API, native mobile app, light t
 | A — Baseline | ✅ Complete (one initial commit, `.gitignore`, `.gitattributes`) |
 | B — Frontend scaffold | ✅ Complete (Vite + React + TS, Tailwind, tokens, ESLint, Vitest) |
 | C — Design system foundation | ✅ Complete (19 primitives, 8 shared components, `/dev/ui` gallery at `dev-gallery.html`) |
-| D — App shell and routing | ⏸ Awaiting approval |
+| D — App shell and routing | ✅ Complete — awaiting approval (shell, role-aware nav, guards, 403/404/loading/error, dev-only session) |
 | E–J | ⏸ Not started |
 
-**What exists now:** a production build (`dist/`) that renders the scaffold screen, and a development-only
-component gallery. There is **no routing, no database, no authentication, and no club feature** — those begin at
-Groups D and E.
+**What exists now:** a production build (`dist/`) with the real application shell: desktop sidebar,
+mobile bottom navigation, role-aware module navigation for multi-role accounts, guarded routes,
+and loading / unauthenticated / pending / access-denied / not-found / error states. There is **no
+database and no authentication**: the production build is permanently signed out and says so. Development
+builds use a clearly labelled local persona switcher (`features/auth/dev-session.tsx`) that is compiled out
+of `dist/`. No club module renders data yet — each later-phase route shows a "not built yet" state.
 
 **Design note (Group C):** `--color-text-faint` was raised from `#61707F` to `#7A8998` because the original
 measured 3.64:1 and failed WCAG AA for small text. It now measures 4.83:1 on the darkest surface and 5.43:1 on `bg`.
 
-Next action on approval: **Group D only** (app shell, navigation, route guards), then stop at Gate D and report.
+**Verification note (Group D):** 32 browser checks passed against the dev build (route guards, direct URL
+access, role unions for 1/2/3 roles, unknown routes, skip link, mobile bar at 390px and 360px, dialog focus
+trap and focus return, persona persistence) and the production build was checked separately: `/` and
+`/players` both resolve to `/sign-in`, and the dev persona strings are absent from `dist/`.
+
+Next action on approval: **Group E only** (Supabase project wiring), then stop at Gate E and report.
 
 **Steps only you can do:**
 
@@ -485,4 +514,5 @@ Next action on approval: **Group D only** (app shell, navigation, route guards),
 | v2 | 2026-10-30 | D1–D7 approved. Supabase-only settled. Final folder structure. Full Phase 1 checklist (§6.1). §7 converted to a tracked business-rule register with standing provisional policy. |
 | v3 | 2026-10-30 | D8 (first Super Admin via one-time SQL bootstrap), D9 (Round Robin tie-break chain + mini-table rule), D10 (Mixed Doubles one male + one female) approved. §4 gains `players.gender` and Mixed Doubles integrity rules; §7 register drops the two resolved rows into a "Resolved since v2" table; Phase 3 scope updated; Phase 1 Group J4 now specifies the bootstrap script. Group A executed. |
 | v4 | 2026-10-30 | Groups B and C executed. `text-faint` token raised to meet AA. Component library and dev-only gallery recorded in §9. |
+| v5 | 2026-10-30 | Group D executed. §6.1 gains a "Group D — as built" note recording guarded placeholder routes for later modules, the single navigation/permission config, and the development-only session adapter. §9 status updated with verification evidence. |
 
