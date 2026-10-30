@@ -6,10 +6,10 @@ import type { Config } from 'tailwindcss'
  *
  * Note: token colours are referenced with plain `var(...)`, so Tailwind's
  * opacity modifiers (e.g. `bg-surface-1/50`) are not available for them.
- * Use the dedicated `accent-soft` style tokens instead.
+ * Use the dedicated `*-soft` tokens instead.
  */
 export default {
-  content: ['./index.html', './src/**/*.{ts,tsx}'],
+  content: ['./index.html', './dev-gallery.html', './src/**/*.{ts,tsx}'],
   theme: {
     extend: {
       colors: {
@@ -32,11 +32,27 @@ export default {
           DEFAULT: 'var(--color-accent)',
           hover: 'var(--color-accent-hover)',
           soft: 'var(--color-accent-soft)',
+          ring: 'var(--color-accent-ring)',
           foreground: 'var(--color-on-accent)',
         },
-        danger: 'var(--color-danger)',
-        warning: 'var(--color-warning)',
-        info: 'var(--color-info)',
+        danger: {
+          DEFAULT: 'var(--color-danger)',
+          hover: 'var(--color-danger-hover)',
+          soft: 'var(--color-danger-soft)',
+          ring: 'var(--color-danger-ring)',
+        },
+        warning: {
+          DEFAULT: 'var(--color-warning)',
+          soft: 'var(--color-warning-soft)',
+        },
+        info: {
+          DEFAULT: 'var(--color-info)',
+          soft: 'var(--color-info-soft)',
+        },
+        neutral: {
+          soft: 'var(--color-neutral-soft)',
+        },
+        overlay: 'var(--color-overlay)',
       },
       fontFamily: {
         sans: ['Inter Variable', 'Inter', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
@@ -50,10 +66,61 @@ export default {
         ],
       },
       borderRadius: {
-        DEFAULT: '8px',
+        DEFAULT: 'var(--radius-md)',
+        sm: 'var(--radius-sm)',
+        md: 'var(--radius-md)',
+        pill: 'var(--radius-pill)',
+      },
+      boxShadow: {
+        elevated: 'var(--shadow-elevated)',
       },
       transitionDuration: {
-        DEFAULT: '150ms',
+        DEFAULT: 'var(--duration-base)',
+        fast: 'var(--duration-fast)',
+      },
+      keyframes: {
+        'fade-in': {
+          from: { opacity: '0' },
+          to: { opacity: '1' },
+        },
+        'fade-out': {
+          from: { opacity: '1' },
+          to: { opacity: '0' },
+        },
+        'pop-in': {
+          from: { opacity: '0', transform: 'scale(0.98)' },
+          to: { opacity: '1', transform: 'scale(1)' },
+        },
+        'pop-out': {
+          from: { opacity: '1', transform: 'scale(1)' },
+          to: { opacity: '0', transform: 'scale(0.98)' },
+        },
+        'dialog-in': {
+          from: { opacity: '0', transform: 'translate(-50%, -50%) scale(0.97)' },
+          to: { opacity: '1', transform: 'translate(-50%, -50%) scale(1)' },
+        },
+        'dialog-out': {
+          from: { opacity: '1', transform: 'translate(-50%, -50%) scale(1)' },
+          to: { opacity: '0', transform: 'translate(-50%, -50%) scale(0.97)' },
+        },
+        'slide-down': {
+          from: { opacity: '0', transform: 'translateY(-4px)' },
+          to: { opacity: '1', transform: 'translateY(0)' },
+        },
+        'slide-up': {
+          from: { opacity: '0', transform: 'translateY(4px)' },
+          to: { opacity: '1', transform: 'translateY(0)' },
+        },
+      },
+      animation: {
+        'fade-in': 'fade-in var(--duration-base) ease-out',
+        'fade-out': 'fade-out var(--duration-fast) ease-in',
+        'pop-in': 'pop-in var(--duration-base) ease-out',
+        'pop-out': 'pop-out var(--duration-fast) ease-in',
+        'slide-down': 'slide-down var(--duration-base) ease-out',
+        'slide-up': 'slide-up var(--duration-base) ease-out',
+        'dialog-in': 'dialog-in var(--duration-base) ease-out',
+        'dialog-out': 'dialog-out var(--duration-fast) ease-in',
       },
     },
   },

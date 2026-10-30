@@ -44,6 +44,21 @@ export default [
   },
 
   {
+    // shadcn-style primitives intentionally co-locate their variant maps with
+    // the component. These exports are stable and safe for Fast Refresh.
+    files: ['src/components/ui/**/*.{ts,tsx}'],
+    rules: {
+      'react-refresh/only-export-components': [
+        'warn',
+        {
+          allowConstantExport: true,
+          allowExportNames: ['buttonVariants', 'badgeVariants', 'fieldBase'],
+        },
+      ],
+    },
+  },
+
+  {
     files: ['*.config.{ts,js}', 'eslint.config.js'],
     languageOptions: {
       globals: {

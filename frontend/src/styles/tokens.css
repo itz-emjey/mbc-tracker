@@ -25,18 +25,29 @@
   /* --- Text (all AA contrast or better on their intended surface) -------- */
   --color-text: #e7edf3;
   --color-text-muted: #93a1b1;
-  --color-text-faint: #61707f;
+  --color-text-faint: #7a8998;
 
   /* --- Accent: the only colour allowed to carry emphasis ----------------- */
   --color-accent: #2ed47a;
   --color-accent-hover: #27bc6c;
   --color-accent-soft: rgba(46, 212, 122, 0.12);
+  --color-accent-ring: rgba(46, 212, 122, 0.45);
   --color-on-accent: #06120b;
 
-  /* --- Semantic status --------------------------------------------------- */
+  /* --- Semantic status (tinted at 12% for pills and inline messages) ----- */
   --color-danger: #f05a5a;
+  --color-danger-hover: #d94f4f;
+  --color-danger-soft: rgba(240, 90, 90, 0.12);
+  --color-danger-ring: rgba(240, 90, 90, 0.45);
   --color-warning: #e8b04b;
+  --color-warning-soft: rgba(232, 176, 75, 0.14);
   --color-info: #5aa9f0;
+  --color-info-soft: rgba(90, 169, 240, 0.12);
+  --color-neutral-soft: rgba(147, 161, 177, 0.12);
+
+  /* --- Overlay + the single allowed shadow (menus and modals only) ------- */
+  --color-overlay: rgba(4, 6, 9, 0.72);
+  --shadow-elevated: 0 16px 40px -12px rgba(0, 0, 0, 0.65);
 
   /* --- Shape ------------------------------------------------------------- */
   --radius-sm: 6px;

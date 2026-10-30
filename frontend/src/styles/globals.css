@@ -24,9 +24,20 @@
     color: var(--color-on-accent);
   }
 
-  /* Visible focus for keyboard users only — no permanent glow. */
+  /* Fallback focus indicator for plain elements (links, summary, etc.).
+     Styled components opt out and draw their own ring. */
   :focus-visible {
     outline: 2px solid var(--color-accent);
     outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

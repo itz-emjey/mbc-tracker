@@ -166,7 +166,7 @@ This is a hard constraint on all UI work, layered on top of `AGENT.md` §7 (whic
 | `border-strong` | `#33404F` | Focus rings, active edges |
 | `text` | `#E7EDF3` | Primary text |
 | `text-muted` | `#93A1B1` | Secondary text, labels |
-| `text-faint` | `#61707F` | Timestamps, hints |
+| `text-faint` | `#7A8998` | Timestamps, hints *(raised from `#61707F` in Group C to meet AA 4.5:1 — see §9)* |
 | `accent` | `#2ED47A` | Primary buttons, active nav, positive delta |
 | `accent-hover` | `#27BC6C` | Hover state |
 | `accent-soft` | `rgba(46,212,122,0.12)` | Accent badges/chips |
@@ -453,13 +453,20 @@ Payment gateway integration, ELO ratings, public API, native mobile app, light t
 
 | Group | State |
 | --- | --- |
-| A — Baseline | ✅ Complete (one initial commit, `.gitignore` in place) |
-| B — Frontend scaffold | ⏸ Awaiting approval |
-| C–J | ⏸ Not started |
+| A — Baseline | ✅ Complete (one initial commit, `.gitignore`, `.gitattributes`) |
+| B — Frontend scaffold | ✅ Complete (Vite + React + TS, Tailwind, tokens, ESLint, Vitest) |
+| C — Design system foundation | ✅ Complete (19 primitives, 8 shared components, `/dev/ui` gallery at `dev-gallery.html`) |
+| D — App shell and routing | ⏸ Awaiting approval |
+| E–J | ⏸ Not started |
 
-**No application code exists yet.** `frontend/` and `backend/` are still empty; nothing has been installed. Group A only established the repository baseline.
+**What exists now:** a production build (`dist/`) that renders the scaffold screen, and a development-only
+component gallery. There is **no routing, no database, no authentication, and no club feature** — those begin at
+Groups D and E.
 
-Next action on approval: **Group B only** (Vite + React + TS scaffold, Tailwind, `tokens.css`, lint/type/test scripts), then stop at Gate B and report.
+**Design note (Group C):** `--color-text-faint` was raised from `#61707F` to `#7A8998` because the original
+measured 3.64:1 and failed WCAG AA for small text. It now measures 4.83:1 on the darkest surface and 5.43:1 on `bg`.
+
+Next action on approval: **Group D only** (app shell, navigation, route guards), then stop at Gate D and report.
 
 **Steps only you can do:**
 
@@ -477,4 +484,5 @@ Next action on approval: **Group B only** (Vite + React + TS scaffold, Tailwind,
 | v1 | 2026-10-30 | Initial plan from `AGENT.md`: architecture options, design system, schema, roadmap, open decisions. |
 | v2 | 2026-10-30 | D1–D7 approved. Supabase-only settled. Final folder structure. Full Phase 1 checklist (§6.1). §7 converted to a tracked business-rule register with standing provisional policy. |
 | v3 | 2026-10-30 | D8 (first Super Admin via one-time SQL bootstrap), D9 (Round Robin tie-break chain + mini-table rule), D10 (Mixed Doubles one male + one female) approved. §4 gains `players.gender` and Mixed Doubles integrity rules; §7 register drops the two resolved rows into a "Resolved since v2" table; Phase 3 scope updated; Phase 1 Group J4 now specifies the bootstrap script. Group A executed. |
+| v4 | 2026-10-30 | Groups B and C executed. `text-faint` token raised to meet AA. Component library and dev-only gallery recorded in §9. |
 
