@@ -338,11 +338,18 @@ Executed in order. Each group ends at a **gate** that must pass before moving on
 - [x] E1. Supabase project created (**manual step: developer creates it and holds credentials**). Verified: `.env.local` configured locally, GoTrue and the database API reachable.
 - [x] E2. `.env.example` with `VITE_SUPABASE_URL=` and `VITE_SUPABASE_ANON_KEY=` placeholders only; `.env.local` gitignored.
 - [x] E3. `lib/supabase.ts` — single lazy client; the `Database` generic lands with E4.
-- [ ] E4. `supabase gen types typescript` wired to a script and committed output. **Blocked — see below.**
+- [ ] E4. `supabase gen types typescript` wired to a script and committed output. **Deferred to Group F** (formal deferral reconciliation pending).
 - [x] E5. Verify no service-role key exists anywhere in `frontend/` or Git history.
-- **Gate E:** app boots against the real project; a failed env var produces a clear error, not a blank screen. **Not passed: E4 is open.**
+- **Gate E:** app boots against the real project; a failed env var produces a clear error, not a blank screen. **Not passed pending formal E4 deferral reconciliation.**
 
-**Group E — as built (v7):**
+**Group E status (v8):**
+
+- **E1:** verified.
+- **E4:** deferred to Group F.
+- **Email confirmation:** disabled for development.
+- **Gate E:** not passed pending formal E4 deferral reconciliation.
+
+**Group E — as built (v8):**
 
 - **E1 done and verified.** The owner created the `mbc-arena` project and filled `frontend/.env.local` (gitignored,
   never committed). `npm run check:supabase` probes the live project without printing secrets and reports:
@@ -354,19 +361,22 @@ Executed in order. Each group ends at a **gate** that must pass before moving on
 - **E3 done (client + validation).** `src/lib/env.ts` validates both variables, rejects malformed URLs, rejects
   service-role JWTs and `sb_secret_…` keys, and throws a readable `SupabaseConfigError`. `src/lib/supabase.ts`
   exposes one lazily created client with session persistence and token refresh. **The generated `Database` generic
-  is not applied yet** because types cannot be generated until E4.
+  is not applied yet** because type generation is deferred to Group F, after the schema exists.
 - **E5 verified.** `git grep` finds no service-role key, secret key, or JWT value in tracked files or history; the
   only matches are documentation and tests that reject such keys.
-- **E4 blocked.** The hosted schema is empty (migrations belong to F), so generated output would be an empty stub;
+- **E4 deferred.** The hosted schema is empty (migrations belong to F), so generated output would be an empty stub;
   `supabase gen types` additionally needs a Supabase access token or a database URL. The CLI is not installed here
-  (`npx supabase` did not finish installing within 5 minutes) and no Docker stack is available. The command is
-  documented in `frontend/README.md` and should run after F creates the tables. **Gate E cannot pass while E4 is open.**
+  (`npx supabase` did not finish installing within 5 minutes) and no Docker stack is available. Type generation now
+  moves into Group F, after the schema exists, using the command documented in `frontend/README.md`. **Gate E remains
+  open until the deferral itself is formally reconciled.**
 - **Gate E evidence.** Connectivity and key rejection are covered by `npm run check:supabase`; env validation and
   the clear `SupabaseConfigError` are covered by 13 unit tests. The error path has not been exercised through the
   running app because nothing consumes the client until Group G — wiring the session provider belongs there.
-- **Observed setting discrepancy (for Group G).** The project reports `mailer_autoconfirm: false`, i.e. email
-  confirmation is **still enabled**, even though the decision was to disable it for development. Either flip
-  Authentication → Providers → Email before G, or keep it on and adjust the registration test plan.
+- **Email confirmation (development).** The owner has disabled email confirmation for the development project. A
+  live probe at the time of writing still returned `mailer_autoconfirm: false` together with `external.email: false`,
+  and `signInWithPassword` returned `email_provider_disabled`. That means the **Email provider itself is currently
+  off**, which blocks all email sign-in and sign-up. Re-enable Authentication → Providers → Email and leave
+  "Confirm email" off before Group G; confirmation being off is the intended state, disabling the provider is not.
 - **Not started (belongs to F–H, and explicitly out of this authorisation):** migrations, identity tables, RLS,
   registration approval, and the real auth provider. The development persona adapter is still the only session
   source, so nothing about authentication is being presented as real.
@@ -507,7 +517,7 @@ Payment gateway integration, ELO ratings, public API, native mobile app, light t
 | B — Frontend scaffold | ✅ Complete (Vite + React + TS, Tailwind, tokens, ESLint, Vitest) |
 | C — Design system foundation | ✅ Complete (19 primitives, 8 shared components, `/dev/ui` gallery at `dev-gallery.html`) |
 | D — App shell and routing | ✅ Complete — awaiting approval (shell, role-aware nav, guards, 403/404/loading/error, dev-only session) |
-| E — Supabase wiring | 🟡 Partial — E1/E2/E3/E5 done and verified against the live project; E4 blocked (types); Gate E not passed |
+| E — Supabase wiring | 🟡 Partial — E1 verified; E4 deferred to Group F; Gate E not passed pending formal E4 deferral reconciliation |
 | F–J | ⏸ Not started |
 
 **What exists now:** a production build (`dist/`) with the real application shell: desktop sidebar,
@@ -521,8 +531,9 @@ of `dist/`. No club module renders data yet — each later-phase route shows a "
 `frontend/.env.local` (gitignored), the client reaches GoTrue v2.197.0 and the database API, accepts the
 `sb_publishable_…` key, starts with no stored session, and finds an empty `public` schema — as expected before
 Group F. `npm run check:supabase` reproduces this check without printing the key. No migration, policy, generated
-type, or real authentication exists yet. The project still reports `mailer_autoconfirm: false`, so email confirmation
-is enabled despite the development decision to disable it; resolve that before Group G.
+type, or real authentication exists yet. Email confirmation is disabled for development; however, the live probe
+currently returns `email_provider_disabled`, so the Email provider itself must be re-enabled (with confirmation
+left off) before Group G. E4 is deferred to Group F and Gate E stays open until that deferral is formally reconciled.
 
 **Design note (Group C):** `--color-text-faint` was raised from `#61707F` to `#7A8998` because the original
 measured 3.64:1 and failed WCAG AA for small text. It now measures 4.83:1 on the darkest surface and 5.43:1 on `bg`.
@@ -532,15 +543,16 @@ access, role unions for 1/2/3 roles, unknown routes, skip link, mobile bar at 39
 trap and focus return, persona persistence) and the production build was checked separately: `/` and
 `/players` both resolve to `/sign-in`, and the dev persona strings are absent from `dist/`.
 
-Next action: **decide E4**, then approve Group F. The requested database, authentication,
+Next action: **wait for explicit approval to start Group F.** E4 is deferred to Group F; the deferral still needs
+formal reconciliation before Gate E can be recorded as passed. The requested database, authentication,
 registration-approval, and RLS work is tracked as Groups F–H and has not been started.
 
 **Steps only you can do:**
 
 - Create the Supabase project and keep the credentials (Group E1) — **done**.
 - Copy `frontend/.env.example` to `frontend/.env.local` and paste `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from Project Settings → API — **done**. Never put the service-role or secret key in a `VITE_` variable; `.env.local` is gitignored and must stay uncommitted.
-- **Choose how E4 is closed:** either (a) defer type generation into Group F, when the schema exists (recommended), or (b) supply a Supabase personal access token through your own environment so `supabase gen types` can run. A database URL/password is not requested.
-- If development registration should work without confirmation emails, turn off Authentication → Providers → Email → "Confirm email"; the project currently has it **on**.
+- Email confirmation is disabled for development (owner action). The live probe still reports the Email provider off (`email_provider_disabled`); re-enable Authentication → Providers → Email with "Confirm email" off before Group G.
+- Approve the start of Group F when you are ready. Type generation will run there once the schema exists.
 
 **Resolved:** first Super Admin bootstrap method (D8), Round Robin tie-break (D9), Mixed Doubles pairing (D10). Remaining open items are the SP and season rules in §7.
 
@@ -557,4 +569,5 @@ registration-approval, and RLS work is tracked as Groups F–H and has not been 
 | v5 | 2026-10-30 | Group D executed. §6.1 gains a "Group D — as built" note recording guarded placeholder routes for later modules, the single navigation/permission config, and the development-only session adapter. §9 status updated with verification evidence. |
 | v6 | 2026-10-30 | Group E started. E2/E3/E5 implemented and tested (env validation rejects service-role keys; single lazy client). E1/E4 blocked: no Supabase project or credentials exist and no CLI/Docker is available. Gate E not attempted; F–H remain unstarted. |
 | v7 | 2026-10-30 | E1 verified against the live `mbc-arena` project (GoTrue v2.197.0, publishable key accepted, empty `public` schema, no stored session) and `npm run check:supabase` added. E4 remains blocked: no CLI/access token and no tables yet, so types are deferred to F. Gate E not passed. Recorded that email confirmation is still enabled (`mailer_autoconfirm: false`) despite the development decision. |
+| v8 | 2026-10-30 | Email confirmation disabled for development. Status fixed as: E1 verified, E4 deferred to Group F, email confirmation disabled for development, Gate E not passed pending formal E4 deferral reconciliation. A live probe still reports the Email provider off (`email_provider_disabled`), recorded as a pre-G check. Group F remains blocked on explicit approval. |
 
