@@ -25,6 +25,7 @@ const [
   tournamentMigration,
   spRuleMigration,
   trainingMigration,
+  clubMigration,
   identityPolicies,
   operationPolicies,
   spPolicies,
@@ -32,6 +33,7 @@ const [
   tournamentPolicies,
   spRulePolicies,
   trainingPolicies,
+  clubPolicies,
   seed,
   bootstrap,
 ] = await Promise.all([
@@ -42,6 +44,7 @@ const [
   readFile(join(backendDir, 'migrations', '005_tournaments.sql'), 'utf8'),
   readFile(join(backendDir, 'migrations', '006_shuttlepower_rules.sql'), 'utf8'),
   readFile(join(backendDir, 'migrations', '007_training.sql'), 'utf8'),
+  readFile(join(backendDir, 'migrations', '008_club_activities.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '001_identity.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '002_operations.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '003_shuttlepower.sql'), 'utf8'),
@@ -49,6 +52,7 @@ const [
   readFile(join(backendDir, 'policies', '005_tournaments.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '006_shuttlepower_rules.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '007_training.sql'), 'utf8'),
+  readFile(join(backendDir, 'policies', '008_club_activities.sql'), 'utf8'),
   readFile(join(backendDir, 'seeds', '001_fictional_players.sql'), 'utf8'),
   readFile(join(backendDir, 'seeds', 'bootstrap_super_admin.sql'), 'utf8'),
 ])
@@ -89,6 +93,14 @@ const tables = [
   'training_fee_periods',
   'training_payments',
   'training_sessions',
+  'jersey_projects',
+  'jersey_designs',
+  'jersey_sizes',
+  'jersey_orders',
+  'polls',
+  'poll_options',
+  'poll_votes',
+  'announcements',
   'tournament_events',
   'teams',
   'team_members',
@@ -347,6 +359,7 @@ await db.exec(playerMigration)
 await db.exec(tournamentMigration)
 await db.exec(spRuleMigration)
 await db.exec(trainingMigration)
+await db.exec(clubMigration)
 await db.exec(identityPolicies)
 await db.exec(operationPolicies)
 await db.exec(spPolicies)
@@ -354,6 +367,7 @@ await db.exec(authPolicies)
 await db.exec(tournamentPolicies)
 await db.exec(spRulePolicies)
 await db.exec(trainingPolicies)
+await db.exec(clubPolicies)
 
 // ---------------------------------------------------------------------------
 // Schema and catalogue
@@ -3043,6 +3057,335 @@ await test('N8: anon cannot read training or call its RPCs', async () => {
         'anon',
         `select public.record_training_payment('00000000-0000-4000-8000-000000000000', '00000000-0000-4000-8000-000000000000', 1)`,
       ),
+    /permission denied/i,
+  )
+})
+
+// ---------------------------------------------------------------------------
+// Jerseys, polls, and announcements (Phase 7)
+// ---------------------------------------------------------------------------
+await test('N9: club activity tables are read-only and RPCs are authenticated-only', async () => {
+  const { rows } = await db.query(`
+    select
+      has_table_privilege('authenticated', 'public.jersey_projects', 'SELECT') as project_select,
+      has_table_privilege('authenticated', 'public.jersey_orders', 'INSERT') as order_insert,
+      has_table_privilege('authenticated', 'public.polls', 'UPDATE') as poll_update,
+      has_table_privilege('authenticated', 'public.poll_votes', 'DELETE') as vote_delete,
+      has_table_privilege('authenticated', 'public.announcements', 'INSERT') as announcement_insert,
+      has_function_privilege('authenticated', 'public.create_jersey_project(text,text,numeric,timestamp with time zone)', 'EXECUTE') as project_execute,
+      has_function_privilege('authenticated', 'public.submit_jersey_order(uuid,uuid,uuid,integer)', 'EXECUTE') as order_execute,
+      has_function_privilege('authenticated', 'public.create_poll(text,jsonb,text,text,boolean,boolean,timestamp with time zone,timestamp with time zone)', 'EXECUTE') as poll_execute,
+      has_function_privilege('authenticated', 'public.cast_poll_vote(uuid,uuid[])', 'EXECUTE') as vote_execute,
+      has_function_privilege('authenticated', 'public.poll_results(uuid)', 'EXECUTE') as results_execute,
+      has_function_privilege('authenticated', 'public.create_announcement(text,text)', 'EXECUTE') as news_execute,
+      has_function_privilege('anon', 'public.poll_results(uuid)', 'EXECUTE') as anon_results_execute
+  `)
+  const row = rows[0]
+  assert(row.project_select === true, 'members should read projects')
+  assert(row.order_insert === false, 'orders must cross the RPC')
+  assert(row.poll_update === false, 'polls must cross the RPC')
+  assert(row.vote_delete === false, 'votes must cross the RPC')
+  assert(row.announcement_insert === false, 'announcements must cross the RPC')
+  assert(
+    row.project_execute && row.order_execute && row.poll_execute && row.vote_execute && row.results_execute && row.news_execute,
+    'the club activity RPCs should be executable by authenticated members',
+  )
+  assert(row.anon_results_execute === false, 'anon must not read poll results')
+})
+
+await test('N9: staff create a jersey project and must add designs and sizes before opening', async () => {
+  await inTransaction(async () => {
+    await actAs('authenticated', C)
+    const created = await db.query(
+      `select public.create_jersey_project('Test Kit', 'Home and away', 750, null) as result`,
+    )
+    const projectId = created.rows[0].result.id
+
+    await expectQueryError(
+      `select public.set_jersey_project_status('${projectId}', 'open')`,
+      /at least one design/i,
+    )
+
+    await db.query(`select public.add_jersey_design('${projectId}', 'Home', 'Green')`)
+
+    await expectQueryError(
+      `select public.set_jersey_project_status('${projectId}', 'open')`,
+      /at least one size/i,
+    )
+
+    await db.query(`select public.add_jersey_size('${projectId}', 'M')`)
+    const opened = await db.query(
+      `select public.set_jersey_project_status('${projectId}', 'open') as result`,
+    )
+
+    assert(opened.rows[0].result.status === 'open', 'the project should open')
+
+    const audit = await db.query(
+      `select count(*)::int as total from public.audit_logs
+        where action in ('jersey.project.create', 'jersey.design.create', 'jersey.size.create', 'jersey.project.status')`,
+    )
+
+    assert(audit.rows[0].total >= 4, 'project, design, size, and status should be audited')
+
+    await expectQueryError(
+      `select public.set_jersey_project_status('${projectId}', 'draft')`,
+      /status cannot move/i,
+    )
+  })
+})
+
+await test('N9: a player orders once, can update, and cannot see another player’s order', async () => {
+  await inTransaction(async () => {
+    await actAs('authenticated', C)
+    const project = await db.query(
+      `select public.create_jersey_project('Order Kit', null, 500, now() + interval '1 day') as result`,
+    )
+    const projectId = project.rows[0].result.id
+    const design = await db.query(
+      `select public.add_jersey_design('${projectId}', 'Home', null) as result`,
+    )
+    const size = await db.query(
+      `select public.add_jersey_size('${projectId}', 'L') as result`,
+    )
+    const designId = design.rows[0].result.id
+    const sizeId = size.rows[0].result.id
+    await db.query(`select public.set_jersey_project_status('${projectId}', 'open')`)
+
+    await actAs('authenticated', A)
+    await db.query(
+      `select public.submit_jersey_order('${projectId}', '${designId}', '${sizeId}', 1)`,
+    )
+    await db.query(
+      `select public.submit_jersey_order('${projectId}', '${designId}', '${sizeId}', 3)`,
+    )
+
+    await actAs('postgres')
+    const orders = await db.query(
+      `select player_id, quantity from public.jersey_orders where project_id = '${projectId}'`,
+    )
+
+    assert(orders.rows.length === 1, `expected one active order, got ${orders.rows.length}`)
+    assert(orders.rows[0].player_id === P1, 'the order belongs to the signed-in player')
+    assert(orders.rows[0].quantity === 3, 'a second submission updates the order')
+
+    await actAs('authenticated', A)
+    const own = await db.query(`select id from public.jersey_orders`)
+    assert(own.rows.length === 1, 'a player sees their own order')
+
+    await actAs('authenticated', D)
+    const other = await db.query(`select id from public.jersey_orders`)
+    assert(other.rows.length === 0, 'a non-owner, non-staff member sees no orders')
+  })
+})
+
+await test('N9: a closed project and a passed deadline refuse orders', async () => {
+  await inTransaction(async () => {
+    await actAs('authenticated', C)
+    const project = await db.query(
+      `select public.create_jersey_project('Late Kit', null, null, now() - interval '1 hour') as result`,
+    )
+    const projectId = project.rows[0].result.id
+    const design = await db.query(
+      `select public.add_jersey_design('${projectId}', 'Home', null) as result`,
+    )
+    const size = await db.query(
+      `select public.add_jersey_size('${projectId}', 'S') as result`,
+    )
+    await db.query(`select public.set_jersey_project_status('${projectId}', 'open')`)
+
+    await actAs('authenticated', A)
+    await expectQueryError(
+      `select public.submit_jersey_order('${projectId}', '${design.rows[0].result.id}', '${size.rows[0].result.id}', 1)`,
+      /deadline has passed/i,
+    )
+
+    await actAs('authenticated', C)
+    await db.query(`select public.set_jersey_project_status('${projectId}', 'closed')`)
+
+    await actAs('authenticated', A)
+    await expectQueryError(
+      `select public.submit_jersey_order('${projectId}', '${design.rows[0].result.id}', '${size.rows[0].result.id}', 1)`,
+      /orders are closed/i,
+    )
+  })
+})
+
+await test('N9: a single-choice poll takes one option and replaces a previous vote', async () => {
+  await inTransaction(async () => {
+    await actAs('authenticated', C)
+    const created = await db.query(
+      `select public.create_poll('Which design?', '["Home","Away"]'::jsonb, null, 'single', true, false, null, null) as result`,
+    )
+    const pollId = created.rows[0].result.id
+    await db.query(`select public.set_poll_status('${pollId}', 'open')`)
+
+    const options = await db.query(
+      `select id from public.poll_options where poll_id = '${pollId}' order by position`,
+    )
+    const first = options.rows[0].id
+    const second = options.rows[1].id
+
+    await actAs('authenticated', A)
+    await db.query(`select public.cast_poll_vote('${pollId}', array['${first}']::uuid[])`)
+    await expectQueryError(
+      `select public.cast_poll_vote('${pollId}', array['${first}','${second}']::uuid[])`,
+      /exactly one option/i,
+    )
+    await db.query(`select public.cast_poll_vote('${pollId}', array['${second}']::uuid[])`)
+
+    await actAs('postgres')
+    const votes = await db.query(
+      `select option_id from public.poll_votes where poll_id = '${pollId}' and player_id = '${P1}'`,
+    )
+    assert(votes.rows.length === 1, `expected one stored vote, got ${votes.rows.length}`)
+    assert(votes.rows[0].option_id === second, 'the newer choice replaces the older one')
+
+    await actAs('authenticated', A)
+    const hidden = await db.query(`select public.poll_results('${pollId}') as result`)
+    assert(hidden.rows[0].result.results_visible === false, 'results stay hidden while open')
+    assert(
+      hidden.rows[0].result.options.every((option) => option.count === null),
+      'hidden results must not carry counts',
+    )
+    assert(
+      hidden.rows[0].result.my_option_ids.length === 1 &&
+        hidden.rows[0].result.my_option_ids[0] === second,
+      'the caller sees their own choice',
+    )
+
+    await actAs('authenticated', C)
+    await db.query(`select public.set_poll_status('${pollId}', 'closed')`)
+
+    await actAs('authenticated', A)
+    const shown = await db.query(`select public.poll_results('${pollId}') as result`)
+    assert(shown.rows[0].result.results_visible === true, 'closing reveals results')
+    assert(
+      shown.rows[0].result.options.find((option) => option.id === second).count === 1,
+      'the tally counts the cast vote',
+    )
+
+    await actAs('authenticated', D)
+    const noVotes = await db.query(`select option_id from public.poll_votes`)
+    assert(noVotes.rows.length === 0, 'votes are not exposed to other members')
+  })
+})
+
+await test('N9: a multiple-choice poll accepts several options without duplicates', async () => {
+  await inTransaction(async () => {
+    await actAs('authenticated', C)
+    const created = await db.query(
+      `select public.create_poll('Pick sizes', '["S","M","L"]'::jsonb, null, 'multiple', false, true, null, null) as result`,
+    )
+    const pollId = created.rows[0].result.id
+    await db.query(`select public.set_poll_status('${pollId}', 'open')`)
+
+    const options = await db.query(
+      `select id from public.poll_options where poll_id = '${pollId}' order by position`,
+    )
+
+    await actAs('authenticated', A)
+    await db.query(
+      `select public.cast_poll_vote('${pollId}', array['${options.rows[0].id}','${options.rows[1].id}']::uuid[])`,
+    )
+    await db.query(
+      `select public.cast_poll_vote('${pollId}', array['${options.rows[0].id}','${options.rows[1].id}']::uuid[])`,
+    )
+
+    await actAs('postgres')
+    const votes = await db.query(
+      `select option_id from public.poll_votes where poll_id = '${pollId}' and player_id = '${P1}'`,
+    )
+    assert(votes.rows.length === 2, `expected two selected options, got ${votes.rows.length}`)
+  })
+})
+
+await test('N9: a closed poll or a passed window refuses votes', async () => {
+  await inTransaction(async () => {
+    await actAs('authenticated', C)
+    const created = await db.query(
+      `select public.create_poll('Expired?', '["Yes","No"]'::jsonb, null, 'single', false, false, null, now() - interval '1 minute') as result`,
+    )
+    const pollId = created.rows[0].result.id
+    await db.query(`select public.set_poll_status('${pollId}', 'open')`)
+
+    const options = await db.query(
+      `select id from public.poll_options where poll_id = '${pollId}' order by position`,
+    )
+
+    await actAs('authenticated', A)
+    await expectQueryError(
+      `select public.cast_poll_vote('${pollId}', array['${options.rows[0].id}']::uuid[])`,
+      /has closed/i,
+    )
+
+    await actAs('authenticated', C)
+    await db.query(`select public.set_poll_status('${pollId}', 'closed')`)
+
+    await actAs('authenticated', A)
+    await expectQueryError(
+      `select public.cast_poll_vote('${pollId}', array['${options.rows[0].id}']::uuid[])`,
+      /not open/i,
+    )
+  })
+})
+
+await test('N9: drafts stay staff-only and announcements publish once', async () => {
+  await inTransaction(async () => {
+    await actAs('authenticated', C)
+    const created = await db.query(
+      `select public.create_announcement('Court night', 'Training moves to Friday.') as result`,
+    )
+    const announcementId = created.rows[0].result.id
+
+    await actAs('authenticated', A)
+    const hidden = await db.query(`select id from public.announcements`)
+    assert(hidden.rows.length === 0, 'a draft is hidden from members')
+
+    await actAs('authenticated', C)
+    await db.query(`select public.set_announcement_status('${announcementId}', 'published')`)
+
+    await actAs('authenticated', A)
+    const published = await db.query(
+      `select status, published_at from public.announcements where id = '${announcementId}'`,
+    )
+    assert(published.rows.length === 1 && published.rows[0].status === 'published', 'members see it')
+    assert(published.rows[0].published_at !== null, 'publishing stamps a date')
+
+    await actAs('authenticated', C)
+    await db.query(`select public.set_announcement_status('${announcementId}', 'archived')`)
+
+    await actAs('authenticated', A)
+    const archived = await db.query(`select id from public.announcements`)
+    assert(archived.rows.length === 0, 'archived news leaves the member view')
+
+    await actAs('authenticated', A)
+    await expectQueryError(
+      `select public.create_announcement('Nope', 'Nope')`,
+      /not authorized/i,
+    )
+
+    await expectErrorAs(
+      D,
+      `select public.create_announcement('Nope', 'Nope')`,
+      /not authorized/i,
+    )
+  })
+})
+
+await test('N9: anon cannot read club activity tables or call their RPCs', async () => {
+  await expectError(
+    'anon projects',
+    () => asRole('anon', `select id from public.jersey_projects`),
+    /permission denied/i,
+  )
+  await expectError(
+    'anon polls',
+    () => asRole('anon', `select id from public.polls`),
+    /permission denied/i,
+  )
+  await expectError(
+    'anon announcements',
+    () => asRole('anon', `select id from public.announcements`),
     /permission denied/i,
   )
 })

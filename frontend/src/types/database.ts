@@ -745,6 +745,317 @@ export type Database = {
           },
         ]
       }
+      announcements: {
+        Row: {
+          body: string
+          created_at: string
+          created_by: string | null
+          id: string
+          published_at: string | null
+          status: string
+          title: string
+          updated_at: string
+        }
+        ComputedFields: never
+        Insert: {
+          body: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          published_at?: string | null
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          published_at?: string | null
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      jersey_designs: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          position: number
+          project_id: string
+        }
+        ComputedFields: never
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          position?: number
+          project_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          position?: number
+          project_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'jersey_designs_project_id_fkey'
+            columns: ['project_id']
+            isOneToOne: false
+            referencedRelation: 'jersey_projects'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      jersey_orders: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          design_id: string
+          id: string
+          player_id: string
+          project_id: string
+          quantity: number
+          size_id: string
+          status: string
+          updated_at: string
+        }
+        ComputedFields: never
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          design_id: string
+          id?: string
+          player_id: string
+          project_id: string
+          quantity?: number
+          size_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          design_id?: string
+          id?: string
+          player_id?: string
+          project_id?: string
+          quantity?: number
+          size_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'jersey_orders_project_id_fkey'
+            columns: ['project_id']
+            isOneToOne: false
+            referencedRelation: 'jersey_projects'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'jersey_orders_player_id_fkey'
+            columns: ['player_id']
+            isOneToOne: false
+            referencedRelation: 'players'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      jersey_projects: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          name: string
+          order_deadline: string | null
+          price: number | null
+          status: string
+          updated_at: string
+        }
+        ComputedFields: never
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          order_deadline?: string | null
+          price?: number | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          order_deadline?: string | null
+          price?: number | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      jersey_sizes: {
+        Row: {
+          created_at: string
+          id: string
+          label: string
+          position: number
+          project_id: string
+        }
+        ComputedFields: never
+        Insert: {
+          created_at?: string
+          id?: string
+          label: string
+          position?: number
+          project_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          label?: string
+          position?: number
+          project_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'jersey_sizes_project_id_fkey'
+            columns: ['project_id']
+            isOneToOne: false
+            referencedRelation: 'jersey_projects'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      poll_options: {
+        Row: {
+          created_at: string
+          id: string
+          label: string
+          poll_id: string
+          position: number
+        }
+        ComputedFields: never
+        Insert: {
+          created_at?: string
+          id?: string
+          label: string
+          poll_id: string
+          position?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          label?: string
+          poll_id?: string
+          position?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'poll_options_poll_id_fkey'
+            columns: ['poll_id']
+            isOneToOne: false
+            referencedRelation: 'polls'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      poll_votes: {
+        Row: {
+          created_at: string
+          option_id: string
+          player_id: string
+          poll_id: string
+        }
+        ComputedFields: never
+        Insert: {
+          created_at?: string
+          option_id: string
+          player_id: string
+          poll_id: string
+        }
+        Update: {
+          created_at?: string
+          option_id?: string
+          player_id?: string
+          poll_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'poll_votes_poll_id_fkey'
+            columns: ['poll_id']
+            isOneToOne: false
+            referencedRelation: 'polls'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'poll_votes_player_id_fkey'
+            columns: ['player_id']
+            isOneToOne: false
+            referencedRelation: 'players'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      polls: {
+        Row: {
+          closes_at: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          is_anonymous: boolean
+          mode: string
+          opens_at: string | null
+          question: string
+          show_results: boolean
+          status: string
+          updated_at: string
+        }
+        ComputedFields: never
+        Insert: {
+          closes_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_anonymous?: boolean
+          mode?: string
+          opens_at?: string | null
+          question: string
+          show_results?: boolean
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          closes_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_anonymous?: boolean
+          mode?: string
+          opens_at?: string | null
+          question?: string
+          show_results?: boolean
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       team_members: {
         Row: {
           player_id: string
@@ -1140,6 +1451,55 @@ export type Database = {
       }
       void_training_payment: {
         Args: { p_payment_id: string; p_reason: string }
+        Returns: Json
+      }
+      add_jersey_design: {
+        Args: { p_description?: string | null; p_name: string; p_project_id: string }
+        Returns: Json
+      }
+      add_jersey_size: { Args: { p_label: string; p_project_id: string }; Returns: Json }
+      cancel_jersey_order: { Args: { p_order_id: string }; Returns: Json }
+      cast_poll_vote: { Args: { p_option_ids: string[]; p_poll_id: string }; Returns: Json }
+      create_announcement: { Args: { p_body: string; p_title: string }; Returns: Json }
+      create_jersey_project: {
+        Args: {
+          p_description?: string | null
+          p_name: string
+          p_order_deadline?: string | null
+          p_price?: number | null
+        }
+        Returns: Json
+      }
+      create_poll: {
+        Args: {
+          p_closes_at?: string | null
+          p_description?: string | null
+          p_is_anonymous?: boolean
+          p_mode?: string
+          p_opens_at?: string | null
+          p_options: Json
+          p_question: string
+          p_show_results?: boolean
+        }
+        Returns: Json
+      }
+      poll_results: { Args: { p_poll_id: string }; Returns: Json }
+      set_announcement_status: {
+        Args: { p_announcement_id: string; p_status: string }
+        Returns: Json
+      }
+      set_jersey_project_status: {
+        Args: { p_project_id: string; p_status: string }
+        Returns: Json
+      }
+      set_poll_status: { Args: { p_poll_id: string; p_status: string }; Returns: Json }
+      submit_jersey_order: {
+        Args: {
+          p_design_id: string
+          p_project_id: string
+          p_quantity?: number
+          p_size_id: string
+        }
         Returns: Json
       }
     }

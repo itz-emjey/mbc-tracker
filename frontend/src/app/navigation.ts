@@ -103,8 +103,7 @@ export const APP_MODULES: readonly AppModule[] = [
     label: 'Jerseys',
     shortLabel: 'Jerseys',
     icon: Shirt,
-    description: 'Jersey projects, design polls, and player orders.',
-    phase: 'Phase 7',
+    description: 'Jersey projects, designs, sizes, and player orders.',
     group: 'main',
   },
   {
@@ -112,8 +111,7 @@ export const APP_MODULES: readonly AppModule[] = [
     label: 'Polls',
     shortLabel: 'Polls',
     icon: BarChart3,
-    description: 'Club polls with one vote per eligible member.',
-    phase: 'Phase 7',
+    description: 'Club polls with one response per member.',
     group: 'main',
   },
   {
@@ -122,7 +120,6 @@ export const APP_MODULES: readonly AppModule[] = [
     shortLabel: 'News',
     icon: Megaphone,
     description: 'Published club announcements.',
-    phase: 'Phase 7',
     group: 'main',
   },
   {

@@ -6,6 +6,7 @@ import { RequireRole } from '@/app/guards/require-role'
 import { AppShell } from '@/app/layouts/app-shell'
 import { APP_MODULES } from '@/app/navigation'
 import { AdminPage } from '@/app/pages/admin-page'
+import { AnnouncementsPage } from '@/app/pages/announcements-page'
 import { ModulePage } from '@/app/pages/module-page'
 import { NotFoundPage } from '@/app/pages/not-found-page'
 import { OverviewPage } from '@/app/pages/overview-page'
@@ -15,7 +16,9 @@ import { PlayersPage } from '@/app/pages/players-page'
 import { RegisterPage } from '@/app/pages/register-page'
 import { ShuttlepowerPage } from '@/app/pages/shuttlepower-page'
 import { SignInPage } from '@/app/pages/sign-in-page'
+import { JerseysPage } from '@/app/pages/jerseys-page'
 import { PaymentsPage } from '@/app/pages/payments-page'
+import { PollsPage } from '@/app/pages/polls-page'
 import { TournamentDetailPage } from '@/app/pages/tournament-detail-page'
 import { TournamentsPage } from '@/app/pages/tournaments-page'
 import { TrainingPage } from '@/app/pages/training-page'
@@ -44,6 +47,12 @@ const moduleRoutes = APP_MODULES.filter((module) => module.path !== '/').map((mo
         <TrainingPage />
       ) : module.path === '/payments' ? (
         <PaymentsPage />
+      ) : module.path === '/jerseys' ? (
+        <JerseysPage />
+      ) : module.path === '/polls' ? (
+        <PollsPage />
+      ) : module.path === '/announcements' ? (
+        <AnnouncementsPage />
       ) : (
         <ModulePage module={module} />
       )}

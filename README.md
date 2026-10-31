@@ -84,6 +84,8 @@ backend/migrations/006_shuttlepower_rules.sql
 backend/policies/006_shuttlepower_rules.sql
 backend/migrations/007_training.sql
 backend/policies/007_training.sql
+backend/migrations/008_club_activities.sql
+backend/policies/008_club_activities.sql
 ```
 
 The migrations are **not** idempotent: re-running one fails at the first `CREATE` by design. There
@@ -200,6 +202,12 @@ Phase 6 adds training and payments: sessions, attendance, club-wide fee periods,
 are voided rather than edited or deleted. Staff schedule sessions, mark attendance, record partial or full
 payments, and void a mistake with a reason; players see their own attendance and payment records. The
 schema (migration 007) and screens are verified locally and still need applying to the hosted project.
+
+Phase 7 adds jerseys, polls, and announcements: jersey projects with designs, sizes, and one active order
+per player; single- or multiple-choice polls that refuse late and duplicate votes; and announcements that
+staff publish and archive. Staff manage everything through audited RPCs, players view designs, vote, and
+update their own order before the deadline. Migration 008 and its screens are verified locally only; image
+upload is not built because no storage bucket is configured.
 
 Phase 4 is scaffolded, not activated. Migration 006 adds versioned SP rule configuration with a single
 provisional, **disabled** default and a reconciliation function; the pure engine in `domain/sp.ts` refuses
