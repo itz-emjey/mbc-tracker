@@ -172,6 +172,6 @@ development seed and bootstrap scripts.
 
 Phase 1 (Groups A-J) and Phase 2 (Groups K-M) are implemented and verified locally. Group M added an
 unlinked demo player, refreshed/validated the committed database types, and completed the final docs and
-check suite. Migration 004 is not yet applied to the hosted project, and the hosted Phase 1 walkthrough is
-still open; remaining hosted steps and open product decisions (SP formulas and seasons) are tracked in
-`PLAN.md` §9 and §7.
+check suite. Migration 004 is applied and its three RPCs are verified (anon is denied); the hosted policy 004
+check and Phase 1 walkthrough remain open. Remaining hosted steps and open product decisions (SP formulas
+and seasons) are tracked in `PLAN.md` §9 and §7.

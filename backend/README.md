@@ -43,10 +43,11 @@ applied on 2026-10-31: all six functions now resolve and `anon` receives
 `42501 permission denied` for each, where it received `404 PGRST202` before.
 Policy 004 only narrows `authenticated` grants, which the API cannot read back;
 confirm it with `select has_table_privilege('authenticated', 'public.profiles',
-'INSERT');` returning `false`. Step 8 (Phase 2, Group K) is **not yet applied**
-to the hosted project; until it is, the three player-directory functions return
-`PGRST202`. The repository intentionally stores no credentials that would let an
-agent apply migrations automatically.
+'INSERT');` returning `false`. Step 8 (Phase 2, Group K) was applied on
+2026-10-31: `set_profile_roles`, `link_player_account`, and
+`unlink_player_account` all resolve, and `anon` receives `42501 permission
+denied` for each. The repository intentionally stores no credentials that would
+let an agent apply migrations automatically.
 
 ## Seeds
 

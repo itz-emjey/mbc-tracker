@@ -2,7 +2,7 @@
 
 > **Source of truth for requirements:** `AGENT.md`
 > **This document:** the approved working plan — architecture, design system, schema, phases, Phase 1 checklist, and open business rules.
-> **Status:** v24 — architecture, stack, design, and roadmap approved. **Groups A–M are complete.** Phase 1 and Phase 2 are code- and docs-complete. Group L added the player directory, profiles, add-player dialog, and admin role/link tools; Group M adds an unlinked demo player, validates the committed database types, and closes the docs and full check suite. Verification: 90/90 SQL checks, 71/71 frontend tests, typecheck, lint, format, and build all clean. On the hosted project, migration 003 is live and the seed ran; the GoTrue `500 Database error querying schema` was repaired by the `information_schema` normalization. Remaining hosted steps: confirm policy 004, run the Gate G replay, bootstrap the owner's Super Admin, and apply migration 004.
+> **Status:** v25 — architecture, stack, design, and roadmap approved. **Groups A–M are complete.** Phase 1 and Phase 2 are code- and docs-complete. Group L added the player directory, profiles, add-player dialog, and admin role/link tools; Group M adds an unlinked demo player, validates the committed database types, and closes the docs and full check suite. Verification: 90/90 SQL checks, 71/71 frontend tests, typecheck, lint, format, and build all clean. On the hosted project, migrations 003 and 004 are live, the seed ran, the GoTrue `500 Database error querying schema` was repaired, and all three player RPCs are verified with `anon` denied. Remaining hosted steps: confirm policy 004, run the Gate G replay, and bootstrap the owner's Super Admin.
 
 ### Approved decisions
 
@@ -692,11 +692,11 @@ Payment gateway integration, ELO ratings, public API, native mobile app, light t
 | H — Ownership and privacy | ✅ Complete — 11 new negative checks; 67/67 locally; no policy change required |
 | I — Seed data | ✅ Complete — seed shape and idempotency checks; hosted re-run repaired the GoTrue 500 |
 | J — Tests and docs | ✅ Complete — SQL, frontend, typecheck, lint, format, and build clean; hosted walkthrough in progress |
-| K — Player lifecycle RPCs | ✅ Complete — migration 004 and three Super Admin RPCs; 15 new checks; hosted application pending |
+| K — Player lifecycle RPCs | ✅ Complete — migration 004 and three Super Admin RPCs; 15 new checks; hosted application verified and anon denied |
 | L — Directory and profile UI | ✅ Complete — directory, profiles, add/edit, role editor, and link/unlink tools; 71/71 frontend |
 | M — Seed, types, docs, verification | ✅ Complete — unlinked demo player, types validated against migration 004, docs current; 90/90 SQL, 71/71 frontend, build clean |
 
-**What exists now:** the production frontend with real Supabase authentication and the Phase 2 player directory, plus the Phase 1 and Phase 2 database schema applied locally. `backend/` holds four migrations and four policy files: the nine identity/SP tables, the six auth-lifecycle functions, and the three player lifecycle RPCs. Sign-up, pending review, admin approval/rejection, role assignment, account suspension, the one-time 1,000 SP award, the player directory, staff record management, and audited role/link changes are implemented end to end and covered by 90 local SQL assertions and 71 frontend tests (including the Group H ownership/privacy negatives, the Group I seed, the Group J bootstrap, and the Group K lifecycle RPCs); the development persona adapter is gone. Migration 003 is live on the hosted project — all six functions resolve and `anon` is denied — while policy 004's grant revocation still needs the one-line check listed under "Steps only you can do"; migration 004 is not yet applied.
+**What exists now:** the production frontend with real Supabase authentication and the Phase 2 player directory, plus the Phase 1 and Phase 2 database schema applied locally. `backend/` holds four migrations and four policy files: the nine identity/SP tables, the six auth-lifecycle functions, and the three player lifecycle RPCs. Sign-up, pending review, admin approval/rejection, role assignment, account suspension, the one-time 1,000 SP award, the player directory, staff record management, and audited role/link changes are implemented end to end and covered by 90 local SQL assertions and 71 frontend tests (including the Group H ownership/privacy negatives, the Group I seed, the Group J bootstrap, and the Group K lifecycle RPCs); the development persona adapter is gone. Migration 003 is live on the hosted project — all six functions resolve and `anon` is denied — while policy 004's grant revocation still needs the one-line check listed under "Steps only you can do"; migration 004 is applied and its three RPCs resolve with `anon` denied.
 
 **Supabase status (Groups E–F):** the project is connected and verified with the publishable key: GoTrue v2.197.0,
 database API reachable, no stored session. Migrations 001–002 and policies 001–003 are committed, verified locally,
@@ -707,8 +707,8 @@ verified (`mailer_autoconfirm: true`, Email provider enabled); production must r
 real session provider, registration UI, and approval RPCs are implemented and **migration 003 is live** there: a
 publishable-key probe resolves all six functions and denies `anon` with `42501`. Policy 004 narrows only
 `authenticated` grants, so it needs the `has_table_privilege('authenticated', 'public.profiles', 'INSERT')` check
-described in the Group G note rather than an API probe. Migration 004 adds the Group K RPCs but is still a hosted
-apply step.
+described in the Group G note rather than an API probe. Migration 004 adds the Group K RPCs and is applied:
+PostgREST resolves all three functions, and `anon` receives `42501` for each.
 
 **Design note (Group C):** `--color-text-faint` was raised from `#61707F` to `#7A8998` because the original
 measured 3.64:1 and failed WCAG AA for small text. It now measures 4.83:1 on the darkest surface and 5.43:1 on `bg`.
@@ -718,7 +718,7 @@ access, role unions for 1/2/3 roles, unknown routes, skip link, mobile bar at 39
 trap and focus return, persona persistence) and the production build was checked separately: `/` and
 `/players` both resolve to `/sign-in`, and the dev persona strings are absent from `dist/`.
 
-Next action: **apply `migrations/004_players.sql` to the hosted project**, then verify the three player-directory RPCs resolve. The development seed has been re-run and its repair pass normalized every NULL value GoTrue scans into a non-nullable field, so demo sign-in works. Then: confirm policy 004 with the one-line check in the Group G note, bootstrap the owner's own Super Admin with `seeds/bootstrap_super_admin.sql`, and approve the demo pending request once (and again, to prove Gate G). After that, Phase 2 is code-complete and Phase 3 (tournament engine) is next in §6.
+Next action: **confirm policy 004**, **bootstrap the owner's own Super Admin**, and replay the Gate G approval. Migration 004 is applied and its three RPCs are verified, the development seed has been re-run, and demo sign-in works. After that, Phase 3 (tournament engine) is next in §6.
 
 **Steps only you can do:**
 
@@ -727,14 +727,14 @@ Next action: **apply `migrations/004_players.sql` to the hosted project**, then 
 - Email confirmation is disabled for development and verified (`mailer_autoconfirm: true`, sign-ups allowed). Production must require confirmation.
 - **Apply the migrations (Group F) — done.** The five SQL files were run in order in the Supabase SQL Editor;
   PostgREST now resolves all nine tables and denies `anon` with `42501`.
-- Optionally regenerate types against the hosted project after migration 004:
+- Optionally regenerate types against the hosted project now that migration 004 is applied:
   `supabase gen types typescript --project-id ehftzafmsirzrffrekzk --schema public > frontend/src/types/database.ts`.
   The committed types cover migrations 001–004 and typecheck cleanly; regeneration is the final authoritative
   refresh, not a blocker.
 - **Migration 003 — applied and verified.** All six functions resolve and deny `anon` with `42501`.
-- **Migration 004 — outstanding.** Apply `backend/migrations/004_players.sql` after policy 004, then confirm
-  `set_profile_roles`, `link_player_account`, and `unlink_player_account` resolve for a signed-in Super Admin. Until
-  then the admin role/link tools return `PGRST202`.
+- **Migration 004 — applied and verified.** All three player-directory functions resolve, and `anon` receives
+  `42501 permission denied` for each. A rerun of the migration correctly fails because it is intentionally not
+  idempotent; do not paste it again.
 - **Policy 004 — confirm the revocation.** In the Supabase SQL Editor run
   `select has_table_privilege('authenticated', 'public.profiles', 'INSERT');` — expected `false` — and
   `select policyname from pg_policies where schemaname = 'public' and tablename = 'profiles';` —
@@ -782,3 +782,5 @@ Next action: **apply `migrations/004_players.sql` to the hosted project**, then 
 | v23 | 2026-10-31 | Group L executed. Added `/players` (search, status filter, three sort orders), `/players/:id` and `/profile` profiles, a staff add/edit dialog, and admin role editing plus link/unlink tools in the Members tab. `MemberSummary` now carries the linked player; role changes refresh the current session. The directory omits SP; a profile shows the current balance where RLS returns it. Fourteen new tests cover player validation, filtering, and date formatting; 71/71 frontend, 90/90 SQL. Migration 004 is still not applied to the hosted project; Group M (unlinked demo seed, type refresh, final docs and suite) remains. |
 
 | v24 | 2026-10-31 | Group M executed, closing Phase 2. The seed adds Gabi Walkin, an active unlinked player with no account or SP ledger, so the audited link flow can be demonstrated; the five linked demo players keep their single 1,000 SP award. Seed assertions now distinguish six player records (five linked, one unlinked) and still prove a second run adds nothing. The committed database types cover migrations 001–004, including the Group K RPCs; the Supabase CLI was unavailable, so those signatures were validated against `004_players.sql` and the file remains authoritative until regenerated against the hosted schema. Root README, backend README, and the plan are current. Full verification is clean: 90/90 SQL, 71/71 frontend, typecheck, lint, Prettier, and production build. Migration 004 and the hosted Phase 1 gates remain developer steps. |
+
+| v25 | 2026-10-31 | Confirmed migration 004 is already applied on the hosted project after a rerun correctly failed with `42723 function "set_profile_roles" already exists`. A publishable-key probe resolves `set_profile_roles`, `link_player_account`, and `unlink_player_account`, each returning `42501 permission denied` to `anon`. No schema repair is needed; migrations are intentionally not idempotent. Docs now record hosted step 8 as applied. Remaining hosted steps are the policy 004 check, the Gate G replay, and the owner's Super Admin bootstrap. |
