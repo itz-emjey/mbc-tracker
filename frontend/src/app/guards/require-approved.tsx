@@ -23,5 +23,9 @@ export function RequireApproved({ children }: { children: React.ReactNode }) {
     return <Navigate to="/unauthorized" replace state={{ reason: 'suspended' }} />
   }
 
+  if (user.status === 'deactivated') {
+    return <Navigate to="/unauthorized" replace state={{ reason: 'deactivated' }} />
+  }
+
   return <>{children}</>
 }

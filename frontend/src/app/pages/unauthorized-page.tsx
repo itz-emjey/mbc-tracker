@@ -8,7 +8,7 @@ import { useSession } from '@/features/auth/session-context'
 import { ROLE_LABELS, type Role } from '@/features/auth/types'
 
 interface UnauthorizedState {
-  reason?: 'suspended'
+  reason?: 'suspended' | 'deactivated'
   required?: Role[]
   from?: string
 }
@@ -19,13 +19,17 @@ export function UnauthorizedPage() {
   const location = useLocation()
   const state = (location.state as UnauthorizedState | null) ?? {}
   const suspended = state.reason === 'suspended'
+  const deactivated = state.reason === 'deactivated'
+  const blocked = suspended || deactivated
 
   return (
     <AuthLayout
-      title={suspended ? 'Account suspended' : 'Access denied'}
+      title={
+        suspended ? 'Account suspended' : deactivated ? 'Account deactivated' : 'Access denied'
+      }
       description={
-        suspended
-          ? 'A Super Admin has deactivated this account. Records and history are retained, but access to the club workspace is closed.'
+        blocked
+          ? 'A Super Admin has closed access to this account. Records and history are retained, but the club workspace is unavailable.'
           : 'This page needs a role your account does not hold. Navigation hides it, and the route guard blocks direct links as well.'
       }
     >
@@ -34,12 +38,16 @@ export function UnauthorizedPage() {
           <ShieldAlert className="mt-0.5 size-4 shrink-0 text-danger" aria-hidden="true" />
           <div className="min-w-0">
             <p className="text-sm font-medium text-text">
-              {suspended ? 'Access is closed' : 'Not enough permissions'}
+              {blocked ? 'Access is closed' : 'Not enough permissions'}
             </p>
 
             {user ? (
               <p className="mt-1 text-sm text-text-muted">
-                Signed in as {user.name} ({user.roles.map((role) => ROLE_LABELS[role]).join(', ')}).
+                Signed in as {user.name}
+                {user.roles.length > 0
+                  ? ` (${user.roles.map((role) => ROLE_LABELS[role]).join(', ')})`
+                  : ''}
+                .
               </p>
             ) : (
               <p className="mt-1 text-sm text-text-muted">No account is signed in.</p>

@@ -1,4 +1,4 @@
-export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
+﻿export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
 
 export type Database = {
   public: {
@@ -384,7 +384,19 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      approve_registration: {
+        Args: { p_player_id?: string; p_request_id: string; p_role_keys?: string[] }
+        Returns: Json
+      }
+      grant_starting_sp: {
+        Args: { p_player_id: string; p_registration_request_id?: string }
+        Returns: Json
+      }
       has_role: { Args: { p_profile_id: string; p_role_key: string }; Returns: boolean }
+      reject_registration: { Args: { p_reason: string; p_request_id: string }; Returns: Json }
+      require_super_admin: { Args: Record<PropertyKey, never>; Returns: string }
+      set_profile_status: { Args: { p_profile_id: string; p_status: string }; Returns: Json }
+      submit_registration: { Args: { p_full_name?: string }; Returns: Json }
     }
     Enums: {
       [_ in never]: never

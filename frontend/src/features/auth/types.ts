@@ -17,7 +17,14 @@ export const ROLE_LABELS: Record<Role, string> = {
   player: 'Player',
 }
 
-export type AccountStatus = 'approved' | 'pending' | 'suspended'
+export type AccountStatus = 'approved' | 'pending' | 'suspended' | 'deactivated'
+
+export const ACCOUNT_STATUS_LABELS: Record<AccountStatus, string> = {
+  approved: 'Approved',
+  pending: 'Pending approval',
+  suspended: 'Suspended',
+  deactivated: 'Deactivated',
+}
 
 export interface SessionUser {
   id: string

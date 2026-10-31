@@ -4,29 +4,12 @@ import type { SessionUser } from './types'
 
 export type SessionStatus = 'loading' | 'authenticated' | 'unauthenticated'
 
-export interface DevPersona {
-  id: string
-  label: string
-  description: string
-  user: SessionUser | null
-}
-
-/**
- * Development-only session controls.
- * Always `null` in a production build — there is no way to obtain a session
- * without configured authentication.
- */
-export interface DevSessionApi {
-  personaId: string
-  personas: readonly DevPersona[]
-  switchTo: (personaId: string) => void
-}
-
 export interface SessionState {
   status: SessionStatus
   user: SessionUser | null
   signOut: () => void
-  dev: DevSessionApi | null
+  /** Re-reads the profile and roles, e.g. after an admin approves the account. */
+  refresh: () => Promise<void>
 }
 
 export const SessionContext = React.createContext<SessionState | null>(null)

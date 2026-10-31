@@ -7,12 +7,12 @@ import { PlayerIdentity } from '@/components/shared/player-identity'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useSession } from '@/features/auth/session-context'
-import { ROLE_LABELS } from '@/features/auth/types'
+import { ACCOUNT_STATUS_LABELS, ROLE_LABELS } from '@/features/auth/types'
 
 const SHELL_CAPABILITIES = [
-  'Application shell with desktop sidebar and mobile bar',
+  'Real Supabase Auth session with pending-account gating',
   'Role-aware navigation for multi-role accounts',
-  'Reusable route guards for auth, approval, and role',
+  'Registration approval, player linking, and starting SP',
   'Loading, unauthenticated, access-denied, and not-found states',
 ] as const
 
@@ -53,8 +53,16 @@ export function OverviewPage() {
               meta={user.email}
               size="lg"
               trailing={
-                <Badge tone={user.status === 'approved' ? 'accent' : 'warning'}>
-                  {user.status === 'approved' ? 'Approved' : 'Pending'}
+                <Badge
+                  tone={
+                    user.status === 'approved'
+                      ? 'accent'
+                      : user.status === 'pending'
+                        ? 'warning'
+                        : 'danger'
+                  }
+                >
+                  {ACCOUNT_STATUS_LABELS[user.status]}
                 </Badge>
               }
             />

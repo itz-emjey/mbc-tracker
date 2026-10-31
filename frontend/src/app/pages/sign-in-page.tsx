@@ -1,140 +1,134 @@
-import { AlertTriangle, ArrowRight, ShieldOff } from 'lucide-react'
-import { Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { AlertCircle } from 'lucide-react'
+import * as React from 'react'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 
 import { AuthLayout } from '@/app/layouts/auth-layout'
 import { AppLoading } from '@/app/states/app-loading'
-import { Badge } from '@/components/ui/badge'
+import { FormField } from '@/components/shared/form-field'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { errorMessage, signIn } from '@/features/auth/api'
 import { useSession } from '@/features/auth/session-context'
-import { ROLE_LABELS } from '@/features/auth/types'
+import { signInSchema, type SignInValues } from '@/features/auth/validation'
 
 interface SignInLocationState {
   from?: string
 }
 
-function PersonaButton({
-  label,
-  description,
-  roles,
-  status,
-  onSelect,
-}: {
-  label: string
-  description: string
-  roles: string[]
-  status: 'approved' | 'pending' | 'suspended'
-  onSelect: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className="group flex w-full items-center gap-3 rounded-md border border-border bg-surface-1 px-4 py-3 text-left transition-colors duration-fast hover:border-border-strong hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring"
-    >
-      <span className="min-w-0 flex-1">
-        <span className="block text-sm font-medium text-text">{label}</span>
-        <span className="block text-xs text-text-muted">{description}</span>
-        <span className="mt-2 flex flex-wrap gap-1">
-          {roles.map((role) => (
-            <Badge key={role} tone="neutral">
-              {role}
-            </Badge>
-          ))}
-          {status !== 'approved' ? (
-            <Badge tone={status === 'pending' ? 'warning' : 'danger'}>
-              {status === 'pending' ? 'Pending' : 'Suspended'}
-            </Badge>
-          ) : null}
-        </span>
-      </span>
+type FieldErrors = Partial<Record<keyof SignInValues, string>>
 
-      <ArrowRight
-        className="size-4 shrink-0 text-text-faint transition-transform duration-fast group-hover:translate-x-0.5"
-        aria-hidden="true"
-      />
-    </button>
-  )
-}
-
-/**
- * Development sign-in placeholder.
- *
- * In a production build there is no authentication yet, so this screen says so
- * and offers no way in. In development it lists local personas and states
- * plainly that they are not authentication.
- */
 export function SignInPage() {
-  const { status, user, dev } = useSession()
+  const { status, user } = useSession()
   const navigate = useNavigate()
   const location = useLocation()
+  const [values, setValues] = React.useState<SignInValues>({ email: '', password: '' })
+  const [fieldErrors, setFieldErrors] = React.useState<FieldErrors>({})
+  const [formError, setFormError] = React.useState<string | null>(null)
+  const [submitting, setSubmitting] = React.useState(false)
 
   if (status === 'loading') {
     return <AppLoading label="Checking session" />
   }
 
-  if (user) {
-    return <Navigate to="/" replace />
-  }
-
   const from = (location.state as SignInLocationState | null)?.from ?? '/'
 
-  if (!dev) {
-    return (
-      <AuthLayout
-        title="Sign-in is not configured"
-        description="MBC Arena uses Supabase Authentication. It is wired in Group E, so this build has no way to authenticate."
-      >
-        <div className="flex items-start gap-3 rounded-md border border-border bg-surface-1 px-4 py-4">
-          <ShieldOff className="mt-0.5 size-4 shrink-0 text-text-faint" aria-hidden="true" />
-          <div>
-            <p className="text-sm font-medium text-text">No session available</p>
-            <p className="mt-1 text-sm text-text-muted">
-              Nothing in this build grants access. Protected routes stay closed until real
-              authentication exists.
-            </p>
-          </div>
-        </div>
-      </AuthLayout>
-    )
+  if (user) {
+    if (user.status === 'pending') {
+      return <Navigate to="/pending" replace />
+    }
+
+    if (user.status === 'suspended' || user.status === 'deactivated') {
+      return <Navigate to="/unauthorized" replace state={{ reason: user.status }} />
+    }
+
+    return <Navigate to={from} replace />
+  }
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setFormError(null)
+
+    const parsed = signInSchema.safeParse(values)
+
+    if (!parsed.success) {
+      const flattened = parsed.error.flatten().fieldErrors
+      setFieldErrors({
+        email: flattened.email?.[0],
+        password: flattened.password?.[0],
+      })
+      return
+    }
+
+    setFieldErrors({})
+    setSubmitting(true)
+
+    try {
+      await signIn(parsed.data.email, parsed.data.password)
+      navigate(from, { replace: true })
+    } catch (error) {
+      setFormError(errorMessage(error))
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
     <AuthLayout
-      title="Development sign-in"
-      description="Authentication is not implemented yet. Choose a development persona to preview the shell and its role-aware navigation."
+      title="Sign in to MBC Arena"
+      description="Use the email and password attached to your approved club account."
     >
-      <div
-        role="note"
-        className="flex items-start gap-3 rounded-md border border-warning-soft bg-warning-soft px-4 py-3"
-      >
-        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden="true" />
-        <p className="text-sm leading-relaxed text-text-muted">
-          <span className="font-medium text-warning">Not authentication.</span> Personas live in
-          this browser only. Supabase RLS remains the authority for every real read and write.
-        </p>
-      </div>
+      <form className="rounded-md border border-border bg-surface-1 p-5" onSubmit={handleSubmit}>
+        {formError ? (
+          <div
+            role="alert"
+            className="mb-4 flex items-start gap-2 rounded-sm border border-danger-soft bg-danger-soft px-3 py-2.5"
+          >
+            <AlertCircle className="mt-0.5 size-4 shrink-0 text-danger" aria-hidden="true" />
+            <p className="text-sm text-text-muted">{formError}</p>
+          </div>
+        ) : null}
 
-      <ul className="mt-4 flex flex-col gap-2">
-        {dev.personas
-          .filter((persona) => persona.user)
-          .map((persona) => (
-            <li key={persona.id}>
-              <PersonaButton
-                label={persona.label}
-                description={persona.description}
-                roles={persona.user!.roles.map((role) => ROLE_LABELS[role])}
-                status={persona.user!.status}
-                onSelect={() => {
-                  dev.switchTo(persona.id)
-                  navigate(from, { replace: true })
-                }}
+        <div className="flex flex-col gap-3">
+          <FormField id="sign-in-email" label="Email" error={fieldErrors.email} required>
+            {(field) => (
+              <Input
+                {...field}
+                type="email"
+                autoComplete="email"
+                value={values.email}
+                onChange={(event) =>
+                  setValues((current) => ({ ...current, email: event.target.value }))
+                }
               />
-            </li>
-          ))}
-      </ul>
+            )}
+          </FormField>
 
-      <p className="mt-4 text-xs leading-relaxed text-text-faint">
-        This screen does not exist in a production build. Group E replaces it with Supabase Auth.
-      </p>
+          <FormField id="sign-in-password" label="Password" error={fieldErrors.password} required>
+            {(field) => (
+              <Input
+                {...field}
+                type="password"
+                autoComplete="current-password"
+                value={values.password}
+                onChange={(event) =>
+                  setValues((current) => ({ ...current, password: event.target.value }))
+                }
+              />
+            )}
+          </FormField>
+        </div>
+
+        <Button type="submit" className="mt-5 w-full" loading={submitting}>
+          Sign in
+        </Button>
+
+        <p className="mt-4 text-center text-sm text-text-muted">
+          New member?{' '}
+          <Link to="/register" className="font-medium text-accent hover:underline">
+            Create an account
+          </Link>
+        </p>
+      </form>
     </AuthLayout>
   )
 }

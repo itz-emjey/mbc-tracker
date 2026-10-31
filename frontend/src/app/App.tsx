@@ -5,9 +5,8 @@ import { Toaster } from '@/components/ui/sonner'
 import { router } from '@/app/router'
 
 /**
- * Application root: session source, router, and the single toast host.
- * The session provider is a development placeholder until Group E wires
- * Supabase Auth; see `features/auth/session-provider.tsx`.
+ * Application root: real Supabase Auth session source, router, and the single
+ * toast host. There is no development persona or fallback identity.
  */
 export default function App() {
   return (

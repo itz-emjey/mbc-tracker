@@ -28,6 +28,7 @@ const STATUS_TONES = {
   unpaid: 'danger',
   rejected: 'danger',
   overdue: 'danger',
+  deactivated: 'danger',
   // info (system-decided)
   'auto-approved': 'info',
 } as const satisfies Record<string, StatusTone>

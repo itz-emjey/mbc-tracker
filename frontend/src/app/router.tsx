@@ -5,10 +5,12 @@ import { RequireAuth } from '@/app/guards/require-auth'
 import { RequireRole } from '@/app/guards/require-role'
 import { AppShell } from '@/app/layouts/app-shell'
 import { APP_MODULES } from '@/app/navigation'
+import { AdminPage } from '@/app/pages/admin-page'
 import { ModulePage } from '@/app/pages/module-page'
 import { NotFoundPage } from '@/app/pages/not-found-page'
 import { OverviewPage } from '@/app/pages/overview-page'
 import { PendingPage } from '@/app/pages/pending-page'
+import { RegisterPage } from '@/app/pages/register-page'
 import { SignInPage } from '@/app/pages/sign-in-page'
 import { UnauthorizedPage } from '@/app/pages/unauthorized-page'
 import { RouteError } from '@/app/states/route-error'
@@ -22,7 +24,7 @@ const moduleRoutes = APP_MODULES.filter((module) => module.path !== '/').map((mo
   path: module.path.slice(1),
   element: (
     <RequireRole roles={module.roles}>
-      <ModulePage module={module} />
+      {module.path === '/admin' ? <AdminPage /> : <ModulePage module={module} />}
     </RequireRole>
   ),
 }))
@@ -32,6 +34,7 @@ export const router = createBrowserRouter([
     errorElement: <RouteError />,
     children: [
       { path: '/sign-in', element: <SignInPage /> },
+      { path: '/register', element: <RegisterPage /> },
       { path: '/pending', element: <PendingPage /> },
       { path: '/unauthorized', element: <UnauthorizedPage /> },
       {

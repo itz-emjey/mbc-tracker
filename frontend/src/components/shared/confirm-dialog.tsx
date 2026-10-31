@@ -38,21 +38,34 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const [open, setOpen] = React.useState(false)
   const [pending, setPending] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
 
   async function handleConfirm(event: React.MouseEvent<HTMLButtonElement>) {
     event.preventDefault()
     setPending(true)
+    setError(null)
 
     try {
       await onConfirm()
       setOpen(false)
+    } catch (confirmError) {
+      setError(
+        confirmError instanceof Error && confirmError.message.trim()
+          ? confirmError.message
+          : 'The action could not be completed. Try again.',
+      )
     } finally {
       setPending(false)
     }
   }
 
+  function handleOpenChange(nextOpen: boolean) {
+    setOpen(nextOpen)
+    if (!nextOpen) setError(null)
+  }
+
   return (
-    <AlertDialog open={open} onOpenChange={setOpen}>
+    <AlertDialog open={open} onOpenChange={handleOpenChange}>
       <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>
 
       <AlertDialogContent>
@@ -67,6 +80,12 @@ export function ConfirmDialog({
             </div>
           </div>
         </AlertDialogHeader>
+
+        {error ? (
+          <p role="alert" className="mt-3 text-sm leading-relaxed text-danger">
+            {error}
+          </p>
+        ) : null}
 
         <AlertDialogFooter>
           <Button variant="secondary" onClick={() => setOpen(false)} disabled={pending}>

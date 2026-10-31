@@ -1,16 +1,15 @@
-import { Check, ChevronDown, LogOut, ShieldCheck } from 'lucide-react'
+import { ChevronDown, LogOut, ShieldCheck } from 'lucide-react'
 
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { accountStatusLabel } from '@/features/auth/api'
 import { useSession } from '@/features/auth/session-context'
 import { ROLE_LABELS } from '@/features/auth/types'
 
@@ -27,7 +26,7 @@ function initials(name: string): string {
  * union — an account is never "just" one role.
  */
 export function UserMenu() {
-  const { user, signOut, dev } = useSession()
+  const { user, signOut } = useSession()
 
   if (!user) {
     return null
@@ -62,7 +61,7 @@ export function UserMenu() {
             ))}
             {user.status !== 'approved' ? (
               <Badge tone={user.status === 'pending' ? 'warning' : 'danger'}>
-                {user.status === 'pending' ? 'Pending' : 'Suspended'}
+                {accountStatusLabel(user.status)}
               </Badge>
             ) : null}
           </div>
@@ -78,43 +77,12 @@ export function UserMenu() {
           </span>
         </DropdownMenuItem>
 
-        {dev ? (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel>Development session</DropdownMenuLabel>
-            <p className="px-2.5 pb-1 text-[11px] leading-relaxed text-warning">
-              Not authentication. A persona switch is a local shortcut for building the UI.
-            </p>
-            <div className="max-h-56 overflow-y-auto">
-              {dev.personas.map((persona) => (
-                <DropdownMenuCheckboxItem
-                  key={persona.id}
-                  checked={persona.id === dev.personaId}
-                  onCheckedChange={() => dev.switchTo(persona.id)}
-                >
-                  <span className="flex flex-col">
-                    <span className="text-sm text-text">{persona.label}</span>
-                    <span className="text-[11px] text-text-faint">{persona.description}</span>
-                  </span>
-                </DropdownMenuCheckboxItem>
-              ))}
-            </div>
-          </>
-        ) : null}
-
         <DropdownMenuSeparator />
 
         <DropdownMenuItem destructive onSelect={() => signOut()}>
           <LogOut className="size-4" aria-hidden="true" />
           Sign out
         </DropdownMenuItem>
-
-        {dev ? (
-          <p className="flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] uppercase tracking-[0.08em] text-text-faint">
-            <Check className="size-3" aria-hidden="true" />
-            Dev build
-          </p>
-        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   )
