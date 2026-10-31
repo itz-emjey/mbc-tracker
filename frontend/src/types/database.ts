@@ -393,10 +393,16 @@ export type Database = {
         Returns: Json
       }
       has_role: { Args: { p_profile_id: string; p_role_key: string }; Returns: boolean }
+      link_player_account: {
+        Args: { p_player_id: string; p_profile_id: string }
+        Returns: Json
+      }
       reject_registration: { Args: { p_reason: string; p_request_id: string }; Returns: Json }
       require_super_admin: { Args: Record<PropertyKey, never>; Returns: string }
+      set_profile_roles: { Args: { p_profile_id: string; p_role_keys: string[] }; Returns: Json }
       set_profile_status: { Args: { p_profile_id: string; p_status: string }; Returns: Json }
       submit_registration: { Args: { p_full_name?: string }; Returns: Json }
+      unlink_player_account: { Args: { p_player_id: string }; Returns: Json }
     }
     Enums: {
       [_ in never]: never

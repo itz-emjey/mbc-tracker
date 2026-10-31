@@ -21,6 +21,7 @@ const [
   migration,
   spMigration,
   authMigration,
+  playerMigration,
   identityPolicies,
   operationPolicies,
   spPolicies,
@@ -31,6 +32,7 @@ const [
   readFile(join(backendDir, 'migrations', '001_identity.sql'), 'utf8'),
   readFile(join(backendDir, 'migrations', '002_shuttlepower_bootstrap.sql'), 'utf8'),
   readFile(join(backendDir, 'migrations', '003_auth_lifecycle.sql'), 'utf8'),
+  readFile(join(backendDir, 'migrations', '004_players.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '001_identity.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '002_operations.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '003_shuttlepower.sql'), 'utf8'),
@@ -251,6 +253,7 @@ await db.exec(`
 await db.exec(migration)
 await db.exec(spMigration)
 await db.exec(authMigration)
+await db.exec(playerMigration)
 await db.exec(identityPolicies)
 await db.exec(operationPolicies)
 await db.exec(spPolicies)
@@ -307,6 +310,20 @@ await test('re-running the ShuttlePower migration fails loudly', async () => {
     async () => {
       try {
         await db.exec(spMigration)
+      } finally {
+        await db.exec('rollback')
+      }
+    },
+    /already exists/i,
+  )
+})
+
+await test('re-running the players migration fails loudly', async () => {
+  await expectError(
+    're-run players migration',
+    async () => {
+      try {
+        await db.exec(playerMigration)
       } finally {
         await db.exec('rollback')
       }
@@ -1567,6 +1584,197 @@ await test('J4: the bootstrap is not exposed as an API function', async () => {
   assert(
     rows[0].bootstrap_functions === 0,
     'the bootstrap must stay a SQL script, never a callable function',
+  )
+})
+
+// ---------------------------------------------------------------------------
+// Group K: player directory lifecycle (Phase 2)
+// ---------------------------------------------------------------------------
+await test('K1: only a super admin can replace roles', async () => {
+  await expectErrorAs(A, `select public.set_profile_roles('${D}', array['player'])`, /not authorized/i)
+  await expectErrorAs(D, `select public.set_profile_roles('${A}', array['player'])`, /not authorized/i)
+})
+
+await test('K1: role replacement replaces the set and audits once', async () => {
+  await inTransaction(async () => {
+    await actAs('authenticated', C)
+
+    const { rows } = await db.query(
+      `select public.set_profile_roles('${D}', array['player','trainer']) as result`,
+    )
+
+    assert(rows[0].result.changed === true, 'the changed role set must report a change')
+    assert(
+      rows[0].result.roles.join(',') === 'player,trainer',
+      `unexpected roles: ${rows[0].result.roles.join(',')}`,
+    )
+
+    const roles = await db.query(`
+      select r.key
+        from public.user_roles as ur
+        join public.roles as r on r.id = ur.role_id
+       where ur.profile_id = '${D}'
+       order by r.key
+    `)
+
+    assert(
+      roles.rows.map((row) => row.key).join(',') === 'player,trainer',
+      'replacing roles must remove the old role, not append to it',
+    )
+
+    const audit = await db.query(`
+      select count(*)::int as entries
+        from public.audit_logs
+       where action = 'profile.roles' and target_id = '${D}'
+    `)
+
+    assert(audit.rows[0].entries === 1, 'role replacement must write one audit row')
+  })
+})
+
+await test('K1: repeating the same role set is a no-op', async () => {
+  const { rows } = await asUser(
+    C,
+    `select public.set_profile_roles('${D}', array['tournament_manager']) as result`,
+  )
+
+  assert(rows[0].result.changed === false, 'an unchanged role set must not report a change')
+})
+
+await test('K1: unknown roles and empty sets are rejected', async () => {
+  await expectError(
+    'unknown role',
+    () => asUser(C, `select public.set_profile_roles('${D}', array['wizard'])`),
+    /unknown role/i,
+  )
+
+  await expectError(
+    'empty role set',
+    () => asUser(C, `select public.set_profile_roles('${D}', array[]::text[])`),
+    /at least one role/i,
+  )
+})
+
+await test('K1: a super admin cannot remove their own super admin role', async () => {
+  await expectError(
+    'self demotion',
+    () => asUser(C, `select public.set_profile_roles('${C}', array['player'])`),
+    /cannot remove your own super admin role/i,
+  )
+})
+
+await test('K1: pending accounts are handled through approval, not role edits', async () => {
+  await expectErrorAs(
+    C,
+    `select public.set_profile_roles('${B}', array['player'])`,
+    /pending accounts are handled through registration approval/i,
+  )
+})
+
+await test('K2: only a super admin can link or unlink accounts', async () => {
+  await expectErrorAs(
+    A,
+    `select public.link_player_account('${A}', '${P2}')`,
+    /not authorized/i,
+  )
+  await expectErrorAs(D, `select public.unlink_player_account('${P1}')`, /not authorized/i)
+})
+
+await test('K2: linking an approved account is idempotent and audited', async () => {
+  await inTransaction(async () => {
+    await actAs('authenticated', C)
+
+    const first = await db.query(
+      `select public.link_player_account('${D}', '${P2}') as result`,
+    )
+    assert(first.rows[0].result.changed === true, 'the first link must change the record')
+    assert(first.rows[0].result.already_linked === false, 'the first link is not a replay')
+
+    const second = await db.query(
+      `select public.link_player_account('${D}', '${P2}') as result`,
+    )
+    assert(second.rows[0].result.changed === false, 'a repeated link must not change anything')
+    assert(second.rows[0].result.already_linked === true, 'a repeated link must report the replay')
+
+    const link = await db.query(`select profile_id from public.players where id = '${P2}'`)
+    assert(link.rows[0].profile_id === D, 'the player record must point at the approved account')
+
+    const audit = await db.query(`
+      select count(*)::int as entries
+        from public.audit_logs
+       where action = 'player.account_linked' and target_id = '${P2}'
+    `)
+    assert(audit.rows[0].entries === 1, 'a link must write exactly one audit row, even after a replay')
+  })
+})
+
+await test('K2: one player record cannot serve two accounts', async () => {
+  await expectErrorAs(
+    C,
+    `select public.link_player_account('${D}', '${P1}')`,
+    /already linked to another account/i,
+  )
+})
+
+await test('K2: one account cannot own two player records', async () => {
+  await expectErrorAs(
+    C,
+    `select public.link_player_account('${A}', '${P2}')`,
+    /already has a different player record/i,
+  )
+})
+
+await test('K2: only an approved account can be linked', async () => {
+  await expectErrorAs(
+    C,
+    `select public.link_player_account('${B}', '${P2}')`,
+    /only an approved account/i,
+  )
+})
+
+await test('K2: unlinking keeps the player record and audits once', async () => {
+  await inTransaction(async () => {
+    await actAs('authenticated', C)
+
+    const result = await db.query(`select public.unlink_player_account('${P1}') as result`)
+    assert(result.rows[0].result.changed === true, 'the unlink must change the record')
+
+    const player = await db.query(
+      `select profile_id, full_name from public.players where id = '${P1}'`,
+    )
+    assert(player.rows[0].profile_id === null, 'the account link must be cleared')
+    assert(player.rows[0].full_name === 'Alex Player', 'the player record must survive the unlink')
+
+    const again = await db.query(`select public.unlink_player_account('${P1}') as result`)
+    assert(again.rows[0].result.changed === false, 'a repeated unlink must be a no-op')
+
+    const audit = await db.query(`
+      select count(*)::int as entries
+        from public.audit_logs
+       where action = 'player.account_unlinked' and target_id = '${P1}'
+    `)
+    assert(audit.rows[0].entries === 1, 'an unlink must write exactly one audit row')
+  })
+})
+
+await test('K3: clients still cannot write profile_id directly', async () => {
+  await expectErrorAs(
+    C,
+    `update public.players set profile_id = '${D}' where id = '${P2}'`,
+    /permission denied/i,
+  )
+})
+
+await test('K3: anon cannot execute the player lifecycle RPCs', async () => {
+  await expectError(
+    'anon link',
+    () => asRole('anon', `select public.link_player_account('${A}', '${P2}')`),
+    /permission denied/i,
+  )
+  await expectError(
+    'anon roles',
+    () => asRole('anon', `select public.set_profile_roles('${D}', array['player'])`),
+    /permission denied/i,
   )
 })
 

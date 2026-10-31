@@ -73,6 +73,7 @@ backend/policies/002_operations.sql
 backend/policies/003_shuttlepower.sql
 backend/migrations/003_auth_lifecycle.sql
 backend/policies/004_auth_lifecycle.sql
+backend/migrations/004_players.sql
 ```
 
 The migrations are **not** idempotent: re-running one fails at the first `CREATE` by design. There

@@ -20,17 +20,20 @@ backend/
 5. `policies/003_shuttlepower.sql`
 6. `migrations/003_auth_lifecycle.sql`
 7. `policies/004_auth_lifecycle.sql`
+8. `migrations/004_players.sql`
 
 The migrations are **not** idempotent: re-running one fails at the first
 `CREATE`, by design. Never add `IF NOT EXISTS` or `DROP` to a migration.
 
 ### Applying to the hosted Supabase project
 
-Open **Supabase Dashboard → SQL Editor** and run the seven files above, in
+Open **Supabase Dashboard → SQL Editor** and run the eight files above, in
 order, as the project owner. No dashboard schema edits are required, and no
 service-role key or database password is involved. Confirm afterwards that
-`public` contains nine tables and every one has RLS enabled, and that the six
-auth-lifecycle functions from step 6 exist.
+`public` contains nine tables and every one has RLS enabled, that the six
+auth-lifecycle functions from step 6 exist, and that the three player-directory
+functions from step 8 (`set_profile_roles`, `link_player_account`,
+`unlink_player_account`) exist.
 
 **Status:** files 1–5 have been applied to the hosted `mbc-arena` project
 (2026-10-30). `npm run check:supabase` passes, and a PostgREST probe with the
@@ -40,8 +43,10 @@ applied on 2026-10-31: all six functions now resolve and `anon` receives
 `42501 permission denied` for each, where it received `404 PGRST202` before.
 Policy 004 only narrows `authenticated` grants, which the API cannot read back;
 confirm it with `select has_table_privilege('authenticated', 'public.profiles',
-'INSERT');` returning `false`. The repository intentionally stores no
-credentials that would let an agent apply migrations automatically.
+'INSERT');` returning `false`. Step 8 (Phase 2, Group K) is **not yet applied**
+to the hosted project; until it is, the three player-directory functions return
+`PGRST202`. The repository intentionally stores no credentials that would let an
+agent apply migrations automatically.
 
 ## Seeds
 
