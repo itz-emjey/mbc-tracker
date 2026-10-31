@@ -43,19 +43,20 @@ functions from step 8 (`set_profile_roles`, `link_player_account`,
 and that the SP reconciliation function from step 11
 (`reconcile_sp_balances`) exists.
 
-**Status:** files 1–5 have been applied to the hosted `mbc-arena` project
-(2026-10-30). `npm run check:supabase` passes, and a PostgREST probe with the
-publishable key returns `42501 permission denied` for all nine Phase 1 tables to
-`anon` — they exist, and anon grants are revoked. Files 6–7 (Group G) were
-applied on 2026-10-31: all six functions now resolve and `anon` receives
-`42501 permission denied` for each, where it received `404 PGRST202` before.
-Policy 004 only narrows `authenticated` grants, which the API cannot read back;
-confirm it with `select has_table_privilege('authenticated', 'public.profiles',
-'INSERT');` returning `false`. Step 8 (Phase 2, Group K) was applied on
-2026-10-31: `set_profile_roles`, `link_player_account`, and
-`unlink_player_account` all resolve, and `anon` receives `42501 permission
-denied` for each. Steps 9–12 (Phases 3–4) are verified locally only; apply them
-to the hosted project before using the tournament or ShuttlePower screens. The
+**Status:** all twelve files are applied to the hosted `mbc-arena` project.
+Files 1–5 went in on 2026-10-30 and files 6–8 on 2026-10-31; files 9–12
+(Phases 3–4) went in on 2026-11-01. `npm run check:supabase` passes, and
+PostgREST probes with the publishable key return `42501 permission denied` for
+`anon` on the Phase 1 tables, `tournaments`, `matches`, and `sp_rule_versions`,
+and on `reconcile_sp_balances()`, while a deliberately missing function still
+returns `404 PGRST202`. Policy 004 only narrows `authenticated` grants, which the
+API cannot read back; the owner confirmed
+`has_table_privilege('authenticated', 'public.profiles', 'INSERT')` is `false`
+and that `profiles_insert_self_pending` is gone. A signed-in demo Super Admin
+reads `provisional-2026-11` (provisional, disabled) and gets
+`{checked: 7, consistent: true}` from reconciliation. The Phase 3 walkthrough,
+the Gate G replay, and the owner's Super Admin bootstrap are complete. Remaining
+work is product scope (§7 rules and the next phase), not hosted setup. The
 repository intentionally stores no credentials that would let an agent apply
 migrations automatically.
 

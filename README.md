@@ -185,16 +185,17 @@ Phase 1 (Groups A-J) and Phase 2 (Groups K-M) are implemented and verified local
 unlinked demo player, refreshed/validated the committed database types, and completed the final docs and
 check suite. Phase 3 now has its pure engines (single/double elimination with byes and a grand-final
 reset, round-robin generation, D9 standings, D10 entry validation) and its database gate (migration 005:
-tournament tables, RLS, audited entry/draw/result RPCs, and typed client definitions). Migration 004 is
-applied and its three RPCs are verified (anon is denied); migration 005 is verified locally and still
-needs applying to the hosted project, so the tournament screens exist but have no hosted data to read
-until it is. The Phase 3 staff UI is built: `/tournaments` lists and creates tournaments, `/tournaments/:id`
-shows events, entries, draws, brackets, round-robin standings, and result entry/correction.
+tournament tables, RLS, audited entry/draw/result RPCs, and typed client definitions). Every migration and
+policy file through 006 is applied to the hosted project, so the screens read real data. The Phase 3 staff
+UI is built: `/tournaments` lists and creates tournaments, `/tournaments/:id` shows events, entries, draws,
+brackets, round-robin standings, and result entry/correction. The hosted Phase 3 walkthrough, the Gate G
+replay, and the owner's Super Admin bootstrap are complete.
 
 Phase 4 is scaffolded, not activated. Migration 006 adds versioned SP rule configuration with a single
 provisional, **disabled** default and a reconciliation function; the pure engine in `domain/sp.ts` refuses
 to calculate while the rule is unapproved, uses the already-approved 2× tournament impact and team-average
 doubles basis, and keeps the curve, caps, floor, rounding, and split in config. `/shuttlepower` shows the
 leaderboard, your own ledger history, and the provisional-rule notice, so no screen pretends an unapproved
-formula is live. Seasonal ranking and the award workflow wait on the open rules in `PLAN.md` §7. Remaining
-hosted steps and open product decisions (SP formulas and seasons) are tracked in `PLAN.md` §9 and §7.
+formula is live. Seasonal ranking and the award workflow wait on the open rules in `PLAN.md` §7. There is no
+hosted setup left; the open SP/season decisions and the choice of the next phase are tracked in `PLAN.md` §7
+and §9.

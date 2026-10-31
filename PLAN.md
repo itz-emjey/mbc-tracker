@@ -2,7 +2,7 @@
 
 > **Source of truth for requirements:** `AGENT.md`
 > **This document:** the approved working plan — architecture, design system, schema, phases, Phase 1 checklist, and open business rules.
-> **Status:** v29 - architecture, stack, design, and roadmap approved. **Groups A-M are complete; Phase 3 is code-complete; Phase 4 has its scaffold, with SP awards disabled.** Phase 1 and Phase 2 are code- and docs-complete. Phase 3 ships `domain/bracket.ts`, `domain/standings.ts`, and `domain/tournament.ts`, migration 005 (tournament tables, RLS, audited entry/draw/result RPCs), and the staff tournament console. Phase 4 adds migration 006 (versioned `sp_rule_versions` with a provisional, disabled default, plus `reconcile_sp_balances()`), the pure config-driven engine in `domain/sp.ts`, and `/shuttlepower` (leaderboard, own ledger history, admin balance check). Verification: 116/116 SQL checks, 131/131 frontend tests, typecheck, lint, format, and build all clean. The formula stays provisional and disabled until the club answers §7 rules 1, 2, 5, and 6. On the hosted project, migrations 003 and 004 are live, the seed ran, the GoTrue `500 Database error querying schema` was repaired, and all three player RPCs are verified with `anon` denied. Remaining hosted steps: apply migrations 005–006 and policies 005–006, confirm policy 004, run the Gate G replay, and bootstrap the owner's Super Admin.
+> **Status:** v30 - architecture, stack, design, and roadmap approved. **All hosted migrations and policies through 006 are applied; the Phase 1–3 gates are closed; Phase 4 is scaffolded and deliberately inactive.** Phase 1 and Phase 2 are complete. Phase 3 ships `domain/bracket.ts`, `domain/standings.ts`, and `domain/tournament.ts`, migration 005 (tournament tables, RLS, audited entry/draw/result RPCs), and the staff tournament console. Phase 4 adds migration 006 (versioned `sp_rule_versions` with a provisional, disabled default, plus `reconcile_sp_balances()`), the pure config-driven engine in `domain/sp.ts`, and `/shuttlepower` (leaderboard, own ledger history, admin balance check). Verification: 116/116 SQL checks, 131/131 frontend tests, typecheck, lint, format, and build all clean. Hosted (2026-11-01): `anon` is denied on the tournament and rule tables and on the reconciliation RPC; a signed-in demo Super Admin reads `provisional-2026-11` and `{"checked":7,"consistent":true}`; policy 004 is confirmed; demo sign-in, the Phase 3 walkthrough, the Gate G replay, and the owner's Super Admin bootstrap are done. What remains is product scope: §7 rules 1–6 gate Phase 4 activation and any Phase 5 award.
 
 ### Approved decisions
 
@@ -25,13 +25,13 @@
 
 | Item | Finding |
 | --- | --- |
-| Git | Initialized, branch `main`; Phase 1 (Groups A-J) and Phase 2 (Groups K-M) are committed |
+| Git | Initialized, branch `main`; Phases 1–3 and the Phase 4 scaffold are committed |
 | Tracked files | `AGENT.md`, `PLAN.md`, `frontend/`, `backend/`, root test tooling |
-| `frontend/` | React + TS + Vite app: design system, shell, routing, guards, Supabase client, auth/admin screens, player directory and profiles |
-| `backend/` | SQL migrations 001–004, policies 001–004, seeds, and the PGlite verification harness |
+| `frontend/` | React + TS + Vite app: design system, shell, routing, guards, Supabase client, auth/admin screens, player directory and profiles, tournament console, ShuttlePower pages |
+| `backend/` | SQL migrations 001–006, policies 001–006, seeds, and the PGlite verification harness |
 
-**Conclusion:** the Phase 1 foundation and the Phase 2 player directory now exist. The hosted database still needs
-migration 004 applied by the project owner, and the hosted Phase 1 walkthrough is still open (see §9).
+**Conclusion:** Phases 1–3 are implemented and verified against the hosted project, and Phase 4 ships a disabled
+scaffold. The remaining work is product scope, not hosted setup (see §9).
 
 ---
 
@@ -696,17 +696,17 @@ Payment gateway integration, ELO ratings, public API, native mobile app, light t
 | D — App shell and routing | ✅ Complete and approved (shell, role-aware nav, guards, 403/404/loading/error, dev-only session) |
 | E — Supabase wiring | ✅ Complete (E1–E5; E4 closed in F; client typed; Gate E reconciled) |
 | F — Identity migration | ✅ Complete — local 41/41; five SQL files applied to the hosted project; anon is denied on all nine tables |
-| G — Auth lifecycle | ✅ Complete — implemented, 67/67 SQL (56 at v12, plus 11 Group H negatives) and 52/52 frontend checks locally; migration 003 confirmed live on the hosted project, policy 004 pending the dashboard check |
+| G — Auth lifecycle | ✅ Complete — implemented, 67/67 SQL (56 at v12, plus 11 Group H negatives) and 52/52 frontend checks locally; migration 003 and policy 004 confirmed on the hosted project, and the Gate G replay passed there on 2026-11-01 |
 | H — Ownership and privacy | ✅ Complete — 11 new negative checks; 67/67 locally; no policy change required |
 | I — Seed data | ✅ Complete — seed shape and idempotency checks; hosted re-run repaired the GoTrue 500 |
-| J — Tests and docs | ✅ Complete — SQL, frontend, typecheck, lint, format, and build clean; hosted walkthrough in progress |
+| J — Tests and docs | ✅ Complete — SQL, frontend, typecheck, lint, format, and build clean; the hosted walkthrough is complete |
 | K — Player lifecycle RPCs | ✅ Complete — migration 004 and three Super Admin RPCs; 15 new checks; hosted application verified and anon denied |
 | L — Directory and profile UI | ✅ Complete — directory, profiles, add/edit, role editor, and link/unlink tools; 71/71 frontend |
 | M — Seed, types, docs, verification | ✅ Complete — unlinked demo player, types validated against migration 004, docs current; 90/90 SQL, 71/71 frontend, build clean |
-| N — Tournament engine (Phase 3) | ✅ Complete in code — pure engines, migration 005 + policy 005, and the staff UI; 109/109 SQL, 110/110 frontend, typecheck, lint, format, build clean. Hosted migration 005 and the §9 exit walkthrough remain |
-| O — ShuttlePower scaffold (Phase 4) | ✅ Complete in code — migration 006 (rule versions + reconciliation), pure config-driven engine, `/shuttlepower`; 116/116 SQL, 131/131 frontend, checks clean. Awards stay disabled until the formula is approved; hosted migration 006 remains |
+| N — Tournament engine (Phase 3) | ✅ Complete — pure engines, migration 005 + policy 005, and the staff UI; 109/109 SQL, 110/110 frontend at that gate, checks clean; hosted migration 005 and policy 005 applied and the Phase 3 walkthrough passed on 2026-11-01 |
+| O — ShuttlePower scaffold (Phase 4) | ✅ Complete in code — migration 006 (rule versions + reconciliation), pure config-driven engine, `/shuttlepower`; 116/116 SQL, 131/131 frontend, checks clean; hosted migration 006 and policy 006 applied, rule reads and reconciliation verified. Awards stay disabled until the formula is approved |
 
-**What exists now:** the production frontend with real Supabase authentication and the Phase 2 player directory, plus the Phase 1 and Phase 2 database schema applied locally. `backend/` holds four migrations and four policy files: the nine identity/SP tables, the six auth-lifecycle functions, and the three player lifecycle RPCs. Sign-up, pending review, admin approval/rejection, role assignment, account suspension, the one-time 1,000 SP award, the player directory, staff record management, and audited role/link changes are implemented end to end and covered by 90 local SQL assertions and 71 frontend tests (including the Group H ownership/privacy negatives, the Group I seed, the Group J bootstrap, and the Group K lifecycle RPCs); the development persona adapter is gone. Phase 3 adds a fifth migration and policy file (tournament tables, audited entry/draw/result RPCs) plus the `/tournaments` staff console; its UI is covered by the frontend suite (110 tests) and SQL by 109 assertions, but the hosted database still needs migration 005 and policy 005 before the screens have real data. Migration 003 is live on the hosted project — all six functions resolve and `anon` is denied — while policy 004's grant revocation still needs the one-line check listed under "Steps only you can do"; migration 004 is applied and its three RPCs resolve with `anon` denied.
+**What exists now:** the production frontend with real Supabase authentication, the player directory, the tournament console, and the ShuttlePower scaffold, backed by six migrations and six policy files applied to the hosted project. `backend/` holds the nine identity/SP tables plus `sp_rule_versions`, the seven tournament tables, the auth-lifecycle functions, the three player lifecycle RPCs, the tournament RPCs, and `reconcile_sp_balances()`. Sign-up, pending review, approval/rejection, role assignment, suspension, the one-time 1,000 SP award, directory and profile management, audited role/link changes, tournaments with draws and corrections, the current-SP leaderboard, personal ledger history, and the balance check are implemented end to end. Local verification: 116 SQL assertions and 131 frontend tests, with typecheck, lint, Prettier, and build clean. Hosted verification (2026-11-01): `anon` is denied on the new tables and the reconciliation RPC, a signed-in demo Super Admin reads the provisional rule and a consistent ledger, policy 004 is confirmed, demo sign-in works, and the Phase 3 walkthrough, Gate G replay, and owner Super Admin bootstrap are done. No screen awards SP yet, by design.
 
 **Supabase status (Groups E–F):** the project is connected and verified with the publishable key: GoTrue v2.197.0,
 database API reachable, no stored session. Migrations 001–002 and policies 001–003 are committed, verified locally,
@@ -715,10 +715,13 @@ RPC live in `frontend/src/types/database.ts`, and the client is typed; the commi
 Email confirmation is disabled for development and
 verified (`mailer_autoconfirm: true`, Email provider enabled); production must require confirmation. Group G's
 real session provider, registration UI, and approval RPCs are implemented and **migration 003 is live** there: a
-publishable-key probe resolves all six functions and denies `anon` with `42501`. Policy 004 narrows only
-`authenticated` grants, so it needs the `has_table_privilege('authenticated', 'public.profiles', 'INSERT')` check
-described in the Group G note rather than an API probe. Migration 004 adds the Group K RPCs and is applied:
-PostgREST resolves all three functions, and `anon` receives `42501` for each.
+publishable-key probe resolves all six functions and denies `anon` with `42501`.Policy 004 narrows only `authenticated` grants, so it cannot be read back through the API; the owner confirmed
+`has_table_privilege('authenticated', 'public.profiles', 'INSERT')` is `false` and that `profiles_insert_self_pending`
+is gone. Migration 004 adds the Group K RPCs, migration 005 the tournament tables and RPCs, and migration 006 the
+rule versions and reconciliation; all three are applied with their policy files. On 2026-11-01 a publishable-key
+probe returned `42501` for the tournament and rule tables and for `reconcile_sp_balances()`, while a deliberately
+missing function still returned `404 PGRST202`; a signed-in demo Super Admin then read `provisional-2026-11`
+(provisional, disabled) and `{"checked":7,"consistent":true}`.
 
 **Design note (Group C):** `--color-text-faint` was raised from `#61707F` to `#7A8998` because the original
 measured 3.64:1 and failed WCAG AA for small text. It now measures 4.83:1 on the darkest surface and 5.43:1 on `bg`.
@@ -728,7 +731,7 @@ access, role unions for 1/2/3 roles, unknown routes, skip link, mobile bar at 39
 trap and focus return, persona persistence) and the production build was checked separately: `/` and
 `/players` both resolve to `/sign-in`, and the dev persona strings are absent from `dist/`.
 
-Next action: **apply migrations 005–006 and policies 005–006 to the hosted project**, then confirm policy 004, bootstrap the owner's own Super Admin, and replay the Gate G approval. Migration 004 is applied and its three RPCs are verified, the development seed has been re-run, and demo sign-in works. Once the tournament schema is hosted, the §6 Phase 3 exit walkthrough (create → publish → enter → draw → record → correct) can run. Phase 4's scaffold then reports real balances and ledger history, but no match can award SP and no seasonal leaderboard exists until §7 rules 1–6 are decided; when they are, the approved version is recorded here and enabled by a reviewed SQL step.
+Next action: **choose the next product phase.** There is no infrastructure work queued: every migration and policy through 006 is applied, and the Phase 1–3 gates, Gate G, the owner's bootstrap, and the hosted walkthrough are closed. Phase 4 stays inactive by design until §7 rules 1, 2, 5, and 6 are approved; approving them unblocks SP awards in Phase 4 and Phase 5. Phase 5 (friendly matches) can be built with the award explicitly deferred, while Phases 6 (training and payments) and 7 (jerseys, polls, announcements) have no SP dependency and can ship in full. Record the choice here before starting it.
 
 **Steps only you can do:**
 
@@ -737,25 +740,30 @@ Next action: **apply migrations 005–006 and policies 005–006 to the hosted p
 - Email confirmation is disabled for development and verified (`mailer_autoconfirm: true`, sign-ups allowed). Production must require confirmation.
 - **Apply the migrations (Group F) — done.** The five SQL files were run in order in the Supabase SQL Editor;
   PostgREST now resolves all nine tables and denies `anon` with `42501`.
-- Optionally regenerate types against the hosted project now that migration 004 is applied:
+- Optionally regenerate types against the hosted project now that migrations 001–006 are applied:
   `supabase gen types typescript --project-id ehftzafmsirzrffrekzk --schema public > frontend/src/types/database.ts`.
-  The committed types cover migrations 001–004 and typecheck cleanly; regeneration is the final authoritative
-  refresh, not a blocker.
+  The committed types cover migrations 001–006 and typecheck cleanly; regeneration is the final authoritative
+  refresh, not a blocker (the Supabase CLI is not installed in the development environment).
 - **Migration 003 — applied and verified.** All six functions resolve and deny `anon` with `42501`.
 - **Migration 004 — applied and verified.** All three player-directory functions resolve, and `anon` receives
   `42501 permission denied` for each. A rerun of the migration correctly fails because it is intentionally not
   idempotent; do not paste it again.
-- **Policy 004 — confirm the revocation.** In the Supabase SQL Editor run
-  `select has_table_privilege('authenticated', 'public.profiles', 'INSERT');` — expected `false` — and
-  `select policyname from pg_policies where schemaname = 'public' and tablename = 'profiles';` —
-  `profiles_insert_self_pending` should be absent.
+- **Policy 004 — confirmed (2026-11-01).** `has_table_privilege('authenticated', 'public.profiles', 'INSERT')`
+  returns `false`, and `profiles_insert_self_pending` is absent from `pg_policies`.
+- **Migrations 005–006 and policies 005–006 — applied and verified (2026-11-01).** `tournaments`, `matches`,
+  `sp_rule_versions`, the tournament RPCs, and `reconcile_sp_balances()` all resolve; `anon` receives `42501` for
+  the tables and the RPC, and a deliberately missing function still returns `404 PGRST202`.
+  `npm run check:supabase` passes.
 - **Re-run the development seed (Group I) — done.** The re-run repaired the GoTrue `500 Database error querying
   schema` by normalizing every NULL value it scans into non-nullable Go fields, skipping unique-indexed columns like
   `phone`. Demo sign-in as `ada.demo@example.test` / `mbc-demo-2026` works.
-- **Bootstrap the owner's Super Admin (Group J) — outstanding.** After the owner's own account exists, run
-  `set mbc.bootstrap_super_admin_email = '…';` plus `backend/seeds/bootstrap_super_admin.sql`.
-- **Gate G approval — outstanding.** With the demo Super Admin signed in, approve the Erin example pending request
-  twice (the second call must report `already_processed`), which closes Gate G end to end.
+- **Bootstrap the owner's Super Admin (Group J) — done (2026-11-01).** The owner's own account was activated and
+  granted `super_admin` once through `set mbc.bootstrap_super_admin_email = '…';` plus
+  `backend/seeds/bootstrap_super_admin.sql`.
+- **Gate G approval — done (2026-11-01).** The pending request was approved twice; the second call reported
+  `already_processed` with exactly one player, one role set, and one 1,000 SP row.
+- **Phase 3 hosted walkthrough — done (2026-11-01).** Create → publish → enter → draw → start → record → correct ran
+  against the hosted project, including the rejection and correction paths.
 
 **Resolved:** first Super Admin bootstrap method (D8), Round Robin tie-break (D9), Mixed Doubles pairing (D10). Remaining open items are the SP and season rules in §7.
 
@@ -797,6 +805,7 @@ Next action: **apply migrations 005–006 and policies 005–006 to the hosted p
 
 | v26 | 2026-10-31 | Phase 3 pure domain gate. Added `domain/bracket.ts` (single/double elimination with byes, losers ladder, grand final and conditional reset; circle-method round robin), `domain/standings.ts` (D9 chain with a two-way head-to-head, mutual mini-table for 3+, game/point difference, and a playoff flag for unresolved groups), and `domain/tournament.ts` (cap, duplicates, seeds, missing records, gendered doubles, and D10 Mixed Doubles). Losers-round drop-ins are reversed before pairing to avoid immediate rematches. Twenty-four new tests; 95/95 frontend and 90/90 SQL, typecheck, lint, Prettier, and build clean. Tournament schema, RLS, RPCs, and UI are next; SP enqueueing stays blocked until the SP formula is approved. |
 
+| v30 | 2026-11-01 | Hosted completion. The owner applied migrations 005–006 with policies 005–006 and confirmed policy 004; the Phase 3 walkthrough, the Gate G replay, and the owner's Super Admin bootstrap were completed on the hosted project. Agent-side probes: `anon` receives `42501` for `tournaments`, `matches`, and `sp_rule_versions` and for `reconcile_sp_balances()`, a missing-function control still returns `404 PGRST202`, a signed-in demo Super Admin reads `provisional-2026-11` (provisional, disabled), and reconciliation returns `{checked: 7, consistent: true}`. Status, group table, and "Steps only you can do" now reflect a closed hosted checklist; the next action is choosing Phase 5, 6, or 7, with Phase 4 activation still gated on §7 rules 1–6. |
 | v29 | 2026-10-31 | Phase 4 ShuttlePower scaffold. Migration 006 adds versioned `sp_rule_versions` (one provisional, disabled default; an unapproved version cannot be enabled; at most one enabled version) and the Super Admin `reconcile_sp_balances()` report. `domain/sp.ts` is the pure config-driven engine: it refuses provisional or disabled rules, keeps the approved 2× tournament impact and team-average doubles basis, and makes the curve, caps, floor, rounding, and split configuration rather than code. `/shuttlepower` replaces the Phase 4 placeholder with the current-SP leaderboard, the reader's own ledger history, the provisional notice, and a Super Admin balance check. Twenty-one new frontend tests (131 total) and seven SQL checks (116 total); typecheck, lint, Prettier, and build clean. No SP-awarding RPC exists by design, so no balance can move before the formula is approved; hosted migrations 005–006 remain. |
 | v28 | 2026-10-31 | Phase 3 tournament UI. `/tournaments` and `/tournaments/:id` replace the placeholder module: tournament creation, forward-only lifecycle actions, per-event tabs, entry registration and withdrawal with D10/seed/cap validation in the domain layer, draw generation from either bracket engine, bracket and round-robin schedule views, result recording and reasoned correction, and D9 standings built from stored games. Shared formatters and status tones extended. Twenty-four new tests; 110/110 frontend, 95/95 SQL (unchanged), typecheck, lint, Prettier, and build clean. Hosted migration 005 and SP enqueueing remain. |
 | v27 | 2026-10-31 | Phase 3 database gate. Migration 005 adds tournaments, events, teams, team members, entries, matches, and match games. All tournament tables are read-only to clients; audited RPCs own metadata, lifecycle, entries, draws, results, and corrections. D10, the cap, seeds, draw coverage, bracket advancement, grand-final reset cancellation, and correction order are enforced in the database. Policy 005 exposes drafts to staff only and published tournaments to active club members. The committed types cover the new tables and RPCs. Verification: 109/109 SQL and 95/95 frontend, typecheck, lint, Prettier, and build clean. The tournament UI and hosted migration 005 remain; SP enqueueing stays blocked by the open SP formula. |
