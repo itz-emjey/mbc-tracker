@@ -54,7 +54,6 @@ export const APP_MODULES: readonly AppModule[] = [
     shortLabel: 'Events',
     icon: Trophy,
     description: 'Create tournaments, generate brackets, and enter official results.',
-    phase: 'Phase 3',
     group: 'main',
     roles: ['super_admin', 'tournament_manager'],
   },

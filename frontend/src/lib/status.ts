@@ -16,6 +16,7 @@ const STATUS_TONES = {
   active: 'accent',
   open: 'accent',
   published: 'accent',
+  registered: 'accent',
   confirmed: 'accent',
   accepted: 'accent',
   paid: 'accent',
@@ -29,8 +30,10 @@ const STATUS_TONES = {
   rejected: 'danger',
   overdue: 'danger',
   deactivated: 'danger',
+  disqualified: 'danger',
   // info (system-decided)
   'auto-approved': 'info',
+  in_progress: 'info',
 } as const satisfies Record<string, StatusTone>
 
 export type Status = keyof typeof STATUS_TONES
@@ -43,9 +46,11 @@ export function statusTone(status: string): StatusTone {
   return isKnownStatus(status) ? STATUS_TONES[status] : 'neutral'
 }
 
-/** `pending` → `Pending`, `auto-approved` → `Auto-approved`. */
+/** `pending` → `Pending`, `auto-approved` → `Auto-approved`, `in_progress` → `In progress`. */
 export function statusLabel(status: string): string {
   if (!status) return ''
 
-  return status.charAt(0).toUpperCase() + status.slice(1)
+  const words = status.replace(/_/g, ' ')
+
+  return words.charAt(0).toUpperCase() + words.slice(1)
 }

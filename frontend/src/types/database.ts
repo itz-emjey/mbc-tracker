@@ -819,10 +819,18 @@ export type Database = {
       }
       set_profile_roles: { Args: { p_profile_id: string; p_role_keys: string[] }; Returns: Json }
       set_profile_status: { Args: { p_profile_id: string; p_status: string }; Returns: Json }
+      set_tournament_status: {
+        Args: { p_status: string; p_tournament_id: string }
+        Returns: Json
+      }
       submit_registration: { Args: { p_full_name?: string }; Returns: Json }
       unlink_player_account: { Args: { p_player_id: string }; Returns: Json }
       update_tournament_event: {
         Args: { p_event_id: string; p_format: string; p_max_entries: number }
+        Returns: Json
+      }
+      withdraw_tournament_entry: {
+        Args: { p_entry_id: string }
         Returns: Json
       }
     }

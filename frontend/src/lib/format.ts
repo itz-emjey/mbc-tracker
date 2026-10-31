@@ -23,3 +23,20 @@ export function formatDate(value: string): string {
 
   return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(date)
 }
+
+/** A single date when both ends match, otherwise `"start – end"`. */
+export function formatDateRange(start: string, end: string): string {
+  return start === end ? formatDate(start) : `${formatDate(start)} – ${formatDate(end)}`
+}
+
+/** Formats a timestamp with its local time; invalid values stay readable. */
+export function formatDateTime(value: string): string {
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) return value
+
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date)
+}

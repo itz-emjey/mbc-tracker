@@ -21,6 +21,7 @@ describe('statusLabel', () => {
   it('capitalises and humanises the value', () => {
     expect(statusLabel('pending')).toBe('Pending')
     expect(statusLabel('auto-approved')).toBe('Auto-approved')
+    expect(statusLabel('in_progress')).toBe('In progress')
   })
 
   it('returns an empty string for empty input', () => {

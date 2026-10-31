@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { formatDate, getInitials } from './format'
+import { formatDate, formatDateRange, formatDateTime, getInitials } from './format'
 
 describe('getInitials', () => {
   it('uses the first and last name', () => {
@@ -32,5 +32,24 @@ describe('formatDate', () => {
 
   it('leaves an invalid value readable instead of printing Invalid Date', () => {
     expect(formatDate('not-a-date')).toBe('not-a-date')
+  })
+})
+
+describe('formatDateRange', () => {
+  it('shows one date when the tournament starts and ends the same day', () => {
+    expect(formatDateRange('2026-10-31', '2026-10-31')).toBe(formatDate('2026-10-31'))
+  })
+
+  it('shows both ends otherwise', () => {
+    expect(formatDateRange('2026-10-31', '2026-11-02')).toBe(
+      `${formatDate('2026-10-31')} – ${formatDate('2026-11-02')}`,
+    )
+  })
+})
+
+describe('formatDateTime', () => {
+  it('formats a timestamp and keeps an invalid value readable', () => {
+    expect(formatDateTime('2026-10-31T09:30:00Z')).toMatch(/2026/)
+    expect(formatDateTime('not-a-date')).toBe('not-a-date')
   })
 })

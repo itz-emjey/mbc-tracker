@@ -14,8 +14,11 @@ import { PlayerProfilePage } from '@/app/pages/player-profile-page'
 import { PlayersPage } from '@/app/pages/players-page'
 import { RegisterPage } from '@/app/pages/register-page'
 import { SignInPage } from '@/app/pages/sign-in-page'
+import { TournamentDetailPage } from '@/app/pages/tournament-detail-page'
+import { TournamentsPage } from '@/app/pages/tournaments-page'
 import { UnauthorizedPage } from '@/app/pages/unauthorized-page'
 import { RouteError } from '@/app/states/route-error'
+import { TOURNAMENT_STAFF_ROLES } from '@/features/tournaments/types'
 
 /**
  * Module routes are generated from the same list that builds the navigation.
@@ -30,6 +33,8 @@ const moduleRoutes = APP_MODULES.filter((module) => module.path !== '/').map((mo
         <AdminPage />
       ) : module.path === '/players' ? (
         <PlayersPage />
+      ) : module.path === '/tournaments' ? (
+        <TournamentsPage />
       ) : (
         <ModulePage module={module} />
       )}
@@ -57,6 +62,14 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <OverviewPage /> },
           ...moduleRoutes,
+          {
+            path: 'tournaments/:id',
+            element: (
+              <RequireRole roles={TOURNAMENT_STAFF_ROLES}>
+                <TournamentDetailPage />
+              </RequireRole>
+            ),
+          },
           {
             path: 'players/:id',
             element: (

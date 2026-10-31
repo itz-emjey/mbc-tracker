@@ -148,7 +148,7 @@ directory, and the account menu's **My profile** opens the signed-in member's li
 
 ```bash
 npm run test:db                       # 109 SQL checks on real Postgres (PGlite), no Docker
-npm --prefix frontend test            # 95 frontend unit tests (Vitest)
+npm --prefix frontend test            # 110 frontend unit tests (Vitest)
 npm --prefix frontend run typecheck
 npm --prefix frontend run lint
 npm --prefix frontend run build
@@ -177,5 +177,7 @@ check suite. Phase 3 now has its pure engines (single/double elimination with by
 reset, round-robin generation, D9 standings, D10 entry validation) and its database gate (migration 005:
 tournament tables, RLS, audited entry/draw/result RPCs, and typed client definitions). Migration 004 is
 applied and its three RPCs are verified (anon is denied); migration 005 is verified locally and still
-needs applying to the hosted project. The tournament UI is next. Remaining hosted steps and open product
-decisions (SP formulas and seasons) are tracked in `PLAN.md` §9 and §7.
+needs applying to the hosted project, so the tournament screens exist but have no hosted data to read
+until it is. The Phase 3 staff UI is built: `/tournaments` lists and creates tournaments, `/tournaments/:id`
+shows events, entries, draws, brackets, round-robin standings, and result entry/correction. Remaining hosted
+steps and open product decisions (SP formulas and seasons) are tracked in `PLAN.md` §9 and §7.
