@@ -1,8 +1,9 @@
 import { AlertCircle } from 'lucide-react'
 import * as React from 'react'
-import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useLocation } from 'react-router-dom'
 
 import { AuthLayout } from '@/app/layouts/auth-layout'
+import { landingPathFor } from '@/app/navigation'
 import { AppLoading } from '@/app/states/app-loading'
 import { FormField } from '@/components/shared/form-field'
 import { Button } from '@/components/ui/button'
@@ -19,7 +20,6 @@ type FieldErrors = Partial<Record<keyof SignInValues, string>>
 
 export function SignInPage() {
   const { status, user } = useSession()
-  const navigate = useNavigate()
   const location = useLocation()
   const [values, setValues] = React.useState<SignInValues>({ email: '', password: '' })
   const [fieldErrors, setFieldErrors] = React.useState<FieldErrors>({})
@@ -41,7 +41,9 @@ export function SignInPage() {
       return <Navigate to="/unauthorized" replace state={{ reason: user.status }} />
     }
 
-    return <Navigate to={from} replace />
+    // `from` may belong to whoever was signed in before; only reuse it when
+    // this account's roles allow that module.
+    return <Navigate to={landingPathFor(from, user.roles)} replace />
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -63,8 +65,9 @@ export function SignInPage() {
     setSubmitting(true)
 
     try {
+      // No navigation here: the session provider loads the profile, then the
+      // `if (user)` branch above routes to an allowed page.
       await signIn(parsed.data.email, parsed.data.password)
-      navigate(from, { replace: true })
     } catch (error) {
       setFormError(errorMessage(error))
     } finally {

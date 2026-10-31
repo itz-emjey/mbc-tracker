@@ -156,3 +156,24 @@ export function findModule(pathname: string): AppModule | undefined {
     (module) => pathname === module.path || pathname.startsWith(`${module.path}/`),
   )
 }
+
+/**
+ * Where a signed-in account should land.
+ *
+ * Sign-out and session expiry remember the current path, so the next sign-in
+ * can return there. That path may belong to the previous account's role: after
+ * a Super Admin signs out on `/admin`, a multi-role member would be sent back
+ * to `/admin` and the role guard would show "Access denied" right after a
+ * perfectly valid login. Keep the remembered path only when the new account
+ * can open its module; otherwise fall back to the overview.
+ */
+export function landingPathFor(path: string | undefined, roles: readonly Role[]): string {
+  if (!path) return '/'
+
+  const pathname = path.split(/[?#]/)[0] || '/'
+  const module = findModule(pathname)
+
+  if (!module || hasAnyRole(roles, module.roles)) return path
+
+  return '/'
+}
