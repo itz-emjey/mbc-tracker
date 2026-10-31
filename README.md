@@ -83,7 +83,8 @@ are no manual dashboard schema edits.
 ## 4. Optional: load the development seed
 
 The seed adds a complete demo dataset — six fictional accounts covering all four roles, one pending
-registration, one suspended account, five player records, and five 1,000 SP starting awards.
+registration, one suspended account, six player records (five linked accounts plus one unlinked active
+player), and five 1,000 SP starting awards.
 
 Mark the project as development **once** (the seed refuses any project without this marker):
 
@@ -109,6 +110,10 @@ the development-only password `mbc-demo-2026`:
 | `drew.testcase@example.test` | Player | active |
 | `erin.pending@example.test` | none (awaiting approval) | pending |
 | `finn.suspended@example.test` | Player | suspended |
+
+The seed also creates an unlinked active player, **Gabi Walkin**, so a Super Admin can exercise the
+account-link flow after unlinking an approved member. That player has no SP account until it is linked
+and funded.
 
 ## 5. Create the first Super Admin (one time)
 
@@ -165,7 +170,8 @@ development seed and bootstrap scripts.
 
 ## Current status
 
-Phase 1 (Groups A–J) and Phase 2 Groups K–L are implemented and verified locally. Group M (unlinked
-demo seed, refreshed types, final verification) remains. Migration 004 is not yet applied to the
-hosted project, and the hosted Phase 1 walkthrough is still open; remaining hosted steps and open
-product decisions (SP formulas and seasons) are tracked in `PLAN.md` §9 and §7.
+Phase 1 (Groups A-J) and Phase 2 (Groups K-M) are implemented and verified locally. Group M added an
+unlinked demo player, refreshed/validated the committed database types, and completed the final docs and
+check suite. Migration 004 is not yet applied to the hosted project, and the hosted Phase 1 walkthrough is
+still open; remaining hosted steps and open product decisions (SP formulas and seasons) are tracked in
+`PLAN.md` §9 and §7.

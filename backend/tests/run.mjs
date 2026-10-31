@@ -1362,7 +1362,13 @@ await test('I1/I3: the seed creates fictional accounts with every role and mixed
         (select count(*)::int from auth.users where id::text like '5eed0000-%') as accounts,
         (select count(*)::int from auth.identities where user_id::text like '5eed0000-%') as identities,
         (select count(*)::int from public.profiles where id::text like '5eed0000-%') as profiles,
+        (select count(*)::int from public.players
+          where id::text like '5eed1000-%' and profile_id is not null) as linked_players,
+        (select count(*)::int from public.players
+          where id::text like '5eed1000-%' and profile_id is null) as unlinked_players,
         (select count(*)::int from public.players where id::text like '5eed1000-%') as players,
+        (select count(*)::int from public.sp_accounts
+          where player_id::text like '5eed1000-%') as sp_accounts,
         (select count(*)::int from public.registration_requests where id::text like '5eed2000-%') as requests,
         (select count(distinct r.key)::int
            from public.user_roles ur
@@ -1406,11 +1412,17 @@ await test('I1/I3: the seed creates fictional accounts with every role and mixed
     assert(row.accounts === 6, `expected six demo accounts, got ${row.accounts}`)
     assert(row.identities === 6, `expected six email identities, got ${row.identities}`)
     assert(row.profiles === 6, `expected six profiles, got ${row.profiles}`)
-    assert(row.players === 5, `expected five player records, got ${row.players}`)
+    assert(row.players === 6, `expected six player records, got ${row.players}`)
+    assert(row.linked_players === 5, `expected five linked players, got ${row.linked_players}`)
+    assert(
+      row.unlinked_players === 1,
+      `expected one unlinked demo player, got ${row.unlinked_players}`,
+    )
     assert(row.requests === 2, `expected two registration requests, got ${row.requests}`)
     assert(row.pending_requests === 1, 'one request should await review')
     assert(row.distinct_roles === 4, `expected all four roles, got ${row.distinct_roles}`)
     assert(row.funded === 5, `expected five funded players, got ${row.funded}`)
+    assert(row.sp_accounts === 5, `unlinked player must have no SP account, got ${row.sp_accounts}`)
     assert(row.initial_rows === 5, `expected five initial SP rows, got ${row.initial_rows}`)
     assert(row.pending_profiles === 1, 'one profile should be pending')
     assert(row.suspended_profiles === 1, 'one profile should be suspended')
@@ -1504,6 +1516,8 @@ await test('I2: re-running the seed adds nothing', async () => {
         (select count(*)::int from auth.users where id::text like '5eed0000-%') as accounts,
         (select count(*)::int from public.profiles where id::text like '5eed0000-%') as profiles,
         (select count(*)::int from public.players where id::text like '5eed1000-%') as players,
+        (select count(*)::int from public.players
+          where id::text like '5eed1000-%' and profile_id is null) as unlinked,
         (select count(*)::int from public.user_roles where profile_id::text like '5eed0000-%') as role_assignments,
         (select count(*)::int from public.registration_requests where id::text like '5eed2000-%') as requests,
         (select count(*)::int from public.sp_transactions where player_id::text like '5eed1000-%') as sp_rows,
@@ -1514,7 +1528,8 @@ await test('I2: re-running the seed adds nothing', async () => {
     const row = rows[0]
     assert(row.accounts === 6, `accounts duplicated: ${row.accounts}`)
     assert(row.profiles === 6, `profiles duplicated: ${row.profiles}`)
-    assert(row.players === 5, `players duplicated: ${row.players}`)
+    assert(row.players === 6, `players duplicated: ${row.players}`)
+    assert(row.unlinked === 1, `unlinked demo player duplicated: ${row.unlinked}`)
     assert(row.role_assignments === 5, `role assignments duplicated: ${row.role_assignments}`)
     assert(row.requests === 2, `requests duplicated: ${row.requests}`)
     assert(row.sp_rows === 5, `initial SP rows duplicated: ${row.sp_rows}`)

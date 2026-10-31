@@ -52,9 +52,11 @@ agent apply migrations automatically.
 
 `seeds/001_fictional_players.sql` adds a development-only demo dataset: six
 fictional accounts, all four roles, four approved profiles, one pending
-registration with no player record, one suspended account, five linked player
-records, an approved and a pending registration request, and five 1,000 SP
-starting transactions written through `grant_starting_sp`.
+registration with no player record, one suspended account, six player records
+(five linked accounts plus one unlinked active player for demonstrating the
+account-link flow), an approved and a pending registration request, and five
+1,000 SP starting transactions written through `grant_starting_sp`. The unlinked
+demo player has no SP account until an account is linked and funded.
 
 It refuses to run unless the project is explicitly marked as development. Run
 both steps as the project owner in the Supabase SQL Editor:
@@ -117,8 +119,8 @@ npm run test:db
 `backend/tests/run.mjs` runs a real PostgreSQL engine compiled to WebAssembly
 (PGlite), stubs `auth.users` and `auth.uid()` with the same shape Supabase
 provides (the token, bool, and integer columns GoTrue reads are declared
-nullable so the seed's repair pass is exercised), applies all three migrations
-and all four policy files, and asserts (75 checks):
+nullable so the seed's repair pass is exercised), applies all four migrations
+and all four policy files, and asserts (90 checks):
 
 - all nine tables exist and have RLS enabled;
 - the migrations fail loudly on a second run;
@@ -131,10 +133,11 @@ and all four policy files, and asserts (75 checks):
   updates, no contact columns, `auth.users` unreachable, no client writes to
   role/audit/SP tables, and authorization errors for unapproved RPC callers;
 - the fictional seed (Group I): it refuses without the development marker,
-  creates the full demo dataset (six accounts, five players, every role, five
-  1,000 SP awards), leaves no NULL column that GoTrue scans into a non-nullable
-  field, repairs deliberately NULLed ones (strings, bools, and the integer) on a
-  re-run while leaving unique `phone` NULL, and adds nothing else on a second run;
+  creates the full demo dataset (six accounts, six player records - five linked
+  and one unlinked - every role, and five 1,000 SP awards), leaves no NULL
+  column that GoTrue scans into a non-nullable field, repairs deliberately
+  NULLed ones (strings, bools, and the integer) on a re-run while leaving unique
+  `phone` NULL, and adds nothing else on a second run;
 - the first Super Admin bootstrap (Group J): it refuses without an explicit
   email, activates a pending profile, grants the role once, audits once, and
   rejects unknown or suspended accounts.
@@ -151,11 +154,14 @@ supabase gen types typescript --project-id <project-ref> --schema public \
   > ../frontend/src/types/database.ts
 ```
 
-The current `frontend/src/types/database.ts` was generated from migrations
-001–003 (via the CLI against a local Postgres with the same schema). The table
-types match the applied hosted schema and the function types cover the Group G
-RPCs; regenerate them against the hosted project for the authoritative refresh,
-and after every later migration. Never edit the generated file by hand.
+The committed `frontend/src/types/database.ts` covers migrations 001–004: the
+`players` table and its profile relationship, the four auth-lifecycle RPCs, and
+the three Group K RPCs (`set_profile_roles`, `link_player_account`,
+`unlink_player_account`). The Supabase CLI was unavailable in the development
+environment, so the Group K signatures were checked against
+`migrations/004_players.sql` and added to the committed file; application builds
+treat it as authoritative. Regenerate it against the hosted project after step 8
+and after every later migration. Never edit regenerated output by hand.
 
 ## Security notes
 

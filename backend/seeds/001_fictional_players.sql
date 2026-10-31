@@ -1,6 +1,6 @@
 -- MBC Arena — development seed: fictional accounts, players, roles, and SP
 --
--- Apply after migrations 001–003 and policies 001–004.
+-- Apply after migrations 001–004 and policies 001–004.
 --
 -- This file refuses to run unless the project is explicitly marked as a
 -- development project. Mark it once, as the project owner, in the SQL Editor:
@@ -343,7 +343,8 @@ values
 on conflict (id) do nothing;
 
 -- ---------------------------------------------------------------------------
--- Player records: every approved account, including the suspended one.
+-- Player records: every approved account, including the suspended one, plus
+-- one active unlinked player so the Super Admin link flow can be demonstrated.
 -- Erin has none, because a player record is created at approval.
 -- ---------------------------------------------------------------------------
 insert into public.players (id, profile_id, full_name, gender, status, joined_on)
@@ -387,6 +388,14 @@ values
     'male',
     'suspended',
     date '2026-02-01'
+  ),
+  (
+    '5eed1000-0000-4000-8000-000000000006',
+    null,
+    'Gabi Walkin',
+    'female',
+    'active',
+    date '2026-02-15'
   )
 on conflict (id) do nothing;
 
@@ -464,8 +473,9 @@ on conflict (key) do nothing;
 
 -- ---------------------------------------------------------------------------
 -- Starting SP: the same internal RPC approval uses, so the demo ledger is
--- identical in shape to a real approval. The unique idempotency key makes a
--- second seed run a no-op.
+-- identical in shape to a real approval. Only the five linked accounts receive
+-- it; Gabi Walkin stays unlinked and unfunded until an account is linked. The
+-- unique idempotency key makes a second seed run a no-op.
 -- ---------------------------------------------------------------------------
 do $seed_sp$
 declare
