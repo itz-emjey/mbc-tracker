@@ -1,4 +1,5 @@
-import { ChevronDown, LogOut, ShieldCheck } from 'lucide-react'
+import { ChevronDown, LogOut, UserRound } from 'lucide-react'
+import { Link } from 'react-router-dom'
 
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -69,12 +70,11 @@ export function UserMenu() {
 
         <DropdownMenuSeparator />
 
-        <DropdownMenuItem disabled>
-          <ShieldCheck className="size-4" aria-hidden="true" />
-          Profile &amp; security
-          <span className="ml-auto text-[10px] uppercase tracking-[0.08em] text-text-faint">
-            Soon
-          </span>
+        <DropdownMenuItem asChild>
+          <Link to="/profile">
+            <UserRound className="size-4" aria-hidden="true" />
+            My profile
+          </Link>
         </DropdownMenuItem>
 
         <DropdownMenuSeparator />

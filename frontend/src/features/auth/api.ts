@@ -50,6 +50,9 @@ export interface MemberSummary {
   full_name: string
   status: string
   roles: Role[]
+  /** The linked player record, when the account has one. */
+  player_id: string | null
+  player_name: string | null
 }
 
 export interface UnlinkedPlayer {
@@ -346,23 +349,46 @@ export async function listMembers(): Promise<MemberSummary[]> {
     throw new Error(errorMessage(roleRows.error))
   }
 
+  const linkedPlayers = await supabase
+    .from('players')
+    .select('id, profile_id, full_name')
+    .in('profile_id', profileIds)
+
+  if (linkedPlayers.error) {
+    throw new Error(errorMessage(linkedPlayers.error))
+  }
+
+  const playerByProfileId = new Map(
+    (linkedPlayers.data ?? [])
+      .filter((player): player is typeof player & { profile_id: string } =>
+        Boolean(player.profile_id),
+      )
+      .map((player) => [player.profile_id, player]),
+  )
+
   const roleKeyById = new Map(
     (roleRows.data ?? [])
       .filter((role): role is { id: string; key: string } => isRole(role.key))
       .map((role) => [role.id, role.key as Role]),
   )
 
-  return rows.map((profile) => ({
-    id: profile.id,
-    full_name: profile.full_name,
-    status: profile.status,
-    roles: sortRoles(
-      (assignments.data ?? [])
-        .filter((assignment) => assignment.profile_id === profile.id)
-        .map((assignment) => roleKeyById.get(assignment.role_id))
-        .filter((role): role is Role => Boolean(role)),
-    ),
-  }))
+  return rows.map((profile) => {
+    const linkedPlayer = playerByProfileId.get(profile.id)
+
+    return {
+      id: profile.id,
+      full_name: profile.full_name,
+      status: profile.status,
+      roles: sortRoles(
+        (assignments.data ?? [])
+          .filter((assignment) => assignment.profile_id === profile.id)
+          .map((assignment) => roleKeyById.get(assignment.role_id))
+          .filter((role): role is Role => Boolean(role)),
+      ),
+      player_id: linkedPlayer?.id ?? null,
+      player_name: linkedPlayer?.full_name ?? null,
+    }
+  })
 }
 
 export async function listUnlinkedPlayers(): Promise<UnlinkedPlayer[]> {
@@ -426,6 +452,29 @@ export async function setProfileStatus(
   if (error) {
     throw new Error(errorMessage(error))
   }
+}
+
+export interface SetRolesOutcome {
+  profile_id: string
+  roles: Role[]
+  changed: boolean
+}
+
+/** Replaces a member's entire role set. Super Admin only; audited server-side. */
+export async function setProfileRoles(
+  profileId: string,
+  roles: readonly Role[],
+): Promise<SetRolesOutcome> {
+  const { data, error } = await getSupabaseClient().rpc('set_profile_roles', {
+    p_profile_id: profileId,
+    p_role_keys: [...roles],
+  })
+
+  if (error) {
+    throw new Error(errorMessage(error))
+  }
+
+  return data as unknown as SetRolesOutcome
 }
 
 export function roleLabel(role: Role): string {

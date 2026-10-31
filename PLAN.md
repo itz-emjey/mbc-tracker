@@ -2,7 +2,7 @@
 
 > **Source of truth for requirements:** `AGENT.md`
 > **This document:** the approved working plan — architecture, design system, schema, phases, Phase 1 checklist, and open business rules.
-> **Status:** v22 — architecture, stack, design, and roadmap approved. **Groups A–J are complete.** Phase 1 is code- and docs-complete. Verification: 75/75 SQL checks, 52/52 frontend tests, typecheck, lint, and build all clean. On the hosted project, migration 003 is live and the seed ran, but demo sign-in returns GoTrue `500 Database error querying schema`: the seeded `auth.users` rows leave its token/change columns NULL (supabase/auth#1940). Three repairs missed it: the first named only some token columns, the second aborted on the unique `phone`, and the third skipped every unique-indexed column — including the token columns, whose Supabase indexes are *partial* (`WHERE token !~ '^[0-9 ]*$'`) and accept `''` across rows. The seed now skips only unconditional unique indexes (`phone`, which GoTrue reads into a NULL-safe value) and fills the rest: every text/varchar column on a seeded row becomes `''`, and the non-string fields its model scans — `is_sso_user` and `is_anonymous` (bool) and `email_change_confirm_status` (int) — become their zero values. Column names are read from `information_schema`, so a renamed or version-specific column cannot be missed. Remaining hosted steps: confirm policy 004, run the Gate G replay, bootstrap the owner's Super Admin, and apply migration 004. Phase 2 is in progress: Group K is code-complete (role editing plus account link/unlink RPCs; 90/90 SQL checks), Groups L (directory/profile UI) and M (seed/docs) remain.
+> **Status:** v23 — architecture, stack, design, and roadmap approved. **Groups A–L are complete.** Phase 1 is code- and docs-complete; Phase 2 Group L adds the player directory, profiles, add-player dialog, and admin role/link tools. Verification: 90/90 SQL checks, 71/71 frontend tests, typecheck, lint, and build all clean. On the hosted project, migration 003 is live and the seed ran, but demo sign-in returns GoTrue `500 Database error querying schema`: the seeded `auth.users` rows leave its token/change columns NULL (supabase/auth#1940). Three repairs missed it: the first named only some token columns, the second aborted on the unique `phone`, and the third skipped every unique-indexed column — including the token columns, whose Supabase indexes are *partial* (`WHERE token !~ '^[0-9 ]*$'`) and accept `''` across rows. The seed now skips only unconditional unique indexes (`phone`, which GoTrue reads into a NULL-safe value) and fills the rest: every text/varchar column on a seeded row becomes `''`, and the non-string fields its model scans — `is_sso_user` and `is_anonymous` (bool) and `email_change_confirm_status` (int) — become their zero values. Column names are read from `information_schema`, so a renamed or version-specific column cannot be missed. Remaining hosted steps: confirm policy 004, run the Gate G replay, bootstrap the owner's Super Admin, and apply migration 004. Phase 2 Group L is code-complete (directory, profiles, add-player dialog, admin role editor and link/unlink tools); Group M (seed, types, docs, full verification) remains.
 
 ### Approved decisions
 
@@ -25,13 +25,13 @@
 
 | Item | Finding |
 | --- | --- |
-| Git | Initialized, branch `main`; Groups A–E committed, Group F ready for its commit |
+| Git | Initialized, branch `main`; Phase 1 (Groups A–J) and Phase 2 Groups K–L are committed |
 | Tracked files | `AGENT.md`, `PLAN.md`, `frontend/`, `backend/`, root test tooling |
-| `frontend/` | React + TS + Vite app: design system, shell, routing, guards, Supabase client and generated types |
-| `backend/` | SQL migrations 001–002, policies 001–003, and the PGlite verification harness |
+| `frontend/` | React + TS + Vite app: design system, shell, routing, guards, Supabase client, auth/admin screens, player directory and profiles |
+| `backend/` | SQL migrations 001–004, policies 001–004, seeds, and the PGlite verification harness |
 
-**Conclusion:** the greenfield scaffold and the Phase 1 schema now exist. The hosted database still needs the
-committed migrations applied by the project owner (see §9).
+**Conclusion:** the Phase 1 foundation and the Phase 2 player directory now exist. The hosted database still needs
+migration 004 applied by the project owner, and the hosted Phase 1 walkthrough is still open (see §9).
 
 ---
 
@@ -595,7 +595,9 @@ Directory with search/filter, player profile (SP, history, achievements), add pl
 #### Phase 2 groups
 
 - [x] **K. Player lifecycle RPCs.** `migrations/004_players.sql`: `set_profile_roles` (replaces a role set, refuses empty/unknown sets and self-demotion), `link_player_account` (one approved account to one player record, idempotent), `unlink_player_account` (keeps the record and its history). All Super Admin only and audited; clients still cannot write `players.profile_id` directly. 15 new checks, 90/90.
-- [ ] **L. Directory and profile UI.** `/players` list with search/filter, `/players/:id` profile, add-player dialog for staff, admin role editor and post-approval link/unlink tools.
+- [x] **L. Directory and profile UI.** `/players` list with search/filter/sort, `/players/:id` profile, `/profile` self-view, add-player dialog for staff, admin role editor and post-approval link/unlink tools. All writes go through the table grants or the Group K RPCs; SP appears only on a profile, never as a directory column.
+
+**Group L as built (v23):** `features/players/` holds the typed API, Zod form schema, and a pure search/filter/sort module. Staff see "Add player"; every approved member can browse. The profile shows the directory record, linked account (name/status only when RLS allows), roles (self or Super Admin), and the current SP balance where visible. The admin Members tab gains a "Player record" column, a multi-role editor that replaces the set through `set_profile_roles`, and link/unlink controls that call the audited RPCs. Self-demotion from Super Admin is blocked in both the UI and the database. 14 new unit tests cover player validation, filtering, and date formatting; 71/71 frontend tests.
 - [ ] **M. Seed, types, docs, verification.** An unlinked demo player for linking, refreshed types, README/plan updates, full check suite.
 
 ### Phase 3 — Tournament engine
@@ -781,3 +783,5 @@ once (and again, to prove Gate G). After that, Phase 2 (player directory) is the
 | v19 | 2026-10-31 | The text-only repair still left the hosted 500. Rather than guess again, the repair was derived from GoTrue's `internal/models/user.go`: besides the strings, it scans `is_sso_user` and `is_anonymous` into plain `bool` and `email_change_confirm_status` into plain `int`, so a NULL in any of them raises the same unnamed `500 Database error querying schema`. The seed now runs two `information_schema`-driven passes over `auth.users` — `''` for every text/varchar column, `false`/`false`/`0` for those three fields. The harness declares them nullable and the repair assertion covers them, so dropping either pass fails the suite; 75/75. Hosted sign-in remains open pending the re-run. |
 
 | v22 | 2026-10-31 | Phase 2 started. Group K adds migration 004 with three Super Admin RPCs: `set_profile_roles` (replaces a member role set, refuses empty/unknown sets and self-demotion), `link_player_account` (one approved account to one player record, idempotent), and `unlink_player_account` (keeps the record and its history). Each is audited, and clients still cannot write `players.profile_id` directly. The harness covers authority, idempotency, both one-to-one conflicts, pending accounts, direct-write denial, and anon denial; 90/90. Migration 004 is not yet applied to the hosted project. Groups L and M remain. |
+
+| v23 | 2026-10-31 | Group L executed. Added `/players` (search, status filter, three sort orders), `/players/:id` and `/profile` profiles, a staff add/edit dialog, and admin role editing plus link/unlink tools in the Members tab. `MemberSummary` now carries the linked player; role changes refresh the current session. The directory omits SP; a profile shows the current balance where RLS returns it. Fourteen new tests cover player validation, filtering, and date formatting; 71/71 frontend, 90/90 SQL. Migration 004 is still not applied to the hosted project; Group M (unlinked demo seed, type refresh, final docs and suite) remains. |

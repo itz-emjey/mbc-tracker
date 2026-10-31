@@ -14,3 +14,12 @@ export function getInitials(name: string): string {
 
   return `${first.charAt(0)}${last.charAt(0)}`.toUpperCase()
 }
+
+/** Formats a `YYYY-MM-DD` date for display without shifting it across time zones. */
+export function formatDate(value: string): string {
+  const date = new Date(`${value}T00:00:00`)
+
+  if (Number.isNaN(date.getTime())) return value
+
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(date)
+}

@@ -82,7 +82,6 @@ export const APP_MODULES: readonly AppModule[] = [
     shortLabel: 'Players',
     icon: Users,
     description: 'Club directory and player profiles.',
-    phase: 'Phase 2',
     group: 'main',
   },
   {

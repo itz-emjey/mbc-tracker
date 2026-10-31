@@ -1,5 +1,16 @@
-import { Clock, Inbox, ShieldCheck, UserCheck, UserX, Users } from 'lucide-react'
+import {
+  Clock,
+  Inbox,
+  Link2,
+  ListChecks,
+  ShieldCheck,
+  Unlink,
+  UserCheck,
+  UserX,
+  Users,
+} from 'lucide-react'
 import * as React from 'react'
+import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
@@ -21,6 +32,8 @@ import {
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ApproveRegistrationDialog } from '@/features/admin/approve-registration-dialog'
+import { EditRolesDialog } from '@/features/admin/edit-roles-dialog'
+import { LinkPlayerDialog } from '@/features/admin/link-player-dialog'
 import { RejectRegistrationDialog } from '@/features/admin/reject-registration-dialog'
 import {
   errorMessage,
@@ -34,6 +47,7 @@ import {
 } from '@/features/auth/api'
 import { useSession } from '@/features/auth/session-context'
 import { ROLE_LABELS } from '@/features/auth/types'
+import { unlinkPlayerAccount } from '@/features/players/api'
 
 type MemberStatus = 'active' | 'suspended' | 'deactivated'
 
@@ -45,7 +59,7 @@ function formatRequested(value: string): string {
 }
 
 export function AdminPage() {
-  const { user } = useSession()
+  const { user, refresh } = useSession()
   const [pending, setPending] = React.useState<RegistrationRequestSummary[]>([])
   const [members, setMembers] = React.useState<MemberSummary[]>([])
   const [players, setPlayers] = React.useState<UnlinkedPlayer[]>([])
@@ -55,6 +69,8 @@ export function AdminPage() {
   const [tab, setTab] = React.useState('pending')
   const [approving, setApproving] = React.useState<RegistrationRequestSummary | null>(null)
   const [rejecting, setRejecting] = React.useState<RegistrationRequestSummary | null>(null)
+  const [editingRoles, setEditingRoles] = React.useState<MemberSummary | null>(null)
+  const [linking, setLinking] = React.useState<MemberSummary | null>(null)
 
   const reload = React.useCallback(() => {
     setLoading(true)
@@ -93,6 +109,23 @@ export function AdminPage() {
     } catch (statusError) {
       throw new Error(errorMessage(statusError), { cause: statusError })
     }
+  }
+
+  async function unlink(member: MemberSummary) {
+    if (!member.player_id) return
+
+    try {
+      await unlinkPlayerAccount(member.player_id)
+      toast.success(`${member.full_name} is no longer linked to a player record.`)
+      reload()
+    } catch (unlinkError) {
+      throw new Error(errorMessage(unlinkError), { cause: unlinkError })
+    }
+  }
+
+  function handleRolesSaved() {
+    reload()
+    void refresh()
   }
 
   const isSelf = (member: MemberSummary) => member.id === user?.id
@@ -202,6 +235,7 @@ export function AdminPage() {
                     <TableRow>
                       <TableHead>Member</TableHead>
                       <TableHead>Roles</TableHead>
+                      <TableHead>Player record</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="text-right">Access</TableHead>
                     </TableRow>
@@ -231,12 +265,55 @@ export function AdminPage() {
                           </div>
                         </TableCell>
                         <TableCell>
+                          {member.player_id && member.player_name ? (
+                            <Link
+                              to={`/players/${member.player_id}`}
+                              className="rounded-sm text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring"
+                            >
+                              {member.player_name}
+                            </Link>
+                          ) : (
+                            <span className="text-xs text-text-faint">Not linked</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
                           <StatusBadge status={member.status} />
                         </TableCell>
                         <TableCell>
-                          <div className="flex justify-end gap-2">
+                          <div className="flex flex-wrap justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setEditingRoles(member)}
+                            >
+                              <ListChecks aria-hidden="true" />
+                              Roles
+                            </Button>
+
+                            {member.player_id ? (
+                              <ConfirmDialog
+                                trigger={
+                                  <Button variant="ghost" size="sm">
+                                    <Unlink aria-hidden="true" />
+                                    Unlink
+                                  </Button>
+                                }
+                                title={`Unlink ${member.full_name} from ${member.player_name ?? 'the player record'}?`}
+                                description="The account keeps its roles and can still sign in, but it will no longer be attached to this player record. Player history is retained."
+                                confirmLabel="Unlink account"
+                                onConfirm={() => unlink(member)}
+                              />
+                            ) : (
+                              <Button variant="ghost" size="sm" onClick={() => setLinking(member)}>
+                                <Link2 aria-hidden="true" />
+                                Link
+                              </Button>
+                            )}
+
                             {isSelf(member) ? (
-                              <span className="text-xs text-text-faint">Manage another admin</span>
+                              <span className="self-center text-xs text-text-faint">
+                                Manage another admin
+                              </span>
                             ) : member.status === 'active' ? (
                               <>
                                 <ConfirmDialog
@@ -308,6 +385,26 @@ export function AdminPage() {
           if (!open) setRejecting(null)
         }}
         onRejected={reload}
+      />
+
+      <EditRolesDialog
+        key={editingRoles?.id ?? 'roles-none'}
+        member={editingRoles}
+        isSelf={editingRoles?.id === user?.id}
+        onOpenChange={(open) => {
+          if (!open) setEditingRoles(null)
+        }}
+        onSaved={handleRolesSaved}
+      />
+
+      <LinkPlayerDialog
+        key={linking?.id ?? 'link-none'}
+        member={linking}
+        players={players}
+        onOpenChange={(open) => {
+          if (!open) setLinking(null)
+        }}
+        onLinked={reload}
       />
     </>
   )

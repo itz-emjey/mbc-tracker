@@ -27,8 +27,8 @@ npm run check:supabase # verify .env.local reaches the Supabase project
 
 ## Supabase configuration
 
-The Supabase client is wired and the local project connection is verified, but **authentication and the
-database are not implemented yet** (Groups F–G). Until a project is connected, the production build stays signed out.
+The Supabase client is wired, authentication is live, and every table is protected by RLS. The
+frontend reads through RLS and never holds a service-role key.
 
 ```bash
 cp .env.example .env.local   # then fill in the two values
@@ -66,11 +66,13 @@ npm run check:supabase       # prints PASS/FAIL, never the key
 
 | Path                     | Purpose                                                                                                                                   |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/app/`               | Application shell: router, layouts, guards, navigation config, page-level states.                                                         |
-| `src/features/auth/`     | Session contract, roles, and the development-only persona adapter (compiled out of production).                                           |
+| `src/app/`               | Application shell: router, layouts, guards, navigation config, and pages (`Overview`, `Admin`, `Players`, profiles).                      |
+| `src/features/auth/`     | Session contract, role vocabulary, and the Supabase auth/registration lifecycle API.                                                      |
+| `src/features/admin/`    | Approval, rejection, role-editor, and link-player dialogs.                                                                                |
+| `src/features/players/`  | Player types, typed API, Zod form validation, pure search/filter, and the add/edit dialog.                                                |
 | `src/components/ui/`     | shadcn-style primitives, re-themed to the tokens. Owned code, no kit dependency.                                                          |
 | `src/components/shared/` | Composed pieces: `PageHeader`, `StatusBadge`, `EmptyState`, `LoadingState`, `ErrorState`, `ConfirmDialog`, `FormField`, `PlayerIdentity`. |
-| `src/lib/`               | `cn()`, pure helpers (`format`, `status`), and future query/client utilities.                                                             |
+| `src/lib/`               | `cn()`, pure helpers (`format`, `status`), and Supabase client/env utilities.                                                             |
 | `src/domain/`            | Pure business logic (brackets, standings, SP). No React, no Supabase.                                                                     |
 | `src/dev/`               | Development-only component gallery. Never imported by the app entry.                                                                      |
 
@@ -82,9 +84,13 @@ npm run check:supabase       # prints PASS/FAIL, never the key
   (for example Tournament Manager + Trainer). There is no role hierarchy.
 - Guards (`RequireAuth`, `RequireApproved`, `RequireRole`) only shape navigation. Supabase RLS and database
   functions remain the authority for real data.
-- **There is no real authentication yet.** Development builds show a persona switcher labelled "Not
-  authentication"; a production build is signed out, `/sign-in` explains that authentication is not configured,
-  and protected routes stay closed. `features/auth/dev-session.tsx` is removed from production bundles.
+- **Authentication is real.** `SessionProvider` restores the Supabase session, loads the profile and every
+  role, and gates pending, suspended, and deactivated accounts. Registration approval, role changes, and
+  player linking cross audited Postgres RPCs; the browser cannot write those tables directly.
+- **Players (Phase 2).** `/players` is the directory with client-side search, status filter, and sort.
+  `/players/:id` and `/profile` show a player record, linked account details where RLS allows them, roles,
+  and the current SP balance. Staff can add and correct records from the directory or profile; Super Admins
+  edit roles and link/unlink accounts from **Administration → Members**.
 
 ### Status colours
 

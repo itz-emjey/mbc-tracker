@@ -10,6 +10,8 @@ import { ModulePage } from '@/app/pages/module-page'
 import { NotFoundPage } from '@/app/pages/not-found-page'
 import { OverviewPage } from '@/app/pages/overview-page'
 import { PendingPage } from '@/app/pages/pending-page'
+import { PlayerProfilePage } from '@/app/pages/player-profile-page'
+import { PlayersPage } from '@/app/pages/players-page'
 import { RegisterPage } from '@/app/pages/register-page'
 import { SignInPage } from '@/app/pages/sign-in-page'
 import { UnauthorizedPage } from '@/app/pages/unauthorized-page'
@@ -24,7 +26,13 @@ const moduleRoutes = APP_MODULES.filter((module) => module.path !== '/').map((mo
   path: module.path.slice(1),
   element: (
     <RequireRole roles={module.roles}>
-      {module.path === '/admin' ? <AdminPage /> : <ModulePage module={module} />}
+      {module.path === '/admin' ? (
+        <AdminPage />
+      ) : module.path === '/players' ? (
+        <PlayersPage />
+      ) : (
+        <ModulePage module={module} />
+      )}
     </RequireRole>
   ),
 }))
@@ -49,6 +57,22 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <OverviewPage /> },
           ...moduleRoutes,
+          {
+            path: 'players/:id',
+            element: (
+              <RequireRole>
+                <PlayerProfilePage />
+              </RequireRole>
+            ),
+          },
+          {
+            path: 'profile',
+            element: (
+              <RequireRole>
+                <PlayerProfilePage self />
+              </RequireRole>
+            ),
+          },
           { path: '*', element: <NotFoundPage /> },
         ],
       },

@@ -1,0 +1,49 @@
+/**
+ * Player directory types.
+ *
+ * These mirror the `players` table. They describe data, not permissions: the
+ * database still decides which rows and columns a caller can read or write.
+ */
+
+export type PlayerStatus = 'active' | 'inactive' | 'suspended'
+export type PlayerGender = 'male' | 'female'
+
+/** Roles allowed to add and correct player records, mirroring the SQL grants. */
+export const PLAYER_STAFF_ROLES = ['super_admin', 'tournament_manager', 'trainer'] as const
+
+export const PLAYER_STATUSES: readonly PlayerStatus[] = ['active', 'inactive', 'suspended']
+export const PLAYER_GENDERS: readonly PlayerGender[] = ['male', 'female']
+
+export const PLAYER_STATUS_LABELS: Record<PlayerStatus, string> = {
+  active: 'Active',
+  inactive: 'Inactive',
+  suspended: 'Suspended',
+}
+
+export const PLAYER_GENDER_LABELS: Record<PlayerGender, string> = {
+  male: 'Male',
+  female: 'Female',
+}
+
+export interface PlayerRecord {
+  id: string
+  profile_id: string | null
+  full_name: string
+  gender: PlayerGender | null
+  status: PlayerStatus
+  joined_on: string
+}
+
+/** Fields staff may write. `profile_id` is intentionally absent: it is RPC-only. */
+export interface PlayerInput {
+  full_name: string
+  gender: PlayerGender | null
+  status: PlayerStatus
+  joined_on: string
+}
+
+export interface LinkedProfile {
+  id: string
+  full_name: string
+  status: string
+}
