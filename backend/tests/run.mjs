@@ -22,10 +22,12 @@ const [
   spMigration,
   authMigration,
   playerMigration,
+  tournamentMigration,
   identityPolicies,
   operationPolicies,
   spPolicies,
   authPolicies,
+  tournamentPolicies,
   seed,
   bootstrap,
 ] = await Promise.all([
@@ -33,10 +35,12 @@ const [
   readFile(join(backendDir, 'migrations', '002_shuttlepower_bootstrap.sql'), 'utf8'),
   readFile(join(backendDir, 'migrations', '003_auth_lifecycle.sql'), 'utf8'),
   readFile(join(backendDir, 'migrations', '004_players.sql'), 'utf8'),
+  readFile(join(backendDir, 'migrations', '005_tournaments.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '001_identity.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '002_operations.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '003_shuttlepower.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '004_auth_lifecycle.sql'), 'utf8'),
+  readFile(join(backendDir, 'policies', '005_tournaments.sql'), 'utf8'),
   readFile(join(backendDir, 'seeds', '001_fictional_players.sql'), 'utf8'),
   readFile(join(backendDir, 'seeds', 'bootstrap_super_admin.sql'), 'utf8'),
 ])
@@ -52,6 +56,11 @@ const G = '66666666-6666-4666-8666-666666666666' // auth user without a profile
 const H = '77777777-7777-4777-8777-777777777777' // pending, no request
 const P1 = 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa' // player record linked to A
 const P2 = 'dddddddd-1111-4111-8111-dddddddddddd' // unlinked player record
+const P3 = '33333333-1111-4111-8111-333333333333' // male player
+const P4 = '44444444-1111-4111-8111-444444444444' // female player
+const P5 = '55555555-1111-4111-8111-555555555555' // male player
+const P6 = '66666666-1111-4111-8111-666666666666' // no recorded gender
+const P7 = '77777777-1111-4111-8111-777777777777' // inactive player
 const RR1 = 'bbbbbbbb-1111-4111-8111-bbbbbbbbbbbb'
 const RR2 = 'cccccccc-1111-4111-8111-cccccccccccc'
 const RR3 = 'eeeeeeee-1111-4111-8111-eeeeeeeeeeee'
@@ -66,6 +75,13 @@ const tables = [
   'app_settings',
   'sp_accounts',
   'sp_transactions',
+  'tournaments',
+  'tournament_events',
+  'teams',
+  'team_members',
+  'tournament_entries',
+  'matches',
+  'match_games',
 ]
 
 let passed = 0
@@ -149,6 +165,67 @@ async function expectErrorAs(uid, sql, pattern) {
     () => asUser(uid, sql),
     pattern,
   )
+}
+
+/** Runs an expected-to-fail query inside the current transaction, preserving it. */
+async function expectQueryError(sql, pattern) {
+  await db.exec('savepoint expected_error')
+  try {
+    await expectError('query inside transaction', () => db.query(sql), pattern)
+  } finally {
+    await db.exec('rollback to savepoint expected_error')
+  }
+}
+
+async function createTournament(name = 'Club Cup') {
+  const { rows } = await db.query(
+    `select public.create_tournament('${name}', '2026-11-01', '2026-11-02') as result`,
+  )
+  return rows[0].result
+}
+
+async function createEvent(
+  tournamentId,
+  discipline = 'singles',
+  format = 'single_elimination',
+  maxEntries = 8,
+) {
+  const { rows } = await db.query(
+    `select public.create_tournament_event('${tournamentId}', '${discipline}', '${format}', ${maxEntries}) as result`,
+  )
+  return rows[0].result
+}
+
+async function registerEntry(eventId, playerIds, seed = null) {
+  const ids = playerIds.map((id) => `'${id}'`).join(', ')
+  return db.query(
+    `select public.register_tournament_entry('${eventId}', array[${ids}]::uuid[], ${seed ?? 'null'}) as result`,
+  )
+}
+
+async function saveDraw(eventId, matches, replace = false) {
+  const payload = JSON.stringify(matches).replaceAll("'", "''")
+  const { rows } = await db.query(
+    `select public.save_tournament_draw('${eventId}', '${payload}'::jsonb, ${replace}) as result`,
+  )
+  return rows[0].result
+}
+
+async function matchIdFor(eventId, bracket, round, position = 1) {
+  const { rows } = await db.query(
+    `select id from public.matches
+      where event_id = '${eventId}'
+        and bracket = '${bracket}'
+        and round = ${round}
+        and position = ${position}`,
+  )
+  assert(rows[0], `missing ${bracket} round ${round} match`)
+  return rows[0].id
+}
+
+async function recordResult(matchId, games) {
+  const payload = JSON.stringify(games).replaceAll("'", "''")
+  return db.query(`select public.record_match_result('${matchId}', '${payload}'::jsonb) as result`)
 }
 
 // ---------------------------------------------------------------------------
@@ -254,15 +331,17 @@ await db.exec(migration)
 await db.exec(spMigration)
 await db.exec(authMigration)
 await db.exec(playerMigration)
+await db.exec(tournamentMigration)
 await db.exec(identityPolicies)
 await db.exec(operationPolicies)
 await db.exec(spPolicies)
 await db.exec(authPolicies)
+await db.exec(tournamentPolicies)
 
 // ---------------------------------------------------------------------------
 // Schema and catalogue
 // ---------------------------------------------------------------------------
-await test('all nine tables exist', async () => {
+await test('all expected tables exist', async () => {
   const { rows } = await db.query(
     `select table_name from information_schema.tables where table_schema = 'public'`,
   )
@@ -275,7 +354,8 @@ await test('row level security is enabled on every table', async () => {
     `select relname, relrowsecurity
        from pg_class
       where relnamespace = 'public'::regnamespace
-        and relname in ('profiles','players','roles','user_roles','registration_requests','audit_logs','app_settings','sp_accounts','sp_transactions')`,
+        and relname = any($1::text[])`,
+    [tables],
   )
   assert(rows.length === tables.length, `expected ${tables.length} tables, found ${rows.length}`)
   for (const row of rows) assert(row.relrowsecurity, `RLS is off on ${row.relname}`)
@@ -332,6 +412,20 @@ await test('re-running the players migration fails loudly', async () => {
   )
 })
 
+await test('re-running the tournaments migration fails loudly', async () => {
+  await expectError(
+    're-run tournaments migration',
+    async () => {
+      try {
+        await db.exec(tournamentMigration)
+      } finally {
+        await db.exec('rollback')
+      }
+    },
+    /already exists/i,
+  )
+})
+
 // ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------
@@ -365,6 +459,13 @@ await db.exec(`
 
   insert into public.players (id, full_name, gender)
     values ('${P2}', 'Unlinked Player', 'female');
+
+  insert into public.players (id, full_name, gender, status) values
+    ('${P3}', 'Carlo Male', 'male', 'active'),
+    ('${P4}', 'Dana Female', 'female', 'active'),
+    ('${P5}', 'Eli Male', 'male', 'active'),
+    ('${P6}', 'Fay Unknown', null, 'active'),
+    ('${P7}', 'Gina Inactive', 'female', 'inactive');
 
   insert into public.registration_requests (id, profile_id, email, full_name) values
     ('${RR1}', '${B}', 'bea@example.test', 'Bea Pending'),
@@ -553,6 +654,37 @@ await test('least-privilege column grants are in place', async () => {
   assert(row.anon_submit_execute === false, 'anon must not execute submit_registration')
 })
 
+await test('N0: tournament tables are read-only and tournament RPCs are authenticated-only', async () => {
+  const { rows } = await db.query(`
+    select
+      has_table_privilege('authenticated', 'public.tournaments', 'SELECT') as tournament_select,
+      has_table_privilege('authenticated', 'public.tournaments', 'INSERT') as tournament_insert,
+      has_table_privilege('authenticated', 'public.tournament_entries', 'INSERT') as entry_insert,
+      has_table_privilege('authenticated', 'public.matches', 'UPDATE') as match_update,
+      has_table_privilege('authenticated', 'public.match_games', 'DELETE') as game_delete,
+      has_function_privilege('authenticated', 'public.create_tournament(text,date,date,text,text,timestamptz)', 'EXECUTE') as create_execute,
+      has_function_privilege('authenticated', 'public.register_tournament_entry(uuid,uuid[],integer)', 'EXECUTE') as entry_execute,
+      has_function_privilege('authenticated', 'public.save_tournament_draw(uuid,jsonb,boolean)', 'EXECUTE') as draw_execute,
+      has_function_privilege('authenticated', 'public.record_match_result(uuid,jsonb)', 'EXECUTE') as result_execute,
+      has_function_privilege('authenticated', 'public.correct_match_result(uuid,jsonb,text)', 'EXECUTE') as correct_execute,
+      has_function_privilege('authenticated', 'public.score_match_games(uuid,uuid,jsonb)', 'EXECUTE') as score_execute,
+      has_function_privilege('anon', 'public.record_match_result(uuid,jsonb)', 'EXECUTE') as anon_result_execute
+  `)
+  const row = rows[0]
+  assert(row.tournament_select === true, 'authenticated should read tournaments')
+  assert(row.tournament_insert === false, 'tournament writes must cross an RPC')
+  assert(row.entry_insert === false, 'entries must be inserted by the RPC only')
+  assert(row.match_update === false, 'matches must be updated by the result RPC only')
+  assert(row.game_delete === false, 'game scores must not be deletable by clients')
+  assert(row.create_execute === true, 'authenticated should create tournaments')
+  assert(row.entry_execute === true, 'authenticated should register entries')
+  assert(row.draw_execute === true, 'authenticated should save a draw')
+  assert(row.result_execute === true, 'authenticated should record results')
+  assert(row.correct_execute === true, 'authenticated should correct results')
+  assert(row.score_execute === false, 'score_match_games must stay internal')
+  assert(row.anon_result_execute === false, 'anon must not record results')
+})
+
 // ---------------------------------------------------------------------------
 // RLS behaviour
 // ---------------------------------------------------------------------------
@@ -574,7 +706,7 @@ await test('a super admin sees every profile', async () => {
 await test('club members see player records, pending users do not', async () => {
   const member = await asUser(A, `select id from public.players`)
   const pending = await asUser(B, `select id from public.players`)
-  assert(member.rows.length === 2, `player should see 2 players, got ${member.rows.length}`)
+  assert(member.rows.length === 7, `player should see 7 players, got ${member.rows.length}`)
   assert(pending.rows.length === 0, `pending user should see 0 players, got ${pending.rows.length}`)
 })
 
@@ -1333,7 +1465,7 @@ await test('§5 matrix: anon holds no table privilege on any Phase 1 table', asy
      order by t.table_name
   `)
 
-  assert(rows.length === 9, `expected nine tables, found ${rows.length}`)
+  assert(rows.length === tables.length, `expected ${tables.length} tables, found ${rows.length}`)
   for (const row of rows) assert(row.can_select === false, `anon must not read ${row.table_name}`)
 })
 
@@ -1789,6 +1921,727 @@ await test('K3: anon cannot execute the player lifecycle RPCs', async () => {
   await expectError(
     'anon roles',
     () => asRole('anon', `select public.set_profile_roles('${D}', array['player'])`),
+    /permission denied/i,
+  )
+})
+
+// ---------------------------------------------------------------------------
+// Group N: tournaments, entries, draws, and results
+// ---------------------------------------------------------------------------
+await test('N1: only tournament staff can create or change tournaments', async () => {
+  await expectErrorAs(
+    A,
+    `select public.create_tournament('Not Mine', '2026-11-01', '2026-11-02')`,
+    /not authorized/i,
+  )
+  await expectErrorAs(
+    B,
+    `select public.create_tournament('Not Mine', '2026-11-01', '2026-11-02')`,
+    /not authorized/i,
+  )
+
+  await inTransaction(async () => {
+    await actAs('authenticated', C)
+    const tournament = await createTournament('Admin Cup')
+    assert(tournament.status === 'draft', 'a new tournament must start as a draft')
+    assert(tournament.name === 'Admin Cup', 'the name must be stored')
+  })
+})
+
+await test('N1: the lifecycle is audited and refuses skipped steps', async () => {
+  await inTransaction(async () => {
+    await actAs('authenticated', D)
+    const tournament = await createTournament('Autumn Open')
+
+    await expectQueryError(
+      `select public.set_tournament_status('${tournament.id}', 'published')`,
+      /add at least one event/i,
+    )
+
+    await createEvent(tournament.id)
+
+    const published = await db.query(
+      `select public.set_tournament_status('${tournament.id}', 'published') as result`,
+    )
+    assert(published.rows[0].result.changed === true, 'publishing should change the status')
+
+    const again = await db.query(
+      `select public.set_tournament_status('${tournament.id}', 'published') as result`,
+    )
+    assert(again.rows[0].result.changed === false, 'repeating a status must be a no-op')
+
+    await expectQueryError(
+      `select public.set_tournament_status('${tournament.id}', 'draft')`,
+      /cannot move a tournament/i,
+    )
+
+    await actAs('authenticated', C)
+    const audit = await db.query(`
+      select count(*)::int as entries
+        from public.audit_logs
+       where action = 'tournament.status' and target_id = '${tournament.id}'
+    `)
+    assert(audit.rows[0].entries === 1, 'only the real transition should be audited')
+  })
+})
+
+await test('N1: event discipline, format, cap, and uniqueness are enforced', async () => {
+  await inTransaction(async () => {
+    await actAs('authenticated', D)
+    const tournament = await createTournament('Rules Cup')
+
+    await expectQueryError(
+      `select public.create_tournament_event('${tournament.id}', 'triples', 'round_robin', 8)`,
+      /unknown discipline/i,
+    )
+    await expectQueryError(
+      `select public.create_tournament_event('${tournament.id}', 'singles', 'ladder', 8)`,
+      /unknown format/i,
+    )
+    await expectQueryError(
+      `select public.create_tournament_event('${tournament.id}', 'singles', 'round_robin', 1)`,
+      /max entries/i,
+    )
+
+    const event = await createEvent(tournament.id, 'singles', 'round_robin', 8)
+    assert(event.format === 'round_robin', 'the event format must be stored')
+
+    await expectQueryError(
+      `select public.create_tournament_event('${tournament.id}', 'singles', 'round_robin', 8)`,
+      /duplicate key|unique constraint/i,
+    )
+  })
+})
+
+await test('N2: D10 rejects same-gender and missing-gender doubles pairs', async () => {
+  await inTransaction(async () => {
+    await actAs('authenticated', D)
+    const tournament = await createTournament('Mixed Cup')
+    const event = await createEvent(tournament.id, 'mixed_doubles', 'single_elimination', 8)
+
+    await expectQueryError(
+      `select public.register_tournament_entry('${event.id}', array['${P3}', '${P5}']::uuid[])`,
+      /mixed doubles needs exactly one male and one female/i,
+    )
+    await expectQueryError(
+      `select public.register_tournament_entry('${event.id}', array['${P4}', '${P6}']::uuid[])`,
+      /recorded gender/i,
+    )
+    await expectQueryError(
+      `select public.register_tournament_entry('${event.id}', array['${P1}', '${P7}']::uuid[])`,
+      /missing or inactive/i,
+    )
+
+    const entry = await registerEntry(event.id, [P3, P4])
+    assert(entry.rows[0].result.team_id, 'a doubles entry must create a team')
+    assert(entry.rows[0].result.player_ids.length === 2, 'the pair must be recorded')
+
+    await expectQueryError(
+      `select public.register_tournament_entry('${event.id}', array['${P3}', '${P4}']::uuid[])`,
+      /cannot be registered twice/i,
+    )
+
+    const teamCount = await db.query(
+      `select count(*)::int as members from public.team_members where team_id = '${entry.rows[0].result.team_id}'`,
+    )
+    assert(teamCount.rows[0].members === 2, 'the team must have exactly two members')
+  })
+})
+
+await test('N2: a singles player cannot enter the same event twice', async () => {
+  await inTransaction(async () => {
+    await actAs('authenticated', D)
+    const tournament = await createTournament('Singles Cup')
+    const event = await createEvent(tournament.id, 'singles')
+
+    await registerEntry(event.id, [P1])
+    await expectQueryError(
+      `select public.register_tournament_entry('${event.id}', array['${P1}']::uuid[])`,
+      /cannot be registered twice/i,
+    )
+  })
+})
+
+await test('N2: caps, seeds, and withdrawal behave before a draw', async () => {
+  await inTransaction(async () => {
+    await actAs('authenticated', D)
+    const tournament = await createTournament('Seeded Cup')
+    const event = await createEvent(tournament.id, 'singles', 'single_elimination', 3)
+
+    await registerEntry(event.id, [P1], 1)
+    await expectQueryError(
+      `select public.register_tournament_entry('${event.id}', array['${P3}']::uuid[], 1)`,
+      /seed is already assigned/i,
+    )
+
+    await registerEntry(event.id, [P3], 2)
+    const fourth = await registerEntry(event.id, [P4], 3)
+    const fourthEntry = fourth.rows[0].result.entry_id
+
+    await expectQueryError(
+      `select public.register_tournament_entry('${event.id}', array['${P5}']::uuid[])`,
+      /event is full/i,
+    )
+
+    const withdrawn = await db.query(
+      `select public.withdraw_tournament_entry('${fourthEntry}') as result`,
+    )
+    assert(withdrawn.rows[0].result.changed === true, 'withdrawing should change the entry')
+
+    const replacement = await registerEntry(event.id, [P5], 3)
+    assert(
+      replacement.rows[0].result.seed === 3,
+      'withdrawing must free the seed for a replacement',
+    )
+
+    const kept = await db.query(
+      `select status from public.tournament_entries where id = '${fourthEntry}'`,
+    )
+    assert(kept.rows[0].status === 'withdrawn', 'a withdrawal must keep the original row')
+  })
+})
+
+await test('N2: clients cannot write tournament tables directly', async () => {
+  await expectErrorAs(
+    D,
+    `insert into public.tournaments (name, starts_on, ends_on)
+     values ('Direct', '2026-11-01', '2026-11-02')`,
+    /permission denied/i,
+  )
+  await expectErrorAs(
+    D,
+    `update public.tournaments set name = 'Changed'`,
+    /permission denied/i,
+  )
+  await expectErrorAs(A, `delete from public.tournament_entries`, /permission denied/i)
+})
+
+await test('N3: a draw must cover every entry and use earlier sources', async () => {
+  await inTransaction(async () => {
+    await actAs('authenticated', D)
+    const tournament = await createTournament('Draw Cup')
+    const event = await createEvent(tournament.id, 'singles')
+
+    const first = (await registerEntry(event.id, [P1], 1)).rows[0].result.entry_id
+    const second = (await registerEntry(event.id, [P3], 2)).rows[0].result.entry_id
+    const third = (await registerEntry(event.id, [P4], 3)).rows[0].result.entry_id
+
+    await expectQueryError(
+      `select public.save_tournament_draw('${event.id}', '[{"key":"m1","bracket":"winners","round":1,"position":1,"home_entry_id":"${first}","away_entry_id":"${second}"}]'::jsonb)`,
+      /place every registered entry/i,
+    )
+
+    const brokenSource = JSON.stringify([
+      {
+        key: 'm1',
+        bracket: 'winners',
+        round: 1,
+        position: 1,
+        home_source_key: 'm2',
+        home_source_outcome: 'winner',
+        away_entry_id: second,
+      },
+    ]).replaceAll("'", "''")
+
+    await expectQueryError(
+      `select public.save_tournament_draw('${event.id}', '${brokenSource}'::jsonb)`,
+      /later or unknown source/i,
+    )
+
+    const saved = await saveDraw(event.id, [
+      {
+        key: 'w-r1-m1',
+        bracket: 'winners',
+        round: 1,
+        position: 1,
+        home_entry_id: second,
+        away_entry_id: third,
+      },
+      {
+        key: 'w-r2-m1',
+        bracket: 'winners',
+        round: 2,
+        position: 1,
+        home_entry_id: first,
+        away_source_key: 'w-r1-m1',
+        away_source_outcome: 'winner',
+      },
+    ])
+    assert(saved.match_count === 2, 'the draw should store both matches')
+
+    const drawn = await db.query(
+      `select draw_generated_at from public.tournament_events where id = '${event.id}'`,
+    )
+    assert(drawn.rows[0].draw_generated_at, 'saving a draw must lock entries')
+
+    await expectQueryError(
+      `select public.save_tournament_draw('${event.id}', '[]'::jsonb)`,
+      /between 1 and 2048/i,
+    )
+    await expectQueryError(
+      `select public.register_tournament_entry('${event.id}', array['${P5}']::uuid[])`,
+      /draw already exists/i,
+    )
+  })
+})
+
+await test('N3: round robin stores every pair exactly once', async () => {
+  await inTransaction(async () => {
+    await actAs('authenticated', D)
+    const tournament = await createTournament('League Cup')
+    const event = await createEvent(tournament.id, 'singles', 'round_robin', 8)
+
+    const first = (await registerEntry(event.id, [P1], 1)).rows[0].result.entry_id
+    const second = (await registerEntry(event.id, [P3], 2)).rows[0].result.entry_id
+    const third = (await registerEntry(event.id, [P4], 3)).rows[0].result.entry_id
+
+    const missingPair = JSON.stringify([
+      { key: 'r1', bracket: 'round_robin', round: 1, position: 1, home_entry_id: first, away_entry_id: second },
+      { key: 'r2', bracket: 'round_robin', round: 2, position: 1, home_entry_id: second, away_entry_id: third },
+    ]).replaceAll("'", "''")
+
+    await expectQueryError(
+      `select public.save_tournament_draw('${event.id}', '${missingPair}'::jsonb)`,
+      /every pair exactly once/i,
+    )
+
+    const duplicatePair = JSON.stringify([
+      { key: 'r1', bracket: 'round_robin', round: 1, position: 1, home_entry_id: first, away_entry_id: second },
+      { key: 'r2', bracket: 'round_robin', round: 2, position: 1, home_entry_id: second, away_entry_id: first },
+      { key: 'r3', bracket: 'round_robin', round: 3, position: 1, home_entry_id: second, away_entry_id: third },
+    ]).replaceAll("'", "''")
+
+    await expectQueryError(
+      `select public.save_tournament_draw('${event.id}', '${duplicatePair}'::jsonb)`,
+      /pair appears twice/i,
+    )
+
+    const saved = await saveDraw(event.id, [
+      { key: 'r1', bracket: 'round_robin', round: 1, position: 1, home_entry_id: first, away_entry_id: second },
+      { key: 'r2', bracket: 'round_robin', round: 2, position: 1, home_entry_id: first, away_entry_id: third },
+      { key: 'r3', bracket: 'round_robin', round: 3, position: 1, home_entry_id: second, away_entry_id: third },
+    ])
+    assert(saved.match_count === 3, 'three entries need three round-robin matches')
+  })
+})
+
+await test('N4: a result decides the winner and advances both final slots', async () => {
+  await inTransaction(async () => {
+    await actAs('authenticated', D)
+    const tournament = await createTournament('Bracket Cup')
+    const event = await createEvent(tournament.id, 'singles')
+    const first = (await registerEntry(event.id, [P1], 1)).rows[0].result.entry_id
+    const second = (await registerEntry(event.id, [P3], 2)).rows[0].result.entry_id
+    const third = (await registerEntry(event.id, [P4], 3)).rows[0].result.entry_id
+    const fourth = (await registerEntry(event.id, [P5], 4)).rows[0].result.entry_id
+
+    await saveDraw(event.id, [
+      {
+        key: 's1',
+        bracket: 'winners',
+        round: 1,
+        position: 1,
+        home_entry_id: first,
+        away_entry_id: fourth,
+      },
+      {
+        key: 's2',
+        bracket: 'winners',
+        round: 1,
+        position: 2,
+        home_entry_id: second,
+        away_entry_id: third,
+      },
+      {
+        key: 'f1',
+        bracket: 'winners',
+        round: 2,
+        position: 1,
+        home_source_key: 's1',
+        home_source_outcome: 'winner',
+        away_source_key: 's2',
+        away_source_outcome: 'winner',
+      },
+    ])
+
+    const semiOne = await matchIdFor(event.id, 'winners', 1, 1)
+    const semiTwo = await matchIdFor(event.id, 'winners', 1, 2)
+    const final = await matchIdFor(event.id, 'winners', 2)
+
+    const firstResult = await recordResult(semiOne, [
+      { home_points: 21, away_points: 15 },
+      { home_points: 21, away_points: 18 },
+    ])
+    assert(
+      firstResult.rows[0].result.winner_entry_id === first,
+      'the home side should win two straight games',
+    )
+
+    let finalRow = await db.query(`select home_entry_id from public.matches where id = '${final}'`)
+    assert(finalRow.rows[0].home_entry_id === first, 'the first semi winner must reach the final')
+
+    await recordResult(semiTwo, [
+      { home_points: 18, away_points: 21 },
+      { home_points: 15, away_points: 21 },
+    ])
+
+    finalRow = await db.query(
+      `select home_entry_id, away_entry_id from public.matches where id = '${final}'`,
+    )
+    assert(finalRow.rows[0].home_entry_id === first, 'the home finalist must be unchanged')
+    assert(finalRow.rows[0].away_entry_id === third, 'the away semi winner must reach the final')
+
+    const finalResult = await recordResult(final, [
+      { home_points: 21, away_points: 19 },
+      { home_points: 17, away_points: 21 },
+      { home_points: 21, away_points: 12 },
+    ])
+    assert(finalResult.rows[0].result.winner_entry_id === first, 'the match winner must be stored')
+
+    const games = await db.query(
+      `select count(*)::int as games from public.match_games where match_id = '${final}'`,
+    )
+    assert(games.rows[0].games === 3, 'all three games must be stored')
+
+    await actAs('authenticated', C)
+    const audit = await db.query(`
+      select count(*)::int as entries
+        from public.audit_logs
+       where action = 'tournament.match_result' and target_id = '${final}'
+    `)
+    assert(audit.rows[0].entries === 1, 'a first result must be audited once')
+  })
+})
+
+await test('N4: level games and split matches are refused', async () => {
+  await inTransaction(async () => {
+    await actAs('authenticated', D)
+    const tournament = await createTournament('Score Cup')
+    const event = await createEvent(tournament.id, 'singles')
+    const first = (await registerEntry(event.id, [P1], 1)).rows[0].result.entry_id
+    const second = (await registerEntry(event.id, [P3], 2)).rows[0].result.entry_id
+
+    await saveDraw(event.id, [
+      {
+        key: 'f1',
+        bracket: 'winners',
+        round: 1,
+        position: 1,
+        home_entry_id: first,
+        away_entry_id: second,
+      },
+    ])
+
+    const final = await matchIdFor(event.id, 'winners', 1)
+
+    await expectQueryError(
+      `select public.record_match_result('${final}', '[{"home_points":21,"away_points":21}]'::jsonb)`,
+      /cannot end level/i,
+    )
+    await expectQueryError(
+      `select public.record_match_result('${final}', '[{"home_points":21,"away_points":19},{"home_points":19,"away_points":21}]'::jsonb)`,
+      /must have a winner/i,
+    )
+  })
+})
+
+await test('N4: the grand-final reset is cancelled when the winners finalist wins', async () => {
+  await inTransaction(async () => {
+    await actAs('authenticated', D)
+    const tournament = await createTournament('Double Cup')
+    const event = await createEvent(tournament.id, 'singles', 'double_elimination', 8)
+    const first = (await registerEntry(event.id, [P1], 1)).rows[0].result.entry_id
+    const second = (await registerEntry(event.id, [P3], 2)).rows[0].result.entry_id
+
+    await saveDraw(event.id, [
+      {
+        key: 'w1',
+        bracket: 'winners',
+        round: 1,
+        position: 1,
+        home_entry_id: first,
+        away_entry_id: second,
+      },
+      {
+        key: 'gf',
+        bracket: 'grand_final',
+        round: 1,
+        position: 1,
+        home_source_key: 'w1',
+        home_source_outcome: 'winner',
+        away_source_key: 'w1',
+        away_source_outcome: 'loser',
+      },
+      {
+        key: 'gfr',
+        bracket: 'grand_final',
+        round: 2,
+        position: 1,
+        home_source_key: 'gf',
+        home_source_outcome: 'winner',
+        away_source_key: 'gf',
+        away_source_outcome: 'loser',
+        conditional: true,
+        reset: true,
+      },
+    ])
+
+    const winnersFinal = await matchIdFor(event.id, 'winners', 1)
+    const grandFinal = await matchIdFor(event.id, 'grand_final', 1)
+    const reset = await matchIdFor(event.id, 'grand_final', 2)
+
+    await recordResult(winnersFinal, [
+      { home_points: 21, away_points: 10 },
+      { home_points: 21, away_points: 12 },
+    ])
+
+    const finalSides = await db.query(
+      `select home_entry_id, away_entry_id from public.matches where id = '${grandFinal}'`,
+    )
+    assert(finalSides.rows[0].home_entry_id === first, 'the winners finalist must host the final')
+    assert(finalSides.rows[0].away_entry_id === second, 'the loser must drop to the final')
+
+    await recordResult(grandFinal, [
+      { home_points: 21, away_points: 19 },
+      { home_points: 21, away_points: 17 },
+    ])
+
+    const resetRow = await db.query(
+      `select status, winner_entry_id from public.matches where id = '${reset}'`,
+    )
+    assert(
+      resetRow.rows[0].status === 'cancelled',
+      'a reset is not played when the winners finalist wins',
+    )
+    assert(resetRow.rows[0].winner_entry_id === first, 'the first final winner is champion')
+  })
+})
+
+await test('N4: the reset is played when the losers finalist wins the first final', async () => {
+  await inTransaction(async () => {
+    await actAs('authenticated', D)
+    const tournament = await createTournament('Reset Cup')
+    const event = await createEvent(tournament.id, 'singles', 'double_elimination', 8)
+    const first = (await registerEntry(event.id, [P1], 1)).rows[0].result.entry_id
+    const second = (await registerEntry(event.id, [P3], 2)).rows[0].result.entry_id
+
+    await saveDraw(event.id, [
+      {
+        key: 'w1',
+        bracket: 'winners',
+        round: 1,
+        position: 1,
+        home_entry_id: first,
+        away_entry_id: second,
+      },
+      {
+        key: 'gf',
+        bracket: 'grand_final',
+        round: 1,
+        position: 1,
+        home_source_key: 'w1',
+        home_source_outcome: 'winner',
+        away_source_key: 'w1',
+        away_source_outcome: 'loser',
+      },
+      {
+        key: 'gfr',
+        bracket: 'grand_final',
+        round: 2,
+        position: 1,
+        home_source_key: 'gf',
+        home_source_outcome: 'winner',
+        away_source_key: 'gf',
+        away_source_outcome: 'loser',
+        conditional: true,
+        reset: true,
+      },
+    ])
+
+    const winnersFinal = await matchIdFor(event.id, 'winners', 1)
+    const grandFinal = await matchIdFor(event.id, 'grand_final', 1)
+    const reset = await matchIdFor(event.id, 'grand_final', 2)
+
+    // The away side wins the winners final, so it is the winners-bracket
+    // finalist and the home side drops into the grand final as the loser.
+    await recordResult(winnersFinal, [
+      { home_points: 10, away_points: 21 },
+      { home_points: 12, away_points: 21 },
+    ])
+
+    await recordResult(grandFinal, [
+      { home_points: 17, away_points: 21 },
+      { home_points: 19, away_points: 21 },
+    ])
+
+    const resetRow = await db.query(
+      `select status, home_entry_id, away_entry_id
+         from public.matches where id = '${reset}'`,
+    )
+    assert(resetRow.rows[0].status === 'pending', 'the reset must stay ready to play')
+    assert(resetRow.rows[0].home_entry_id === first, 'the first-final winner must host the reset')
+    assert(resetRow.rows[0].away_entry_id === second, 'the first-final loser must play the reset')
+
+    const decided = await recordResult(reset, [
+      { home_points: 21, away_points: 18 },
+      { home_points: 21, away_points: 16 },
+    ])
+    assert(decided.rows[0].result.winner_entry_id === first, 'the reset decides the champion')
+  })
+})
+
+await test('N4: a correction needs a reason, rewrites scores, and is audited', async () => {
+  await inTransaction(async () => {
+    await actAs('authenticated', D)
+    const tournament = await createTournament('Correction Cup')
+    const event = await createEvent(tournament.id, 'singles')
+    const first = (await registerEntry(event.id, [P1], 1)).rows[0].result.entry_id
+    const second = (await registerEntry(event.id, [P3], 2)).rows[0].result.entry_id
+
+    await saveDraw(event.id, [
+      {
+        key: 'f1',
+        bracket: 'winners',
+        round: 1,
+        position: 1,
+        home_entry_id: first,
+        away_entry_id: second,
+      },
+    ])
+    const final = await matchIdFor(event.id, 'winners', 1)
+
+    await recordResult(final, [
+      { home_points: 21, away_points: 19 },
+      { home_points: 21, away_points: 17 },
+    ])
+
+    await expectQueryError(
+      `select public.correct_match_result('${final}', '[{"home_points":19,"away_points":21}]'::jsonb, '')`,
+      /reason is required/i,
+    )
+
+    const corrected = await db.query(
+      `select public.correct_match_result(
+         '${final}',
+         '[{"home_points":19,"away_points":21},{"home_points":18,"away_points":21}]'::jsonb,
+         'Score entered on the wrong side'
+       ) as result`,
+    )
+    assert(
+      corrected.rows[0].result.winner_entry_id === second,
+      'the corrected result must change the winner',
+    )
+
+    const games = await db.query(
+      `select home_points, away_points from public.match_games
+        where match_id = '${final}' order by game_number`,
+    )
+    assert(games.rows.length === 2, 'the old game rows must be replaced')
+    assert(games.rows[0].home_points === 19, 'the corrected score must be stored')
+
+    await actAs('authenticated', C)
+    const audit = await db.query(`
+      select before_data, after_data
+        from public.audit_logs
+       where action = 'tournament.match_result_corrected' and target_id = '${final}'
+    `)
+    assert(audit.rows.length === 1, 'a correction must be audited once')
+    assert(
+      audit.rows[0].before_data.winner_entry_id === first,
+      'the audit must preserve the old winner',
+    )
+    assert(
+      audit.rows[0].after_data.reason === 'Score entered on the wrong side',
+      'the audit must record the reason',
+    )
+  })
+})
+
+await test('N4: a result cannot be corrected after a downstream match is played', async () => {
+  await inTransaction(async () => {
+    await actAs('authenticated', D)
+    const tournament = await createTournament('Cascade Cup')
+    const event = await createEvent(tournament.id, 'singles')
+    const first = (await registerEntry(event.id, [P1], 1)).rows[0].result.entry_id
+    const second = (await registerEntry(event.id, [P3], 2)).rows[0].result.entry_id
+    const third = (await registerEntry(event.id, [P4], 3)).rows[0].result.entry_id
+    const fourth = (await registerEntry(event.id, [P5], 4)).rows[0].result.entry_id
+
+    await saveDraw(event.id, [
+      { key: 's1', bracket: 'winners', round: 1, position: 1, home_entry_id: first, away_entry_id: second },
+      { key: 's2', bracket: 'winners', round: 1, position: 2, home_entry_id: third, away_entry_id: fourth },
+      {
+        key: 'f1',
+        bracket: 'winners',
+        round: 2,
+        position: 1,
+        home_source_key: 's1',
+        home_source_outcome: 'winner',
+        away_source_key: 's2',
+        away_source_outcome: 'winner',
+      },
+    ])
+
+    const semiOne = await matchIdFor(event.id, 'winners', 1, 1)
+    const semiTwo = await matchIdFor(event.id, 'winners', 1, 2)
+    const final = await matchIdFor(event.id, 'winners', 2)
+
+    await recordResult(semiOne, [{ home_points: 21, away_points: 10 }])
+    await recordResult(semiTwo, [{ home_points: 21, away_points: 12 }])
+    await recordResult(final, [{ home_points: 21, away_points: 13 }])
+
+    await expectQueryError(
+      `select public.correct_match_result('${semiOne}', '[{"home_points":10,"away_points":21}]'::jsonb, 'Late fix')`,
+      /downstream match already has a result/i,
+    )
+  })
+})
+
+await test('N5: drafts are staff-only and published tournaments are readable', async () => {
+  await inTransaction(async () => {
+    await actAs('authenticated', D)
+    const tournament = await createTournament('Visibility Cup')
+    const event = await createEvent(tournament.id, 'singles')
+    await registerEntry(event.id, [P1], 1)
+
+    await actAs('authenticated', A)
+    let visible = await db.query(`select id from public.tournaments`)
+    assert(visible.rows.length === 0, 'a player must not read a draft tournament')
+    visible = await db.query(`select id from public.tournament_entries`)
+    assert(visible.rows.length === 0, 'a player must not read draft entries')
+
+    await actAs('authenticated', D)
+    await db.query(`select public.set_tournament_status('${tournament.id}', 'published')`)
+
+    await actAs('authenticated', A)
+    visible = await db.query(`select id from public.tournaments`)
+    assert(visible.rows.length === 1, 'a player should read a published tournament')
+    visible = await db.query(`select id from public.tournament_entries`)
+    assert(visible.rows.length === 1, 'a player should read published entries')
+
+    await actAs('authenticated', B)
+    visible = await db.query(`select id from public.tournaments`)
+    assert(visible.rows.length === 0, 'a pending account must not read tournaments')
+  })
+})
+
+await test('N5: anon cannot execute any tournament RPC', async () => {
+  await expectError(
+    'anon tournament create',
+    () =>
+      asRole(
+        'anon',
+        `select public.create_tournament('Anon', '2026-11-01', '2026-11-02')`,
+      ),
+    /permission denied/i,
+  )
+  await expectError(
+    'anon draw',
+    () =>
+      asRole(
+        'anon',
+        `select public.save_tournament_draw('00000000-0000-4000-8000-000000000000', '[]'::jsonb)`,
+      ),
     /permission denied/i,
   )
 })

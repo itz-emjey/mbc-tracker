@@ -147,17 +147,18 @@ directory, and the account menu's **My profile** opens the signed-in member's li
 ## Tests and checks
 
 ```bash
-npm run test:db                       # 90 SQL checks on real Postgres (PGlite), no Docker
+npm run test:db                       # 109 SQL checks on real Postgres (PGlite), no Docker
 npm --prefix frontend test            # 95 frontend unit tests (Vitest)
 npm --prefix frontend run typecheck
 npm --prefix frontend run lint
 npm --prefix frontend run build
 ```
 
-`npm run test:db` applies all four migrations and all four policy files to a real PostgreSQL engine,
+`npm run test:db` applies all five migrations and all five policy files to a real PostgreSQL engine,
 stubs Supabase Auth (`auth.users`, `auth.uid()`), and covers schema, RLS, column privileges,
-ownership/privacy negatives, approval idempotency, starting SP, player role/link RPCs, and the
-development seed and bootstrap scripts.
+ownership/privacy negatives, approval idempotency, starting SP, player role/link RPCs, tournament
+visibility, D10 entry rules, draw validation, result advancement, correction order, and the development
+seed and bootstrap scripts.
 
 ## Security notes
 
@@ -172,8 +173,9 @@ development seed and bootstrap scripts.
 
 Phase 1 (Groups A-J) and Phase 2 (Groups K-M) are implemented and verified locally. Group M added an
 unlinked demo player, refreshed/validated the committed database types, and completed the final docs and
-check suite. Phase 3 has begun with its pure domain engines: single/double elimination with byes and a
-grand-final reset, round-robin generation, D9 standings, and D10 entry validation. Migration 004 is applied
-and its three RPCs are verified (anon is denied); the hosted policy 004 check and Phase 1 walkthrough remain
-open. Tournament schema, RPCs, and UI are next. Remaining hosted steps and open product decisions (SP
-formulas and seasons) are tracked in `PLAN.md` §9 and §7.
+check suite. Phase 3 now has its pure engines (single/double elimination with byes and a grand-final
+reset, round-robin generation, D9 standings, D10 entry validation) and its database gate (migration 005:
+tournament tables, RLS, audited entry/draw/result RPCs, and typed client definitions). Migration 004 is
+applied and its three RPCs are verified (anon is denied); migration 005 is verified locally and still
+needs applying to the hosted project. The tournament UI is next. Remaining hosted steps and open product
+decisions (SP formulas and seasons) are tracked in `PLAN.md` §9 and §7.
