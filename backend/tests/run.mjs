@@ -27,6 +27,7 @@ const [
   trainingMigration,
   clubMigration,
   jerseyImageMigration,
+  friendlyMigration,
   identityPolicies,
   operationPolicies,
   spPolicies,
@@ -36,6 +37,7 @@ const [
   trainingPolicies,
   clubPolicies,
   jerseyImagePolicies,
+  friendlyPolicies,
   seed,
   bootstrap,
 ] = await Promise.all([
@@ -48,6 +50,7 @@ const [
   readFile(join(backendDir, 'migrations', '007_training.sql'), 'utf8'),
   readFile(join(backendDir, 'migrations', '008_club_activities.sql'), 'utf8'),
   readFile(join(backendDir, 'migrations', '009_jersey_images.sql'), 'utf8'),
+  readFile(join(backendDir, 'migrations', '010_friendly_matches.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '001_identity.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '002_operations.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '003_shuttlepower.sql'), 'utf8'),
@@ -57,6 +60,7 @@ const [
   readFile(join(backendDir, 'policies', '007_training.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '008_club_activities.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '009_jersey_images.sql'), 'utf8'),
+  readFile(join(backendDir, 'policies', '010_friendly_matches.sql'), 'utf8'),
   readFile(join(backendDir, 'seeds', '001_fictional_players.sql'), 'utf8'),
   readFile(join(backendDir, 'seeds', 'bootstrap_super_admin.sql'), 'utf8'),
 ])
@@ -105,6 +109,7 @@ const tables = [
   'poll_options',
   'poll_votes',
   'announcements',
+  'friendly_matches',
   'tournament_events',
   'teams',
   'team_members',
@@ -365,6 +370,7 @@ await db.exec(spRuleMigration)
 await db.exec(trainingMigration)
 await db.exec(clubMigration)
 await db.exec(jerseyImageMigration)
+await db.exec(friendlyMigration)
 await db.exec(identityPolicies)
 await db.exec(operationPolicies)
 await db.exec(spPolicies)
@@ -374,6 +380,7 @@ await db.exec(spRulePolicies)
 await db.exec(trainingPolicies)
 await db.exec(clubPolicies)
 await db.exec(jerseyImagePolicies)
+await db.exec(friendlyPolicies)
 
 // ---------------------------------------------------------------------------
 // Schema and catalogue
@@ -3451,6 +3458,360 @@ await test('N9: anon cannot read club activity tables or call their RPCs', async
   await expectError(
     'anon announcements',
     () => asRole('anon', `select id from public.announcements`),
+    /permission denied/i,
+  )
+})
+
+// ---------------------------------------------------------------------------
+// Phase 5: friendly matches
+// ---------------------------------------------------------------------------
+await test('N10: friendly matches are read-only and the RPCs are authenticated-only', async () => {
+  const { rows } = await db.query(`
+    select
+      has_table_privilege('authenticated', 'public.friendly_matches', 'INSERT') as member_insert,
+      has_table_privilege('authenticated', 'public.friendly_matches', 'UPDATE') as member_update,
+      has_table_privilege('authenticated', 'public.friendly_matches', 'DELETE') as member_delete,
+      has_table_privilege('authenticated', 'public.friendly_matches', 'SELECT') as member_select,
+      has_function_privilege('anon', 'public.create_friendly_challenge(uuid,text)', 'EXECUTE') as anon_create,
+      has_function_privilege('authenticated', 'public.create_friendly_challenge(uuid,text)', 'EXECUTE') as member_create,
+      has_function_privilege('anon', 'public.approve_friendly_result(uuid)', 'EXECUTE') as anon_approve,
+      has_function_privilege('authenticated', 'public.auto_approve_friendly_matches()', 'EXECUTE') as member_auto
+  `)
+  const row = rows[0]
+
+  assert(row.member_select === true, 'members should read their own matches')
+  assert(row.member_insert === false, 'creates must cross the RPC')
+  assert(row.member_update === false, 'transitions must cross the RPC')
+  assert(row.member_delete === false, 'matches must never be deleted directly')
+  assert(row.anon_create === false, 'anon must not challenge')
+  assert(row.anon_approve === false, 'anon must not approve')
+  assert(row.member_create === true, 'an authenticated member can call the RPC')
+  assert(row.member_auto === true, 'the auto-approval job is callable by authenticated members')
+})
+
+await test('N10: challenges need two active linked players and one open match per pair', async () => {
+  await inTransaction(async () => {
+    await actAs('postgres')
+    // The fixtures link only P1; give P4 the manager's account so a second
+    // player can accept challenges. Rolled back with the test.
+    await db.query(`update public.players set profile_id = '${D}' where id = '${P4}'`)
+    const rivalId = P4
+
+    await actAs('authenticated', A)
+    await expectQueryError(
+      `select public.create_friendly_challenge('${P1}', null)`,
+      /cannot challenge yourself/i,
+    )
+    await expectQueryError(
+      `select public.create_friendly_challenge('${P2}', null)`,
+      /no linked account/i,
+    )
+    await expectQueryError(
+      `select public.create_friendly_challenge('${P7}', null)`,
+      /not available/i,
+    )
+
+    const created = await db.query(
+      `select public.create_friendly_challenge('${rivalId}', 'Saturday court 2') as result`,
+    )
+    assert(created.rows[0].result.status === 'pending', 'a new challenge starts pending')
+
+    await expectQueryError(
+      `select public.create_friendly_challenge('${rivalId}', null)`,
+      /already have an open friendly/i,
+    )
+
+    await actAs('authenticated', D)
+    await expectQueryError(
+      `select public.create_friendly_challenge('${P1}', null)`,
+      /already have an open friendly/i,
+    )
+
+    await actAs('postgres')
+    const audit = await db.query(
+      `select count(*)::int as total from public.audit_logs
+        where action = 'friendly.challenge.created'`,
+    )
+    assert(audit.rows[0].total === 1, 'challenge creation is audited')
+  })
+})
+
+await test('N10: only the challenged player responds and only the challenger cancels', async () => {
+  await inTransaction(async () => {
+    await actAs('postgres')
+    await db.query(`update public.players set profile_id = '${D}' where id = '${P4}'`)
+    const rivalId = P4
+    const rivalProfile = D
+
+    await actAs('authenticated', A)
+    const created = await db.query(
+      `select public.create_friendly_challenge('${rivalId}', null) as result`,
+    )
+    const matchId = created.rows[0].result.id
+
+    await expectQueryError(
+      `select public.respond_friendly_challenge('${matchId}', true)`,
+      /only the challenged player/i,
+    )
+
+    await actAs('authenticated', B)
+    await expectQueryError(
+      `select public.respond_friendly_challenge('${matchId}', true)`,
+      /only the challenged player|active player record/i,
+    )
+
+    await actAs('authenticated', rivalProfile)
+    const accepted = await db.query(
+      `select public.respond_friendly_challenge('${matchId}', true) as result`,
+    )
+    assert(accepted.rows[0].result.status === 'accepted', 'the challenged player accepts')
+    await expectQueryError(
+      `select public.respond_friendly_challenge('${matchId}', false)`,
+      /no longer pending/i,
+    )
+    await expectQueryError(
+      `select public.cancel_friendly_challenge('${matchId}')`,
+      /only the challenger/i,
+    )
+
+    await actAs('authenticated', A)
+    const cancelled = await db.query(
+      `select public.cancel_friendly_challenge('${matchId}') as result`,
+    )
+    assert(cancelled.rows[0].result.status === 'cancelled', 'the challenger withdraws')
+
+    // A declined invitation also frees the pair.
+    const second = await db.query(
+      `select public.create_friendly_challenge('${rivalId}', null) as result`,
+    )
+    const secondId = second.rows[0].result.id
+    await actAs('authenticated', rivalProfile)
+    const declined = await db.query(
+      `select public.respond_friendly_challenge('${secondId}', false) as result`,
+    )
+    assert(declined.rows[0].result.status === 'declined', 'the challenged player declines')
+    assert(
+      (await db.query(`select id from public.friendly_matches where status = 'declined'`)).rows
+        .length === 1,
+      'a declined challenge keeps its row',
+    )
+  })
+})
+
+await test('N10: only the winner submits and only the loser approves, without moving SP', async () => {
+  await inTransaction(async () => {
+    await actAs('postgres')
+    const baseline = await db.query(`
+      select
+        (select count(*)::int from public.sp_transactions) as transactions,
+        (select count(*)::int from public.sp_accounts) as accounts
+    `)
+    await db.query(`update public.players set profile_id = '${D}' where id = '${P4}'`)
+    const rivalId = P4
+    const rivalProfile = D
+
+    await actAs('authenticated', A)
+    const created = await db.query(
+      `select public.create_friendly_challenge('${rivalId}', null) as result`,
+    )
+    const matchId = created.rows[0].result.id
+    await actAs('authenticated', rivalProfile)
+    await db.query(`select public.respond_friendly_challenge('${matchId}', true)`)
+
+    await actAs('authenticated', A)
+    await expectQueryError(
+      `select public.submit_friendly_result('${matchId}', '${rivalId}')`,
+      /only the winner/i,
+    )
+    const submitted = await db.query(
+      `select public.submit_friendly_result('${matchId}', '${P1}') as result`,
+    )
+    assert(submitted.rows[0].result.status === 'awaiting_approval', 'the winner submits')
+
+    await expectQueryError(
+      `select public.approve_friendly_result('${matchId}')`,
+      /winner cannot approve/i,
+    )
+    await expectQueryError(
+      `select public.submit_friendly_result('${matchId}', '${P1}')`,
+      /only an accepted challenge/i,
+    )
+
+    await actAs('authenticated', rivalProfile)
+    const confirmed = await db.query(`select public.approve_friendly_result('${matchId}') as result`)
+    assert(confirmed.rows[0].result.status === 'confirmed', 'the loser confirms')
+    await expectQueryError(
+      `select public.approve_friendly_result('${matchId}')`,
+      /no longer awaiting approval/i,
+    )
+
+    await actAs('postgres')
+    const stored = await db.query(
+      `select status, confirmed_at from public.friendly_matches where id = '${matchId}'`,
+    )
+    assert(stored.rows[0].status === 'confirmed', 'the confirmation is stored')
+    assert(stored.rows[0].confirmed_at !== null, 'confirmation records a server time')
+
+    const after = await db.query(`
+      select
+        (select count(*)::int from public.sp_transactions) as transactions,
+        (select count(*)::int from public.sp_accounts) as accounts
+    `)
+    assert(
+      after.rows[0].transactions === baseline.rows[0].transactions,
+      'a confirmed friendly must not write an SP transaction',
+    )
+    assert(
+      after.rows[0].accounts === baseline.rows[0].accounts,
+      'a confirmed friendly must not create an SP account',
+    )
+  })
+})
+
+await test('N10: the loser disputes with a reason and the result is not confirmed', async () => {
+  await inTransaction(async () => {
+    await actAs('postgres')
+    await db.query(`update public.players set profile_id = '${D}' where id = '${P4}'`)
+    const rivalId = P4
+    const rivalProfile = D
+
+    await actAs('authenticated', A)
+    const created = await db.query(
+      `select public.create_friendly_challenge('${rivalId}', null) as result`,
+    )
+    const matchId = created.rows[0].result.id
+    await actAs('authenticated', rivalProfile)
+    await db.query(`select public.respond_friendly_challenge('${matchId}', true)`)
+    await actAs('authenticated', A)
+    await db.query(`select public.submit_friendly_result('${matchId}', '${P1}')`)
+
+    await actAs('authenticated', rivalProfile)
+    await expectQueryError(
+      `select public.dispute_friendly_result('${matchId}', 'no')`,
+      /between 5 and 500/i,
+    )
+
+    const disputed = await db.query(
+      `select public.dispute_friendly_result('${matchId}', 'The score was recorded wrong') as result`,
+    )
+    assert(disputed.rows[0].result.status === 'disputed', 'the loser disputes')
+
+    const state = await db.query(
+      `select status, dispute_reason, confirmed_at from public.friendly_matches where id = '${matchId}'`,
+    )
+    assert(state.rows[0].confirmed_at === null, 'a disputed result is never confirmed')
+    assert(
+      state.rows[0].dispute_reason === 'The score was recorded wrong',
+      'the reason is kept for review',
+    )
+
+    await actAs('authenticated', A)
+    await expectQueryError(
+      `select public.approve_friendly_result('${matchId}')`,
+      /no longer awaiting approval/i,
+    )
+  })
+})
+
+await test('N10: auto-approval waits for the 24-hour deadline and is idempotent', async () => {
+  await inTransaction(async () => {
+    await actAs('postgres')
+    await db.query(`update public.players set profile_id = '${D}' where id = '${P4}'`)
+    const rivalId = P4
+    const rivalProfile = D
+
+    await actAs('authenticated', A)
+    const created = await db.query(
+      `select public.create_friendly_challenge('${rivalId}', null) as result`,
+    )
+    const matchId = created.rows[0].result.id
+    await actAs('authenticated', rivalProfile)
+    await db.query(`select public.respond_friendly_challenge('${matchId}', true)`)
+    await actAs('authenticated', A)
+    await db.query(`select public.submit_friendly_result('${matchId}', '${P1}')`)
+
+    await actAs('postgres')
+    // Clear the JWT claim: the cron session has no user, so the job runs.
+    await db.exec(`set local request.jwt.claim.sub = ''`)
+    const early = await db.query(`select public.auto_approve_friendly_matches() as result`)
+    assert(early.rows[0].result === 0, 'nothing is approved before the 24-hour deadline')
+
+    const due = await db.query(
+      `select auto_approval_due_at > now() + interval '23 hours' as not_due
+         from public.friendly_matches where id = '${matchId}'`,
+    )
+    assert(due.rows[0].not_due === true, 'the deadline is roughly 24 hours away')
+
+    await db.query(
+      `update public.friendly_matches
+          set auto_approval_due_at = now() - interval '1 minute'
+        where id = '${matchId}'`,
+    )
+
+    const approved = await db.query(`select public.auto_approve_friendly_matches() as result`)
+    assert(approved.rows[0].result === 1, 'the overdue result is approved once')
+
+    const replay = await db.query(`select public.auto_approve_friendly_matches() as result`)
+    assert(replay.rows[0].result === 0, 'replaying the job approves nothing twice')
+
+    const stored = await db.query(
+      `select status, confirmed_at from public.friendly_matches where id = '${matchId}'`,
+    )
+    assert(stored.rows[0].status === 'auto_approved', 'the match is auto-approved')
+    assert(stored.rows[0].confirmed_at !== null, 'auto-approval stamps a server time')
+
+    const audit = await db.query(
+      `select count(*)::int as total from public.audit_logs
+        where action = 'friendly.result.auto_approved' and target_id = '${matchId}'`,
+    )
+    assert(audit.rows[0].total === 1, 'the automatic approval is audited')
+
+    await actAs('authenticated', A)
+    await expectQueryError(
+      `select public.auto_approve_friendly_matches()`,
+      /not authorized/i,
+    )
+  })
+})
+
+await test('N10: only participants and Super Admins read a friendly match', async () => {
+  await inTransaction(async () => {
+    await actAs('postgres')
+    await db.query(`update public.players set profile_id = '${D}' where id = '${P4}'`)
+    const rivalId = P4
+    const rivalProfile = D
+
+    await actAs('authenticated', A)
+    await db.query(`select public.create_friendly_challenge('${rivalId}', null)`)
+
+    await actAs('authenticated', A)
+    assert((await db.query(`select id from public.friendly_matches`)).rows.length === 1, 'challenger sees it')
+
+    await actAs('authenticated', rivalProfile)
+    assert((await db.query(`select id from public.friendly_matches`)).rows.length === 1, 'opponent sees it')
+
+    await actAs('authenticated', B)
+    const outsider = await db.query(`select id from public.friendly_matches`)
+    assert(
+      outsider.rows.length === 0,
+      `an unrelated member sees no friendly matches (saw ${outsider.rows.length})`,
+    )
+
+    await actAs('authenticated', C)
+    const admin = await db.query(`select id from public.friendly_matches`)
+    assert(admin.rows.length === 1, 'a Super Admin can review club matches')
+  })
+})
+
+await test('N10: anon cannot read friendly matches or call their RPCs', async () => {
+  await expectError(
+    'anon friendly matches',
+    () => asRole('anon', `select id from public.friendly_matches`),
+    /permission denied/i,
+  )
+  await expectError(
+    'anon challenge',
+    () => asRole('anon', `select public.create_friendly_challenge('${P1}', null)`),
     /permission denied/i,
   )
 })

@@ -31,16 +31,18 @@ backend/
 16. `policies/008_club_activities.sql`
 17. `migrations/009_jersey_images.sql`
 18. `policies/009_jersey_images.sql`
+19. `migrations/010_friendly_matches.sql`
+20. `policies/010_friendly_matches.sql`
 
 The migrations are **not** idempotent: re-running one fails at the first
 `CREATE`, by design. Never add `IF NOT EXISTS` or `DROP` to a migration.
 
 ### Applying to the hosted Supabase project
 
-Open **Supabase Dashboard → SQL Editor** and run the eighteen files above, in
+Open **Supabase Dashboard → SQL Editor** and run the twenty files above, in
 order, as the project owner. No dashboard schema edits are required, and no
 service-role key or database password is involved. Confirm afterwards that
-`public` contains twenty-nine tables and every one has RLS enabled, that the six
+`public` contains thirty tables and every one has RLS enabled, that the six
 auth-lifecycle functions from step 6 exist, that the three player-directory
 functions from step 8 (`set_profile_roles`, `link_player_account`,
 `unlink_player_account`) exist, that the tournament functions from step 9
@@ -58,7 +60,12 @@ activity functions from step 15 (`create_jersey_project`,
 `set_announcement_status`) exist (step 17 adds `set_jersey_design_image`), and
 that the `jersey-designs` bucket exists as public with a 5 MB limit. Storage
 policies are applied by step 18 and are skipped when the `storage` schema is
-absent, which is how the local harness runs.
+absent, which is how the local harness runs. Step 19 adds the friendly match
+functions (`create_friendly_challenge`, `respond_friendly_challenge`,
+`cancel_friendly_challenge`, `submit_friendly_result`,
+`approve_friendly_result`, `dispute_friendly_result`,
+`auto_approve_friendly_matches`) and, where pg_cron is installed, schedules the
+15-minute auto-approval job.
 
 **Status:** all twelve files are applied to the hosted `mbc-arena` project.
 Files 1–5 went in on 2026-10-30 and files 6–8 on 2026-10-31; files 9–12
@@ -73,9 +80,9 @@ and that `profiles_insert_self_pending` is gone. A signed-in demo Super Admin
 reads `provisional-2026-11` (provisional, disabled) and gets
 `{checked: 7, consistent: true}` from reconciliation. The Phase 3 walkthrough,
 the Gate G replay, and the owner's Super Admin bootstrap are complete. Files
-13–18 (Phase 6 training and payments; Phase 7 jerseys, polls, announcements,
-and design images) are verified locally only; apply them to the hosted project
-before using those screens. Remaining work is product scope (§7 rules and the
+13–20 (Phase 6 training and payments; Phase 7 jerseys, polls, announcements,
+and design images; Phase 5 friendly matches) are verified locally only; apply
+them to the hosted project before using those screens. Remaining work is product scope (§7 rules and the
 next phase), not hosted setup. The repository
 intentionally stores no credentials that would let an agent apply migrations
 automatically.
@@ -206,7 +213,15 @@ and all seven policy files, and asserts (124 checks):
   it refuses URLs, path traversal, and non-image extensions, a null path clears
   the mockup, the column constraint rejects any path outside `designs/`, and
   `anon` cannot execute the RPC. The bucket and its storage policies are
-  skipped locally because PGlite has no `storage` schema.
+  skipped locally because PGlite has no `storage` schema;
+- friendly matches (Phase 5): only two active, linked players can be paired,
+  the pair holds one open match at a time, only the challenged player responds,
+  only the challenger cancels before a result, only the winner submits their own
+  win, only the loser approves or disputes, a dispute needs a reason, neither
+  player can act on a settled match, auto-approval waits for the stored 24-hour
+  deadline and is idempotent, a confirmed or auto-approved result writes no SP
+  row, participants and Super Admins see a match while an unrelated member sees
+  none, and `anon` is denied.
 
 PGlite is a development dependency only; it is not shipped to the frontend.
 
@@ -220,20 +235,22 @@ supabase gen types typescript --project-id <project-ref> --schema public \
   > ../frontend/src/types/database.ts
 ```
 
-The committed `frontend/src/types/database.ts` covers migrations 001–009: the
+The committed `frontend/src/types/database.ts` covers migrations 001–010: the
 `players` table and its profile relationship, the four auth-lifecycle RPCs, the
 three Group K RPCs (`set_profile_roles`, `link_player_account`,
 `unlink_player_account`), the tournament tables and RPCs, the
 `sp_rule_versions` table plus `reconcile_sp_balances()`, the four training
 tables plus their six RPCs, the eight club activity tables plus their twelve
-RPCs, and `jersey_designs.image_path` plus `set_jersey_design_image(uuid,text)`.
-The Supabase CLI was unavailable in the development environment, so those
+RPCs, `jersey_designs.image_path` plus `set_jersey_design_image(uuid,text)`, and
+the `friendly_matches` table plus its seven RPCs. The Supabase CLI was
+unavailable in the development environment, so those
 signatures were checked against `migrations/004_players.sql`,
 `migrations/005_tournaments.sql`, `migrations/006_shuttlepower_rules.sql`,
-`migrations/007_training.sql`, `migrations/008_club_activities.sql`, and
-`migrations/009_jersey_images.sql` and added to the committed file; application
-builds treat it as authoritative. Regenerate it against the hosted project after
-step 18 and after every later migration. Never edit regenerated output by hand.
+`migrations/007_training.sql`, `migrations/008_club_activities.sql`,
+`migrations/009_jersey_images.sql`, and `migrations/010_friendly_matches.sql` and
+added to the committed file; application builds treat it as authoritative.
+Regenerate it against the hosted project after step 20 and after every later
+migration. Never edit regenerated output by hand.
 
 ## Security notes
 

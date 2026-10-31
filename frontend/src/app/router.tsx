@@ -7,6 +7,7 @@ import { AppShell } from '@/app/layouts/app-shell'
 import { APP_MODULES } from '@/app/navigation'
 import { AdminPage } from '@/app/pages/admin-page'
 import { AnnouncementsPage } from '@/app/pages/announcements-page'
+import { FriendlyMatchesPage } from '@/app/pages/friendly-matches-page'
 import { ModulePage } from '@/app/pages/module-page'
 import { NotFoundPage } from '@/app/pages/not-found-page'
 import { OverviewPage } from '@/app/pages/overview-page'
@@ -43,6 +44,8 @@ const moduleRoutes = APP_MODULES.filter((module) => module.path !== '/').map((mo
         <TournamentsPage />
       ) : module.path === '/shuttlepower' ? (
         <ShuttlepowerPage />
+      ) : module.path === '/matches' ? (
+        <FriendlyMatchesPage />
       ) : module.path === '/training' ? (
         <TrainingPage />
       ) : module.path === '/payments' ? (

@@ -71,7 +71,6 @@ export const APP_MODULES: readonly AppModule[] = [
     shortLabel: 'Matches',
     icon: Swords,
     description: 'Challenges, score submission, and the 24-hour approval window.',
-    phase: 'Phase 5',
     group: 'main',
   },
   {

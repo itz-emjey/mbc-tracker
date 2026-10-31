@@ -88,6 +88,8 @@ backend/migrations/008_club_activities.sql
 backend/policies/008_club_activities.sql
 backend/migrations/009_jersey_images.sql
 backend/policies/009_jersey_images.sql
+backend/migrations/010_friendly_matches.sql
+backend/policies/010_friendly_matches.sql
 ```
 
 The migrations are **not** idempotent: re-running one fails at the first `CREATE` by design. There
@@ -212,6 +214,13 @@ update their own order before the deadline. Migration 009 adds design mockups: t
 `jersey-designs` bucket (created by the migration), and only training staff may upload, replace, or delete an
 object. Migrations 008–009 and their screens are verified locally only; the bucket is created when the file is
 applied to the hosted project, since the local harness has no storage schema.
+
+Phase 5 adds friendly matches: singles challenges between two active players with linked accounts, the
+winner submits the result, and the losing side confirms or disputes it within 24 hours (a scheduled job
+auto-approves after that). A disputed result stays disputed — no resolution process is invented while the
+club rule is open. **No ShuttlePower moves:** the win/loss formula is still unapproved, so a confirmed
+friendly records the match only. Migration 010 is verified locally and still needs applying to the hosted
+project.
 
 Phase 4 is scaffolded, not activated. Migration 006 adds versioned SP rule configuration with a single
 provisional, **disabled** default and a reconciliation function; the pure engine in `domain/sp.ts` refuses

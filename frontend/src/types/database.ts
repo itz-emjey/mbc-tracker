@@ -779,6 +779,88 @@ export type Database = {
         }
         Relationships: []
       }
+      friendly_matches: {
+        Row: {
+          auto_approval_due_at: string | null
+          challenger_id: string
+          confirmed_at: string | null
+          created_at: string
+          created_by: string | null
+          dispute_reason: string | null
+          disputed_at: string | null
+          id: string
+          note: string | null
+          opponent_id: string
+          responded_at: string | null
+          responded_by: string | null
+          status: string
+          submitted_at: string | null
+          submitted_by: string | null
+          updated_at: string
+          winner_id: string | null
+        }
+        Insert: {
+          auto_approval_due_at?: string | null
+          challenger_id: string
+          confirmed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          dispute_reason?: string | null
+          disputed_at?: string | null
+          id?: string
+          note?: string | null
+          opponent_id: string
+          responded_at?: string | null
+          responded_by?: string | null
+          status?: string
+          submitted_at?: string | null
+          submitted_by?: string | null
+          updated_at?: string
+          winner_id?: string | null
+        }
+        Update: {
+          auto_approval_due_at?: string | null
+          challenger_id?: string
+          confirmed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          dispute_reason?: string | null
+          disputed_at?: string | null
+          id?: string
+          note?: string | null
+          opponent_id?: string
+          responded_at?: string | null
+          responded_by?: string | null
+          status?: string
+          submitted_at?: string | null
+          submitted_by?: string | null
+          updated_at?: string
+          winner_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'friendly_matches_challenger_id_fkey'
+            columns: ['challenger_id']
+            isOneToOne: false
+            referencedRelation: 'players'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'friendly_matches_opponent_id_fkey'
+            columns: ['opponent_id']
+            isOneToOne: false
+            referencedRelation: 'players'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'friendly_matches_winner_id_fkey'
+            columns: ['winner_id']
+            isOneToOne: false
+            referencedRelation: 'players'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       jersey_designs: {
         Row: {
           created_at: string
@@ -1487,6 +1569,28 @@ export type Database = {
         Returns: Json
       }
       poll_results: { Args: { p_poll_id: string }; Returns: Json }
+      approve_friendly_result: { Args: { p_match_id: string }; Returns: Json }
+      auto_approve_friendly_matches: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
+      cancel_friendly_challenge: { Args: { p_match_id: string }; Returns: Json }
+      create_friendly_challenge: {
+        Args: { p_note?: string | null; p_opponent_id: string }
+        Returns: Json
+      }
+      dispute_friendly_result: {
+        Args: { p_match_id: string; p_reason: string }
+        Returns: Json
+      }
+      respond_friendly_challenge: {
+        Args: { p_accept: boolean; p_match_id: string }
+        Returns: Json
+      }
+      submit_friendly_result: {
+        Args: { p_match_id: string; p_winner_id: string }
+        Returns: Json
+      }
       set_jersey_design_image: {
         Args: { p_design_id: string; p_image_path: string | null }
         Returns: Json
