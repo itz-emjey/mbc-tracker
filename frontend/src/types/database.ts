@@ -418,6 +418,54 @@ export type Database = {
           },
         ]
       }
+      sp_rule_versions: {
+        Row: {
+          config: Json
+          created_at: string
+          created_by: string | null
+          effective_from: string | null
+          id: string
+          is_enabled: boolean
+          notes: string | null
+          status: string
+          updated_at: string
+          version: string
+        }
+        ComputedFields: never
+        Insert: {
+          config: Json
+          created_at?: string
+          created_by?: string | null
+          effective_from?: string | null
+          id?: string
+          is_enabled?: boolean
+          notes?: string | null
+          status?: string
+          updated_at?: string
+          version: string
+        }
+        Update: {
+          config?: Json
+          created_at?: string
+          created_by?: string | null
+          effective_from?: string | null
+          id?: string
+          is_enabled?: boolean
+          notes?: string | null
+          status?: string
+          updated_at?: string
+          version?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'sp_rule_versions_created_by_fkey'
+            columns: ['created_by']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       sp_transactions: {
         Row: {
           created_at: string
@@ -800,6 +848,10 @@ export type Database = {
       }
       record_match_result: {
         Args: { p_games: Json; p_match_id: string }
+        Returns: Json
+      }
+      reconcile_sp_balances: {
+        Args: Record<string, never>
         Returns: Json
       }
       register_tournament_entry: {

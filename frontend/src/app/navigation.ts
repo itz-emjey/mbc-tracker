@@ -63,7 +63,6 @@ export const APP_MODULES: readonly AppModule[] = [
     shortLabel: 'SP',
     icon: Zap,
     description: 'Seasonal leaderboard, personal SP history, and rule versions.',
-    phase: 'Phase 4',
     group: 'main',
   },
   {

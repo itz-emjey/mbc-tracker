@@ -23,11 +23,13 @@ const [
   authMigration,
   playerMigration,
   tournamentMigration,
+  spRuleMigration,
   identityPolicies,
   operationPolicies,
   spPolicies,
   authPolicies,
   tournamentPolicies,
+  spRulePolicies,
   seed,
   bootstrap,
 ] = await Promise.all([
@@ -36,11 +38,13 @@ const [
   readFile(join(backendDir, 'migrations', '003_auth_lifecycle.sql'), 'utf8'),
   readFile(join(backendDir, 'migrations', '004_players.sql'), 'utf8'),
   readFile(join(backendDir, 'migrations', '005_tournaments.sql'), 'utf8'),
+  readFile(join(backendDir, 'migrations', '006_shuttlepower_rules.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '001_identity.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '002_operations.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '003_shuttlepower.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '004_auth_lifecycle.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '005_tournaments.sql'), 'utf8'),
+  readFile(join(backendDir, 'policies', '006_shuttlepower_rules.sql'), 'utf8'),
   readFile(join(backendDir, 'seeds', '001_fictional_players.sql'), 'utf8'),
   readFile(join(backendDir, 'seeds', 'bootstrap_super_admin.sql'), 'utf8'),
 ])
@@ -74,6 +78,7 @@ const tables = [
   'audit_logs',
   'app_settings',
   'sp_accounts',
+  'sp_rule_versions',
   'sp_transactions',
   'tournaments',
   'tournament_events',
@@ -332,11 +337,13 @@ await db.exec(spMigration)
 await db.exec(authMigration)
 await db.exec(playerMigration)
 await db.exec(tournamentMigration)
+await db.exec(spRuleMigration)
 await db.exec(identityPolicies)
 await db.exec(operationPolicies)
 await db.exec(spPolicies)
 await db.exec(authPolicies)
 await db.exec(tournamentPolicies)
+await db.exec(spRulePolicies)
 
 // ---------------------------------------------------------------------------
 // Schema and catalogue
@@ -2642,6 +2649,159 @@ await test('N5: anon cannot execute any tournament RPC', async () => {
         'anon',
         `select public.save_tournament_draw('00000000-0000-4000-8000-000000000000', '[]'::jsonb)`,
       ),
+    /permission denied/i,
+  )
+})
+
+// ---------------------------------------------------------------------------
+// ShuttlePower rules and reconciliation (Phase 4)
+// ---------------------------------------------------------------------------
+await test('N6: SP ships one provisional rule version and it is disabled', async () => {
+  const { rows } = await db.query(
+    `select version, status, is_enabled, config from public.sp_rule_versions`,
+  )
+
+  assert(rows.length === 1, `expected exactly one rule version, got ${rows.length}`)
+
+  const rule = rows[0]
+
+  assert(rule.status === 'provisional', `expected a provisional rule, got ${rule.status}`)
+  assert(rule.is_enabled === false, 'the provisional rule must ship disabled')
+
+  for (const key of [
+    'baseChange',
+    'strengthSensitivity',
+    'minGainPerMatch',
+    'maxGainPerMatch',
+    'minLossPerMatch',
+    'maxLossPerMatch',
+    'tournamentMultiplier',
+    'rounding',
+    'doublesSplit',
+  ]) {
+    assert(key in rule.config, `the config is missing ${key}`)
+  }
+
+  assert(
+    rule.config.tournamentMultiplier === 2,
+    'the approved tournament multiplier must stay 2',
+  )
+})
+
+await test('N6: an unapproved rule version cannot be enabled', async () => {
+  await inTransaction(async () => {
+    await expectQueryError(
+      `update public.sp_rule_versions set is_enabled = true`,
+      /sp_rule_versions_enabled_check/i,
+    )
+  })
+})
+
+await test('N6: only one rule version can be enabled at a time', async () => {
+  await inTransaction(async () => {
+    await db.query(
+      `update public.sp_rule_versions set status = 'approved', is_enabled = true`,
+    )
+
+    await expectQueryError(
+      `insert into public.sp_rule_versions (version, status, config, is_enabled)
+       values ('second-enabled', 'approved', '{}'::jsonb, true)`,
+      /sp_rule_versions_one_enabled_key|duplicate key/i,
+    )
+  })
+})
+
+await test('N6: clients read rule versions but cannot write them', async () => {
+  const { rows } = await db.query(`
+    select
+      has_table_privilege('authenticated', 'public.sp_rule_versions', 'SELECT') as can_select,
+      has_table_privilege('authenticated', 'public.sp_rule_versions', 'INSERT') as can_insert,
+      has_table_privilege('authenticated', 'public.sp_rule_versions', 'UPDATE') as can_update,
+      has_table_privilege('authenticated', 'public.sp_rule_versions', 'DELETE') as can_delete,
+      has_table_privilege('anon', 'public.sp_rule_versions', 'SELECT') as anon_select
+  `)
+
+  const row = rows[0]
+
+  assert(row.can_select === true, 'club members should read rule versions')
+  assert(row.can_insert === false, 'clients must not insert rule versions')
+  assert(row.can_update === false, 'clients must not update rule versions')
+  assert(row.can_delete === false, 'clients must not delete rule versions')
+  assert(row.anon_select === false, 'anon must not read rule versions')
+
+  const member = await asUser(A, `select id from public.sp_rule_versions`)
+  const pending = await asUser(B, `select id from public.sp_rule_versions`)
+
+  assert(member.rows.length === 1, `a player should read the rule, got ${member.rows.length}`)
+  assert(pending.rows.length === 0, `a pending account should read 0 rules, got ${pending.rows.length}`)
+
+  await expectError(
+    'anon rule select',
+    () => asRole('anon', `select id from public.sp_rule_versions`),
+    /permission denied/i,
+  )
+})
+
+await test('N6: reconciliation confirms the seeded ledger', async () => {
+  const { rows } = await asUser(C, `select public.reconcile_sp_balances() as result`)
+  const result = rows[0].result
+
+  assert(
+    result.consistent === true,
+    `expected a consistent ledger, got ${JSON.stringify(result.mismatches)}`,
+  )
+  assert(result.checked >= 1, `expected at least one account to be checked, got ${result.checked}`)
+})
+
+await test('N7: reconciliation reports a drifted balance without repairing it', async () => {
+  await inTransaction(async () => {
+    const { rows } = await db.query(
+      `select player_id, current_sp from public.sp_accounts order by player_id limit 1`,
+    )
+    const playerId = rows[0].player_id
+    const cachedSp = rows[0].current_sp
+
+    await db.query(
+      `update public.sp_accounts set current_sp = ${cachedSp} + 25 where player_id = '${playerId}'`,
+    )
+
+    await actAs('authenticated', C)
+    const report = await db.query(`select public.reconcile_sp_balances() as result`)
+    const result = report.rows[0].result
+
+    assert(result.consistent === false, 'drift must be reported')
+    assert(
+      result.mismatches.length === 1,
+      `expected 1 mismatch, got ${result.mismatches.length}`,
+    )
+    assert(result.mismatches[0].player_id === playerId, 'the mismatch must name the drifted player')
+    assert(
+      Number(result.mismatches[0].cached_sp) === cachedSp + 25,
+      'the report should carry the cached value',
+    )
+    assert(
+      Number(result.mismatches[0].ledger_sp) === cachedSp,
+      'the report should carry the ledger sum',
+    )
+
+    await db.exec('reset role')
+    const after = await db.query(
+      `select current_sp from public.sp_accounts where player_id = '${playerId}'`,
+    )
+
+    assert(
+      after.rows[0].current_sp === cachedSp + 25,
+      'reconciliation must never repair a balance',
+    )
+  })
+})
+
+await test('N7: reconciliation is super admin only and anon cannot call it', async () => {
+  await expectErrorAs(A, `select public.reconcile_sp_balances()`, /not authorized/i)
+
+  await expectError(
+    'anon reconcile',
+    () => asRole('anon', `select public.reconcile_sp_balances()`),
     /permission denied/i,
   )
 })

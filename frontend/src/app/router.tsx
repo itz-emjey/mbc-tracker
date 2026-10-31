@@ -13,6 +13,7 @@ import { PendingPage } from '@/app/pages/pending-page'
 import { PlayerProfilePage } from '@/app/pages/player-profile-page'
 import { PlayersPage } from '@/app/pages/players-page'
 import { RegisterPage } from '@/app/pages/register-page'
+import { ShuttlepowerPage } from '@/app/pages/shuttlepower-page'
 import { SignInPage } from '@/app/pages/sign-in-page'
 import { TournamentDetailPage } from '@/app/pages/tournament-detail-page'
 import { TournamentsPage } from '@/app/pages/tournaments-page'
@@ -35,6 +36,8 @@ const moduleRoutes = APP_MODULES.filter((module) => module.path !== '/').map((mo
         <PlayersPage />
       ) : module.path === '/tournaments' ? (
         <TournamentsPage />
+      ) : module.path === '/shuttlepower' ? (
+        <ShuttlepowerPage />
       ) : (
         <ModulePage module={module} />
       )}

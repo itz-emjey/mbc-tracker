@@ -5,8 +5,11 @@ Club management and badminton competition platform for **Matag-ob Badminton Club
 Phase 1 delivers the foundation: real Supabase authentication, pending → approved registration,
 multi-role accounts, the one-time 1,000 ShuttlePower (SP) award, and an admin screen for approvals
 and access changes. Phase 2 adds the club directory: searchable players, staff-managed records,
-player profiles, account linking, and role editing. Product requirements live in `AGENT.md`; the
-approved plan and current status live in `PLAN.md`.
+player profiles, account linking, and role editing. Phase 3 adds the tournament console: events,
+entries, draws, brackets, and official results. Phase 4 scaffolds ShuttlePower: versioned rule
+configuration, the leaderboard, and personal SP history — with match awards deliberately disabled
+until the club approves the formula. Product requirements live in `AGENT.md`; the approved plan and
+current status live in `PLAN.md`.
 
 ## Stack
 
@@ -75,6 +78,10 @@ backend/policies/003_shuttlepower.sql
 backend/migrations/003_auth_lifecycle.sql
 backend/policies/004_auth_lifecycle.sql
 backend/migrations/004_players.sql
+backend/migrations/005_tournaments.sql
+backend/policies/005_tournaments.sql
+backend/migrations/006_shuttlepower_rules.sql
+backend/policies/006_shuttlepower_rules.sql
 ```
 
 The migrations are **not** idempotent: re-running one fails at the first `CREATE` by design. There
@@ -143,22 +150,25 @@ npm --prefix frontend run dev
 Open the printed URL (Vite defaults to `http://localhost:5173`), sign in, and Super Admins land on
 `/admin` for approvals and access changes. Every approved member can open **Players** for the club
 directory, and the account menu's **My profile** opens the signed-in member's linked player record.
+Tournament staff get **Tournaments** to run events and results. **ShuttlePower** shows the current-SP
+leaderboard, your own ledger history, and the provisional-rule notice; a Super Admin also gets a
+balance check that compares every cached balance with its ledger sum.
 
 ## Tests and checks
 
 ```bash
-npm run test:db                       # 109 SQL checks on real Postgres (PGlite), no Docker
-npm --prefix frontend test            # 110 frontend unit tests (Vitest)
+npm run test:db                       # 116 SQL checks on real Postgres (PGlite), no Docker
+npm --prefix frontend test            # 131 frontend unit tests (Vitest)
 npm --prefix frontend run typecheck
 npm --prefix frontend run lint
 npm --prefix frontend run build
 ```
 
-`npm run test:db` applies all five migrations and all five policy files to a real PostgreSQL engine,
+`npm run test:db` applies all six migrations and all six policy files to a real PostgreSQL engine,
 stubs Supabase Auth (`auth.users`, `auth.uid()`), and covers schema, RLS, column privileges,
 ownership/privacy negatives, approval idempotency, starting SP, player role/link RPCs, tournament
-visibility, D10 entry rules, draw validation, result advancement, correction order, and the development
-seed and bootstrap scripts.
+visibility, D10 entry rules, draw validation, result advancement, correction order, the SP rule-version
+guardrails, balance reconciliation, and the development seed and bootstrap scripts.
 
 ## Security notes
 
@@ -179,5 +189,12 @@ tournament tables, RLS, audited entry/draw/result RPCs, and typed client definit
 applied and its three RPCs are verified (anon is denied); migration 005 is verified locally and still
 needs applying to the hosted project, so the tournament screens exist but have no hosted data to read
 until it is. The Phase 3 staff UI is built: `/tournaments` lists and creates tournaments, `/tournaments/:id`
-shows events, entries, draws, brackets, round-robin standings, and result entry/correction. Remaining hosted
-steps and open product decisions (SP formulas and seasons) are tracked in `PLAN.md` §9 and §7.
+shows events, entries, draws, brackets, round-robin standings, and result entry/correction.
+
+Phase 4 is scaffolded, not activated. Migration 006 adds versioned SP rule configuration with a single
+provisional, **disabled** default and a reconciliation function; the pure engine in `domain/sp.ts` refuses
+to calculate while the rule is unapproved, uses the already-approved 2× tournament impact and team-average
+doubles basis, and keeps the curve, caps, floor, rounding, and split in config. `/shuttlepower` shows the
+leaderboard, your own ledger history, and the provisional-rule notice, so no screen pretends an unapproved
+formula is live. Seasonal ranking and the award workflow wait on the open rules in `PLAN.md` §7. Remaining
+hosted steps and open product decisions (SP formulas and seasons) are tracked in `PLAN.md` §9 and §7.
