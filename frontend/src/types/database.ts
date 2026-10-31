@@ -530,6 +530,221 @@ export type Database = {
           },
         ]
       }
+      training_attendance: {
+        Row: {
+          player_id: string
+          recorded_at: string
+          recorded_by: string | null
+          session_id: string
+          status: string
+        }
+        ComputedFields: never
+        Insert: {
+          player_id: string
+          recorded_at?: string
+          recorded_by?: string | null
+          session_id: string
+          status?: string
+        }
+        Update: {
+          player_id?: string
+          recorded_at?: string
+          recorded_by?: string | null
+          session_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'training_attendance_player_id_fkey'
+            columns: ['player_id']
+            isOneToOne: false
+            referencedRelation: 'players'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'training_attendance_recorded_by_fkey'
+            columns: ['recorded_by']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'training_attendance_session_id_fkey'
+            columns: ['session_id']
+            isOneToOne: false
+            referencedRelation: 'training_sessions'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      training_fee_periods: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string | null
+          due_on: string | null
+          ends_on: string
+          id: string
+          label: string
+          starts_on: string
+          updated_at: string
+        }
+        ComputedFields: never
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by?: string | null
+          due_on?: string | null
+          ends_on: string
+          id?: string
+          label: string
+          starts_on: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          due_on?: string | null
+          ends_on?: string
+          id?: string
+          label?: string
+          starts_on?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'training_fee_periods_created_by_fkey'
+            columns: ['created_by']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      training_payments: {
+        Row: {
+          amount: number
+          created_at: string
+          fee_period_id: string
+          id: string
+          method: string
+          paid_on: string
+          player_id: string
+          recorded_by: string | null
+          status: string
+          void_reason: string | null
+          voided_at: string | null
+          voided_by: string | null
+        }
+        ComputedFields: never
+        Insert: {
+          amount: number
+          created_at?: string
+          fee_period_id: string
+          id?: string
+          method?: string
+          paid_on?: string
+          player_id: string
+          recorded_by?: string | null
+          status?: string
+          void_reason?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          fee_period_id?: string
+          id?: string
+          method?: string
+          paid_on?: string
+          player_id?: string
+          recorded_by?: string | null
+          status?: string
+          void_reason?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'training_payments_fee_period_id_fkey'
+            columns: ['fee_period_id']
+            isOneToOne: false
+            referencedRelation: 'training_fee_periods'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'training_payments_player_id_fkey'
+            columns: ['player_id']
+            isOneToOne: false
+            referencedRelation: 'players'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'training_payments_recorded_by_fkey'
+            columns: ['recorded_by']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'training_payments_voided_by_fkey'
+            columns: ['voided_by']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      training_sessions: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          ends_at: string
+          id: string
+          notes: string | null
+          starts_at: string
+          status: string
+          title: string
+          updated_at: string
+          venue: string | null
+        }
+        ComputedFields: never
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          ends_at: string
+          id?: string
+          notes?: string | null
+          starts_at: string
+          status?: string
+          title: string
+          updated_at?: string
+          venue?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          ends_at?: string
+          id?: string
+          notes?: string | null
+          starts_at?: string
+          status?: string
+          title?: string
+          updated_at?: string
+          venue?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'training_sessions_created_by_fkey'
+            columns: ['created_by']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       team_members: {
         Row: {
           player_id: string
@@ -883,6 +1098,48 @@ export type Database = {
       }
       withdraw_tournament_entry: {
         Args: { p_entry_id: string }
+        Returns: Json
+      }
+      create_training_session: {
+        Args: {
+          p_ends_at: string
+          p_notes?: string | null
+          p_starts_at: string
+          p_title: string
+          p_venue?: string | null
+        }
+        Returns: Json
+      }
+      set_training_session_status: {
+        Args: { p_session_id: string; p_status: string }
+        Returns: Json
+      }
+      mark_training_attendance: {
+        Args: { p_entries: Json; p_session_id: string }
+        Returns: Json
+      }
+      create_training_fee_period: {
+        Args: {
+          p_amount: number
+          p_due_on?: string | null
+          p_ends_on: string
+          p_label: string
+          p_starts_on: string
+        }
+        Returns: Json
+      }
+      record_training_payment: {
+        Args: {
+          p_amount: number
+          p_fee_period_id: string
+          p_method?: string | null
+          p_paid_on?: string | null
+          p_player_id: string
+        }
+        Returns: Json
+      }
+      void_training_payment: {
+        Args: { p_payment_id: string; p_reason: string }
         Returns: Json
       }
     }

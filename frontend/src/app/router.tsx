@@ -15,8 +15,10 @@ import { PlayersPage } from '@/app/pages/players-page'
 import { RegisterPage } from '@/app/pages/register-page'
 import { ShuttlepowerPage } from '@/app/pages/shuttlepower-page'
 import { SignInPage } from '@/app/pages/sign-in-page'
+import { PaymentsPage } from '@/app/pages/payments-page'
 import { TournamentDetailPage } from '@/app/pages/tournament-detail-page'
 import { TournamentsPage } from '@/app/pages/tournaments-page'
+import { TrainingPage } from '@/app/pages/training-page'
 import { UnauthorizedPage } from '@/app/pages/unauthorized-page'
 import { RouteError } from '@/app/states/route-error'
 import { TOURNAMENT_STAFF_ROLES } from '@/features/tournaments/types'
@@ -38,6 +40,10 @@ const moduleRoutes = APP_MODULES.filter((module) => module.path !== '/').map((mo
         <TournamentsPage />
       ) : module.path === '/shuttlepower' ? (
         <ShuttlepowerPage />
+      ) : module.path === '/training' ? (
+        <TrainingPage />
+      ) : module.path === '/payments' ? (
+        <PaymentsPage />
       ) : (
         <ModulePage module={module} />
       )}

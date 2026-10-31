@@ -22,19 +22,22 @@ describe('navigation config', () => {
       'ShuttlePower',
       'Friendly Matches',
       'Players',
+      'Training',
+      'Payments',
       'Jerseys',
       'Polls',
       'Announcements',
     ])
   })
 
-  it('hides tournament, training, payment, and admin modules from a Player', () => {
+  it('hides staff-only modules from a Player but keeps own-record views', () => {
     const labels = labelsFor(['player'])
 
     expect(labels).not.toContain('Tournaments')
-    expect(labels).not.toContain('Training')
-    expect(labels).not.toContain('Payments')
     expect(labels).not.toContain('Administration')
+    // A player must be able to see their own attendance and payment records.
+    expect(labels).toContain('Training')
+    expect(labels).toContain('Payments')
   })
 
   it('unions the permissions of a multi-role account', () => {
@@ -72,6 +75,7 @@ describe('landingPathFor', () => {
     expect(landingPathFor('/', ['player'])).toBe('/')
     expect(landingPathFor('/players', ['player'])).toBe('/players')
     expect(landingPathFor('/tournaments', ['tournament_manager'])).toBe('/tournaments')
+    expect(landingPathFor('/training', ['player'])).toBe('/training')
     expect(landingPathFor('/admin', ['super_admin'])).toBe('/admin')
   })
 
@@ -80,7 +84,6 @@ describe('landingPathFor', () => {
     // signs in, and the admin path must not be restored.
     expect(landingPathFor('/admin', ['player', 'tournament_manager'])).toBe('/')
     expect(landingPathFor('/admin/registrations', ['player'])).toBe('/')
-    expect(landingPathFor('/training', ['player'])).toBe('/')
   })
 
   it('matches nested paths and keeps query strings', () => {

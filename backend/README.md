@@ -25,23 +25,28 @@ backend/
 10. `policies/005_tournaments.sql`
 11. `migrations/006_shuttlepower_rules.sql`
 12. `policies/006_shuttlepower_rules.sql`
+13. `migrations/007_training.sql`
+14. `policies/007_training.sql`
 
 The migrations are **not** idempotent: re-running one fails at the first
 `CREATE`, by design. Never add `IF NOT EXISTS` or `DROP` to a migration.
 
 ### Applying to the hosted Supabase project
 
-Open **Supabase Dashboard → SQL Editor** and run the twelve files above, in
+Open **Supabase Dashboard → SQL Editor** and run the fourteen files above, in
 order, as the project owner. No dashboard schema edits are required, and no
 service-role key or database password is involved. Confirm afterwards that
-`public` contains seventeen tables and every one has RLS enabled, that the six
+`public` contains twenty-one tables and every one has RLS enabled, that the six
 auth-lifecycle functions from step 6 exist, that the three player-directory
 functions from step 8 (`set_profile_roles`, `link_player_account`,
 `unlink_player_account`) exist, that the tournament functions from step 9
 (`create_tournament`, `create_tournament_event`, `register_tournament_entry`,
 `save_tournament_draw`, `record_match_result`, `correct_match_result`) exist,
-and that the SP reconciliation function from step 11
-(`reconcile_sp_balances`) exists.
+that the SP reconciliation function from step 11
+(`reconcile_sp_balances`) exists, and that the training functions from step 13
+(`create_training_session`, `set_training_session_status`,
+`mark_training_attendance`, `create_training_fee_period`,
+`record_training_payment`, `void_training_payment`) exist.
 
 **Status:** all twelve files are applied to the hosted `mbc-arena` project.
 Files 1–5 went in on 2026-10-30 and files 6–8 on 2026-10-31; files 9–12
@@ -55,10 +60,12 @@ API cannot read back; the owner confirmed
 and that `profiles_insert_self_pending` is gone. A signed-in demo Super Admin
 reads `provisional-2026-11` (provisional, disabled) and gets
 `{checked: 7, consistent: true}` from reconciliation. The Phase 3 walkthrough,
-the Gate G replay, and the owner's Super Admin bootstrap are complete. Remaining
-work is product scope (§7 rules and the next phase), not hosted setup. The
-repository intentionally stores no credentials that would let an agent apply
-migrations automatically.
+the Gate G replay, and the owner's Super Admin bootstrap are complete. Files
+13–14 (Phase 6, training and payments) are verified locally only; apply them to
+the hosted project before using the training or payment screens. Remaining work
+is product scope (§7 rules and the next phase), not hosted setup. The repository
+intentionally stores no credentials that would let an agent apply migrations
+automatically.
 
 ## Seeds
 
@@ -131,10 +138,10 @@ npm run test:db
 `backend/tests/run.mjs` runs a real PostgreSQL engine compiled to WebAssembly
 (PGlite), stubs `auth.users` and `auth.uid()` with the same shape Supabase
 provides (the token, bool, and integer columns GoTrue reads are declared
-nullable so the seed's repair pass is exercised), applies all six migrations
-and all six policy files, and asserts (116 checks):
+nullable so the seed's repair pass is exercised), applies all seven migrations
+and all seven policy files, and asserts (124 checks):
 
-- all seventeen tables exist and have RLS enabled;
+- all twenty-one tables exist and have RLS enabled;
 - the migrations fail loudly on a second run;
 - `has_role()`, uniqueness, status, email, and SP-ledger constraints;
 - least-privilege column grants;
@@ -165,7 +172,14 @@ and all six policy files, and asserts (116 checks):
   provisional and disabled, an unapproved version cannot be enabled, only one
   version can be enabled at a time, clients read but never write rule versions,
   reconciliation confirms a matching ledger and reports drift without
-  repairing it, and only a Super Admin can run it.
+  repairing it, and only a Super Admin can run it;
+- training and payments (Phase 6): every table is read-only to clients, a
+  player or tournament manager cannot create sessions or fee periods, session
+  creation is audited, times and forward-only status transitions are enforced,
+  attendance upserts one row per session and player (visible to staff or the
+  player only), partial payments are allowed while overpayment is refused, a
+  void needs a reason and keeps the row, a voided payment stops counting toward
+  the total, and neither direct inserts nor deletes are possible.
 
 PGlite is a development dependency only; it is not shipped to the frontend.
 
@@ -179,17 +193,18 @@ supabase gen types typescript --project-id <project-ref> --schema public \
   > ../frontend/src/types/database.ts
 ```
 
-The committed `frontend/src/types/database.ts` covers migrations 001–006: the
+The committed `frontend/src/types/database.ts` covers migrations 001–007: the
 `players` table and its profile relationship, the four auth-lifecycle RPCs, the
 three Group K RPCs (`set_profile_roles`, `link_player_account`,
-`unlink_player_account`), the tournament tables and RPCs, and the
-`sp_rule_versions` table plus `reconcile_sp_balances()`. The Supabase CLI was
-unavailable in the development environment, so those signatures were checked
-against `migrations/004_players.sql`, `migrations/005_tournaments.sql`, and
-`migrations/006_shuttlepower_rules.sql` and added to the committed file;
-application builds treat it as authoritative. Regenerate it against the hosted
-project after step 12 and after every later migration. Never edit regenerated
-output by hand.
+`unlink_player_account`), the tournament tables and RPCs, the
+`sp_rule_versions` table plus `reconcile_sp_balances()`, and the four training
+tables plus their six RPCs. The Supabase CLI was unavailable in the development
+environment, so those signatures were checked against
+`migrations/004_players.sql`, `migrations/005_tournaments.sql`,
+`migrations/006_shuttlepower_rules.sql`, and `migrations/007_training.sql` and
+added to the committed file; application builds treat it as authoritative.
+Regenerate it against the hosted project after step 14 and after every later
+migration. Never edit regenerated output by hand.
 
 ## Security notes
 
@@ -212,6 +227,11 @@ output by hand.
   or RPC can award SP yet: the award workflow waits on the approved formula.
 - `reconcile_sp_balances()` is Super Admin only, reports every cached balance
   that differs from its ledger sum, and never writes a correction.
+- Training and payment tables are read-only to clients. Sessions, attendance,
+  fee periods, and payments cross audited RPCs guarded by
+  `require_training_staff()` (trainer or Super Admin). Payments are never
+  edited or deleted: a mistake is voided with a reason, and only recorded rows
+  count toward a period total.
 - Approval flows and starting SP are implemented as RPCs in
   `migrations/003_auth_lifecycle.sql`; `migrations/001`–`002` deliberately
   contain no approval logic. Registration is RPC-only, because

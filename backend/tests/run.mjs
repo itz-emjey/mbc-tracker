@@ -24,12 +24,14 @@ const [
   playerMigration,
   tournamentMigration,
   spRuleMigration,
+  trainingMigration,
   identityPolicies,
   operationPolicies,
   spPolicies,
   authPolicies,
   tournamentPolicies,
   spRulePolicies,
+  trainingPolicies,
   seed,
   bootstrap,
 ] = await Promise.all([
@@ -39,12 +41,14 @@ const [
   readFile(join(backendDir, 'migrations', '004_players.sql'), 'utf8'),
   readFile(join(backendDir, 'migrations', '005_tournaments.sql'), 'utf8'),
   readFile(join(backendDir, 'migrations', '006_shuttlepower_rules.sql'), 'utf8'),
+  readFile(join(backendDir, 'migrations', '007_training.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '001_identity.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '002_operations.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '003_shuttlepower.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '004_auth_lifecycle.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '005_tournaments.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '006_shuttlepower_rules.sql'), 'utf8'),
+  readFile(join(backendDir, 'policies', '007_training.sql'), 'utf8'),
   readFile(join(backendDir, 'seeds', '001_fictional_players.sql'), 'utf8'),
   readFile(join(backendDir, 'seeds', 'bootstrap_super_admin.sql'), 'utf8'),
 ])
@@ -81,6 +85,10 @@ const tables = [
   'sp_rule_versions',
   'sp_transactions',
   'tournaments',
+  'training_attendance',
+  'training_fee_periods',
+  'training_payments',
+  'training_sessions',
   'tournament_events',
   'teams',
   'team_members',
@@ -338,12 +346,14 @@ await db.exec(authMigration)
 await db.exec(playerMigration)
 await db.exec(tournamentMigration)
 await db.exec(spRuleMigration)
+await db.exec(trainingMigration)
 await db.exec(identityPolicies)
 await db.exec(operationPolicies)
 await db.exec(spPolicies)
 await db.exec(authPolicies)
 await db.exec(tournamentPolicies)
 await db.exec(spRulePolicies)
+await db.exec(trainingPolicies)
 
 // ---------------------------------------------------------------------------
 // Schema and catalogue
@@ -2802,6 +2812,237 @@ await test('N7: reconciliation is super admin only and anon cannot call it', asy
   await expectError(
     'anon reconcile',
     () => asRole('anon', `select public.reconcile_sp_balances()`),
+    /permission denied/i,
+  )
+})
+
+// ---------------------------------------------------------------------------
+// Training and payments (Phase 6)
+// ---------------------------------------------------------------------------
+await test('N8: training tables are read-only and RPCs are authenticated-only', async () => {
+  const { rows } = await db.query(`
+    select
+      has_table_privilege('authenticated', 'public.training_sessions', 'SELECT') as session_select,
+      has_table_privilege('authenticated', 'public.training_sessions', 'INSERT') as session_insert,
+      has_table_privilege('authenticated', 'public.training_attendance', 'UPDATE') as attendance_update,
+      has_table_privilege('authenticated', 'public.training_payments', 'INSERT') as payment_insert,
+      has_table_privilege('authenticated', 'public.training_payments', 'DELETE') as payment_delete,
+      has_function_privilege('authenticated', 'public.create_training_session(text,timestamp with time zone,timestamp with time zone,text,text)', 'EXECUTE') as session_execute,
+      has_function_privilege('authenticated', 'public.mark_training_attendance(uuid,jsonb)', 'EXECUTE') as mark_execute,
+      has_function_privilege('authenticated', 'public.record_training_payment(uuid,uuid,numeric,date,text)', 'EXECUTE') as pay_execute,
+      has_function_privilege('authenticated', 'public.void_training_payment(uuid,text)', 'EXECUTE') as void_execute,
+      has_function_privilege('anon', 'public.create_training_session(text,timestamp with time zone,timestamp with time zone,text,text)', 'EXECUTE') as anon_session_execute
+  `)
+  const row = rows[0]
+  assert(row.session_select === true, 'members should read sessions')
+  assert(row.session_insert === false, 'sessions must be created by the RPC only')
+  assert(row.attendance_update === false, 'attendance must be marked by the RPC only')
+  assert(row.payment_insert === false, 'payments must be recorded by the RPC only')
+  assert(row.payment_delete === false, 'payments are never deleted')
+  assert(row.session_execute === true && row.mark_execute === true, 'staff RPCs should be executable')
+  assert(row.pay_execute === true && row.void_execute === true, 'payment RPCs should be executable')
+  assert(row.anon_session_execute === false, 'anon must not create sessions')
+})
+
+await test('N8: a player and a tournament manager cannot write training', async () => {
+  await expectErrorAs(
+    A,
+    `select public.create_training_session('Blocked', now(), now() + interval '1 hour')`,
+    /not authorized/i,
+  )
+  await expectErrorAs(
+    D,
+    `select public.create_training_fee_period('2026-11', '2026-11-01', '2026-11-30', 500)`,
+    /not authorized/i,
+  )
+})
+
+await test('N8: staff create a session and the change is audited', async () => {
+  await inTransaction(async () => {
+    await actAs('authenticated', C)
+    const created = await db.query(
+      `select public.create_training_session(
+        'Evening drills', '2026-11-05T10:00:00Z', '2026-11-05T12:00:00Z', 'Club courts', 'Footwork'
+      ) as result`,
+    )
+    const session = created.rows[0].result
+
+    assert(session.title === 'Evening drills', 'session title should be returned')
+    assert(session.status === 'scheduled', 'a new session starts scheduled')
+
+    const audit = await db.query(
+      `select count(*)::int as total from public.audit_logs
+        where action = 'training.session.create' and target_id = '${session.id}'`,
+    )
+
+    assert(audit.rows[0].total === 1, 'session creation should be audited once')
+  })
+})
+
+await test('N8: session times and status transitions are enforced', async () => {
+  await inTransaction(async () => {
+    await actAs('authenticated', C)
+
+    await expectQueryError(
+      `select public.create_training_session(
+        'Backwards', '2026-11-05T12:00:00Z', '2026-11-05T10:00:00Z'
+      )`,
+      /training_sessions_times_check/i,
+    )
+
+    const created = await db.query(
+      `select public.create_training_session('Closable', '2026-11-06T10:00:00Z', '2026-11-06T12:00:00Z') as result`,
+    )
+    const sessionId = created.rows[0].result.id
+
+    const cancelled = await db.query(
+      `select public.set_training_session_status('${sessionId}', 'cancelled') as result`,
+    )
+    assert(cancelled.rows[0].result.changed === true, 'first cancellation changes the status')
+
+    const replay = await db.query(
+      `select public.set_training_session_status('${sessionId}', 'cancelled') as result`,
+    )
+    assert(replay.rows[0].result.changed === false, 'repeating the same status is a no-op')
+
+    await expectQueryError(
+      `select public.set_training_session_status('${sessionId}', 'completed')`,
+      /already cancelled/i,
+    )
+  })
+})
+
+await test('N8: attendance upserts and is visible only to staff or its player', async () => {
+  await inTransaction(async () => {
+    await actAs('authenticated', C)
+    const created = await db.query(
+      `select public.create_training_session('Attendance test', '2026-11-07T10:00:00Z', '2026-11-07T12:00:00Z') as result`,
+    )
+    const sessionId = created.rows[0].result.id
+
+    await db.query(
+      `select public.mark_training_attendance('${sessionId}', '[{"player_id":"${P1}","status":"present"},{"player_id":"${P3}","status":"late"}]'::jsonb)`,
+    )
+    await db.query(
+      `select public.mark_training_attendance('${sessionId}', '[{"player_id":"${P1}","status":"absent"}]'::jsonb)`,
+    )
+
+    const rows = await db.query(
+      `select player_id, status from public.training_attendance where session_id = '${sessionId}' order by player_id`,
+    )
+    assert(rows.rows.length === 2, `expected 2 attendance rows, got ${rows.rows.length}`)
+    assert(
+      rows.rows.find((row) => row.player_id === P1).status === 'absent',
+      're-marking updates the row instead of adding one',
+    )
+
+    await actAs('authenticated', A)
+    const own = await db.query(`select player_id from public.training_attendance`)
+    assert(own.rows.length === 1 && own.rows[0].player_id === P1, 'a player sees only their own row')
+
+    await actAs('authenticated', D)
+    const manager = await db.query(`select player_id from public.training_attendance`)
+    assert(manager.rows.length === 0, 'a tournament manager is not training staff')
+  })
+})
+
+await test('N8: fee periods and partial payments enforce the money rules', async () => {
+  await inTransaction(async () => {
+    await actAs('authenticated', C)
+    const period = await db.query(
+      `select public.create_training_fee_period('2026-11', '2026-11-01', '2026-11-30', 500, '2026-11-10') as result`,
+    )
+    const periodId = period.rows[0].result.id
+
+    const first = await db.query(
+      `select public.record_training_payment('${periodId}', '${P1}', 200, '2026-11-03', 'cash') as result`,
+    )
+    assert(Number(first.rows[0].result.total_paid) === 200, 'first payment totals 200')
+    assert(Number(first.rows[0].result.remaining) === 300, '300 remains after a partial payment')
+
+    const second = await db.query(
+      `select public.record_training_payment('${periodId}', '${P1}', 300, '2026-11-04', 'gcash') as result`,
+    )
+    assert(Number(second.rows[0].result.remaining) === 0, 'the period is then paid in full')
+
+    await expectQueryError(
+      `select public.record_training_payment('${periodId}', '${P1}', 1)`,
+      /remaining balance/i,
+    )
+
+    await expectQueryError(
+      `insert into public.training_payments (fee_period_id, player_id, amount) values ('${periodId}', '${P1}', 10)`,
+      /permission denied/i,
+    )
+
+    await actAs('authenticated', A)
+    const own = await db.query(`select player_id from public.training_payments`)
+    assert(own.rows.length === 2, `a player should see their 2 payments, got ${own.rows.length}`)
+  })
+})
+
+await test('N8: payments are voided with a reason and never deleted', async () => {
+  await inTransaction(async () => {
+    await actAs('authenticated', C)
+    const period = await db.query(
+      `select public.create_training_fee_period('2026-12', '2026-12-01', '2026-12-31', 300) as result`,
+    )
+    const periodId = period.rows[0].result.id
+    const recorded = await db.query(
+      `select public.record_training_payment('${periodId}', '${P1}', 300) as result`,
+    )
+    const paymentId = recorded.rows[0].result.id
+
+    await expectQueryError(
+      `select public.void_training_payment('${paymentId}', 'x')`,
+      /void reason is required/i,
+    )
+
+    await db.query(`select public.void_training_payment('${paymentId}', 'Recorded twice')`)
+
+    const row = await db.query(
+      `select status, void_reason from public.training_payments where id = '${paymentId}'`,
+    )
+    assert(row.rows[0].status === 'voided', 'the payment should be voided')
+    assert(row.rows[0].void_reason === 'Recorded twice', 'the reason should be stored')
+
+    await expectQueryError(
+      `select public.void_training_payment('${paymentId}', 'Again')`,
+      /already voided/i,
+    )
+
+    await expectQueryError(
+      `delete from public.training_payments where id = '${paymentId}'`,
+      /permission denied|never deleted/i,
+    )
+
+    const totals = await db.query(
+      `select coalesce(sum(amount), 0)::numeric as paid
+         from public.training_payments
+        where fee_period_id = '${periodId}' and status = 'recorded'`,
+    )
+    assert(Number(totals.rows[0].paid) === 0, 'a voided payment does not count toward the total')
+  })
+})
+
+await test('N8: anon cannot read training or call its RPCs', async () => {
+  await expectError(
+    'anon sessions',
+    () => asRole('anon', `select id from public.training_sessions`),
+    /permission denied/i,
+  )
+  await expectError(
+    'anon payments',
+    () => asRole('anon', `select id from public.training_payments`),
+    /permission denied/i,
+  )
+  await expectError(
+    'anon record payment',
+    () =>
+      asRole(
+        'anon',
+        `select public.record_training_payment('00000000-0000-4000-8000-000000000000', '00000000-0000-4000-8000-000000000000', 1)`,
+      ),
     /permission denied/i,
   )
 })

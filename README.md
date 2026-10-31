@@ -82,6 +82,8 @@ backend/migrations/005_tournaments.sql
 backend/policies/005_tournaments.sql
 backend/migrations/006_shuttlepower_rules.sql
 backend/policies/006_shuttlepower_rules.sql
+backend/migrations/007_training.sql
+backend/policies/007_training.sql
 ```
 
 The migrations are **not** idempotent: re-running one fails at the first `CREATE` by design. There
@@ -152,23 +154,26 @@ Open the printed URL (Vite defaults to `http://localhost:5173`), sign in, and Su
 directory, and the account menu's **My profile** opens the signed-in member's linked player record.
 Tournament staff get **Tournaments** to run events and results. **ShuttlePower** shows the current-SP
 leaderboard, your own ledger history, and the provisional-rule notice; a Super Admin also gets a
-balance check that compares every cached balance with its ledger sum.
+balance check that compares every cached balance with its ledger sum. **Training** and **Payments** are
+visible to every approved member: staff schedule sessions and record fees, while players see their own
+attendance, their period balance, and their payment history.
 
 ## Tests and checks
 
 ```bash
-npm run test:db                       # 116 SQL checks on real Postgres (PGlite), no Docker
-npm --prefix frontend test            # 131 frontend unit tests (Vitest)
+npm run test:db                       # 124 SQL checks on real Postgres (PGlite), no Docker
+npm --prefix frontend test            # 146 frontend unit tests (Vitest)
 npm --prefix frontend run typecheck
 npm --prefix frontend run lint
 npm --prefix frontend run build
 ```
 
-`npm run test:db` applies all six migrations and all six policy files to a real PostgreSQL engine,
+`npm run test:db` applies all seven migrations and all seven policy files to a real PostgreSQL engine,
 stubs Supabase Auth (`auth.users`, `auth.uid()`), and covers schema, RLS, column privileges,
 ownership/privacy negatives, approval idempotency, starting SP, player role/link RPCs, tournament
 visibility, D10 entry rules, draw validation, result advancement, correction order, the SP rule-version
-guardrails, balance reconciliation, and the development seed and bootstrap scripts.
+guardrails, balance reconciliation, training sessions and attendance, partial-payment and soft-void rules,
+and the development seed and bootstrap scripts.
 
 ## Security notes
 
@@ -190,6 +195,11 @@ policy file through 006 is applied to the hosted project, so the screens read re
 UI is built: `/tournaments` lists and creates tournaments, `/tournaments/:id` shows events, entries, draws,
 brackets, round-robin standings, and result entry/correction. The hosted Phase 3 walkthrough, the Gate G
 replay, and the owner's Super Admin bootstrap are complete.
+
+Phase 6 adds training and payments: sessions, attendance, club-wide fee periods, and manual payments that
+are voided rather than edited or deleted. Staff schedule sessions, mark attendance, record partial or full
+payments, and void a mistake with a reason; players see their own attendance and payment records. The
+schema (migration 007) and screens are verified locally and still need applying to the hosted project.
 
 Phase 4 is scaffolded, not activated. Migration 006 adds versioned SP rule configuration with a single
 provisional, **disabled** default and a reconciliation function; the pure engine in `domain/sp.ts` refuses
