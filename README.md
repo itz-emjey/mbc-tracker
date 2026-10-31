@@ -148,7 +148,7 @@ directory, and the account menu's **My profile** opens the signed-in member's li
 
 ```bash
 npm run test:db                       # 90 SQL checks on real Postgres (PGlite), no Docker
-npm --prefix frontend test            # 71 frontend unit tests (Vitest)
+npm --prefix frontend test            # 95 frontend unit tests (Vitest)
 npm --prefix frontend run typecheck
 npm --prefix frontend run lint
 npm --prefix frontend run build
@@ -172,6 +172,8 @@ development seed and bootstrap scripts.
 
 Phase 1 (Groups A-J) and Phase 2 (Groups K-M) are implemented and verified locally. Group M added an
 unlinked demo player, refreshed/validated the committed database types, and completed the final docs and
-check suite. Migration 004 is applied and its three RPCs are verified (anon is denied); the hosted policy 004
-check and Phase 1 walkthrough remain open. Remaining hosted steps and open product decisions (SP formulas
-and seasons) are tracked in `PLAN.md` §9 and §7.
+check suite. Phase 3 has begun with its pure domain engines: single/double elimination with byes and a
+grand-final reset, round-robin generation, D9 standings, and D10 entry validation. Migration 004 is applied
+and its three RPCs are verified (anon is denied); the hosted policy 004 check and Phase 1 walkthrough remain
+open. Tournament schema, RPCs, and UI are next. Remaining hosted steps and open product decisions (SP
+formulas and seasons) are tracked in `PLAN.md` §9 and §7.
