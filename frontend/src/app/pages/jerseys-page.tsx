@@ -1,4 +1,4 @@
-import { Download, Plus, Shirt } from 'lucide-react'
+import { Download, ImagePlus, Plus, Shirt, Trash2 } from 'lucide-react'
 import * as React from 'react'
 import { toast } from 'sonner'
 
@@ -44,15 +44,19 @@ import {
   addJerseyDesign,
   addJerseySize,
   cancelJerseyOrder,
+  clearJerseyDesignImage,
   createJerseyProject,
+  jerseyDesignImageUrl,
   listJerseyDesigns,
   listJerseyOrders,
   listJerseyProjects,
   listJerseySizes,
+  saveJerseyDesignImage,
   setJerseyProjectStatus,
   submitJerseyOrder,
 } from '@/features/jerseys/api'
 import { downloadCsv, ordersToCsv } from '@/features/jerseys/csv'
+import { JERSEY_IMAGE_ACCEPT, validateJerseyImage } from '@/features/jerseys/images'
 import {
   JERSEY_STAFF_ROLES,
   JERSEY_STATUS_LABELS,
@@ -100,6 +104,7 @@ export function JerseysPage() {
     project: JerseyProjectRecord
     kind: 'design' | 'size'
   } | null>(null)
+  const [imageTarget, setImageTarget] = React.useState<JerseyDesignRecord | null>(null)
 
   React.useEffect(() => {
     let active = true
@@ -266,15 +271,46 @@ export function JerseysPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-4">
-                  <div className="flex flex-wrap gap-1.5">
+                  <div className="flex flex-wrap items-start gap-2">
                     {projectDesigns.length === 0 ? (
                       <span className="text-xs text-text-faint">No designs yet.</span>
                     ) : (
-                      projectDesigns.map((design) => (
-                        <Badge key={design.id} tone="neutral">
-                          {design.name}
-                        </Badge>
-                      ))
+                      projectDesigns.map((design) => {
+                        const image = jerseyDesignImageUrl(design.image_path)
+
+                        return (
+                          <div
+                            key={design.id}
+                            className="flex items-center gap-2 rounded-sm border border-border p-2"
+                          >
+                            {image ? (
+                              <img
+                                src={image}
+                                alt={`${design.name} mockup`}
+                                loading="lazy"
+                                className="h-12 w-12 rounded-sm border border-border object-cover"
+                              />
+                            ) : (
+                              <span className="flex h-12 w-12 items-center justify-center rounded-sm border border-border text-center text-[10px] leading-tight text-text-faint">
+                                No image
+                              </span>
+                            )}
+                            <div className="flex flex-col items-start gap-1">
+                              <span className="text-xs font-medium text-text">{design.name}</span>
+                              {isStaff ? (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setImageTarget(design)}
+                                >
+                                  <ImagePlus aria-hidden="true" />
+                                  {design.image_path ? 'Replace image' : 'Add image'}
+                                </Button>
+                              ) : null}
+                            </div>
+                          </div>
+                        )
+                      })
                     )}
                     {projectSizes.map((size) => (
                       <Badge key={size.id} tone="info">
@@ -442,6 +478,17 @@ export function JerseysPage() {
           onOpenChange={() => setAssetTarget(null)}
           onSaved={() => {
             setAssetTarget(null)
+            reload()
+          }}
+        />
+      ) : null}
+
+      {imageTarget ? (
+        <DesignImageDialog
+          design={imageTarget}
+          onOpenChange={() => setImageTarget(null)}
+          onSaved={() => {
+            setImageTarget(null)
             reload()
           }}
         />
@@ -717,6 +764,7 @@ function AssetDialog({
 }) {
   const [name, setName] = React.useState('')
   const [description, setDescription] = React.useState('')
+  const [file, setFile] = React.useState<File | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const [submitting, setSubmitting] = React.useState(false)
 
@@ -728,15 +776,33 @@ function AssetDialog({
       return
     }
 
+    if (kind === 'design' && file) {
+      const problem = validateJerseyImage(file)
+
+      if (problem) {
+        setError(problem)
+        return
+      }
+    }
+
     setSubmitting(true)
 
     try {
       if (kind === 'design') {
-        await addJerseyDesign(
+        const design = await addJerseyDesign(
           project.id,
           name.trim(),
           description.trim() === '' ? null : description.trim(),
         )
+
+        if (file) {
+          await saveJerseyDesignImage({
+            projectId: project.id,
+            designId: design.id,
+            file,
+            previousPath: null,
+          })
+        }
       } else {
         await addJerseySize(project.id, name.trim())
       }
@@ -786,6 +852,19 @@ function AssetDialog({
               />
             </div>
           ) : null}
+
+          {kind === 'design' ? (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="asset-image">Mockup image (optional)</Label>
+              <Input
+                id="asset-image"
+                type="file"
+                accept={JERSEY_IMAGE_ACCEPT}
+                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+              />
+              <p className="text-xs text-text-faint">PNG, JPEG, or WebP up to 5 MB.</p>
+            </div>
+          ) : null}
         </div>
 
         <DialogFooter>
@@ -794,6 +873,124 @@ function AssetDialog({
           </Button>
           <Button loading={submitting} onClick={() => void save()}>
             Add {kind}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function DesignImageDialog({
+  design,
+  onOpenChange,
+  onSaved,
+}: {
+  design: JerseyDesignRecord
+  onOpenChange: () => void
+  onSaved: () => void
+}) {
+  const [file, setFile] = React.useState<File | null>(null)
+  const [error, setError] = React.useState<string | null>(null)
+  const [saving, setSaving] = React.useState(false)
+  const [removing, setRemoving] = React.useState(false)
+
+  async function save() {
+    setError(null)
+
+    if (!file) {
+      setError('Choose an image file.')
+      return
+    }
+
+    const problem = validateJerseyImage(file)
+
+    if (problem) {
+      setError(problem)
+      return
+    }
+
+    setSaving(true)
+
+    try {
+      await saveJerseyDesignImage({
+        projectId: design.project_id,
+        designId: design.id,
+        file,
+        previousPath: design.image_path,
+      })
+      toast.success(design.image_path ? 'Design image replaced.' : 'Design image added.')
+      onSaved()
+    } catch (saveError) {
+      setError(errorMessage(saveError))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function remove() {
+    setError(null)
+    setRemoving(true)
+
+    try {
+      await clearJerseyDesignImage(design.id, design.image_path)
+      toast.success('Design image removed.')
+      onSaved()
+    } catch (removeError) {
+      setError(errorMessage(removeError))
+    } finally {
+      setRemoving(false)
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            {design.image_path ? 'Replace design image' : 'Add design image'}
+          </DialogTitle>
+          <DialogDescription>
+            {design.name} · PNG, JPEG, or WebP up to 5 MB. Members see the mockup on the project.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="mt-4 flex flex-col gap-3">
+          {error ? (
+            <p role="alert" className="text-sm font-medium text-danger">
+              {error}
+            </p>
+          ) : null}
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="design-image">Image file</Label>
+            <Input
+              id="design-image"
+              type="file"
+              accept={JERSEY_IMAGE_ACCEPT}
+              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+            />
+          </div>
+
+          {design.image_path ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="self-start"
+              loading={removing}
+              onClick={() => void remove()}
+            >
+              <Trash2 aria-hidden="true" />
+              Remove current image
+            </Button>
+          ) : null}
+        </div>
+
+        <DialogFooter>
+          <Button variant="secondary" onClick={onOpenChange} disabled={saving || removing}>
+            Cancel
+          </Button>
+          <Button loading={saving} onClick={() => void save()}>
+            Upload
           </Button>
         </DialogFooter>
       </DialogContent>

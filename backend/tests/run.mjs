@@ -26,6 +26,7 @@ const [
   spRuleMigration,
   trainingMigration,
   clubMigration,
+  jerseyImageMigration,
   identityPolicies,
   operationPolicies,
   spPolicies,
@@ -34,6 +35,7 @@ const [
   spRulePolicies,
   trainingPolicies,
   clubPolicies,
+  jerseyImagePolicies,
   seed,
   bootstrap,
 ] = await Promise.all([
@@ -45,6 +47,7 @@ const [
   readFile(join(backendDir, 'migrations', '006_shuttlepower_rules.sql'), 'utf8'),
   readFile(join(backendDir, 'migrations', '007_training.sql'), 'utf8'),
   readFile(join(backendDir, 'migrations', '008_club_activities.sql'), 'utf8'),
+  readFile(join(backendDir, 'migrations', '009_jersey_images.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '001_identity.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '002_operations.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '003_shuttlepower.sql'), 'utf8'),
@@ -53,6 +56,7 @@ const [
   readFile(join(backendDir, 'policies', '006_shuttlepower_rules.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '007_training.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '008_club_activities.sql'), 'utf8'),
+  readFile(join(backendDir, 'policies', '009_jersey_images.sql'), 'utf8'),
   readFile(join(backendDir, 'seeds', '001_fictional_players.sql'), 'utf8'),
   readFile(join(backendDir, 'seeds', 'bootstrap_super_admin.sql'), 'utf8'),
 ])
@@ -360,6 +364,7 @@ await db.exec(tournamentMigration)
 await db.exec(spRuleMigration)
 await db.exec(trainingMigration)
 await db.exec(clubMigration)
+await db.exec(jerseyImageMigration)
 await db.exec(identityPolicies)
 await db.exec(operationPolicies)
 await db.exec(spPolicies)
@@ -368,6 +373,7 @@ await db.exec(tournamentPolicies)
 await db.exec(spRulePolicies)
 await db.exec(trainingPolicies)
 await db.exec(clubPolicies)
+await db.exec(jerseyImagePolicies)
 
 // ---------------------------------------------------------------------------
 // Schema and catalogue
@@ -3207,6 +3213,65 @@ await test('N9: a closed project and a passed deadline refuse orders', async () 
       `select public.submit_jersey_order('${projectId}', '${design.rows[0].result.id}', '${size.rows[0].result.id}', 1)`,
       /orders are closed/i,
     )
+  })
+})
+
+await test('N9: design images are staff-only and path-checked', async () => {
+  await inTransaction(async () => {
+    await actAs('authenticated', C)
+    const project = await db.query(
+      `select public.create_jersey_project('Image Kit', null, null, null) as result`,
+    )
+    const projectId = project.rows[0].result.id
+    const design = await db.query(
+      `select public.add_jersey_design('${projectId}', 'Home', null) as result`,
+    )
+    const designId = design.rows[0].result.id
+    const path = `designs/${projectId}/bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb.png`
+
+    await expectQueryError(
+      `select public.set_jersey_design_image('${designId}', 'https://evil.test/kit.png')`,
+      /must be a designs/i,
+    )
+    await expectQueryError(
+      `select public.set_jersey_design_image('${designId}', 'designs/../secret.png')`,
+      /must be a designs/i,
+    )
+    await expectQueryError(
+      `select public.set_jersey_design_image('${designId}', 'designs/${projectId}/kit.gif')`,
+      /must be a designs/i,
+    )
+
+    const attached = await db.query(
+      `select public.set_jersey_design_image('${designId}', '${path}') as result`,
+    )
+    assert(attached.rows[0].result.image_path === path, 'the design keeps the object path')
+
+    const audit = await db.query(
+      `select count(*)::int as total from public.audit_logs
+        where action = 'jersey.design.image' and target_id = '${designId}'`,
+    )
+    assert(audit.rows[0].total === 1, 'the image change should be audited')
+
+    await actAs('authenticated', A)
+    await expectQueryError(
+      `select public.set_jersey_design_image('${designId}', '${path}')`,
+      /not authorized|permission denied|club staff/i,
+    )
+
+    await actAs('authenticated', C)
+    const cleared = await db.query(
+      `select public.set_jersey_design_image('${designId}', null) as result`,
+    )
+    assert(cleared.rows[0].result.image_path === null, 'a null path removes the image')
+
+    const grants = await db.query(`
+      select
+        has_function_privilege('anon', 'public.set_jersey_design_image(uuid,text)', 'EXECUTE') as anon_execute,
+        has_function_privilege('authenticated', 'public.set_jersey_design_image(uuid,text)', 'EXECUTE') as member_execute
+    `)
+    assert(grants.rows[0].anon_execute === false, 'anon must not set a design image')
+    assert(grants.rows[0].member_execute === true, 'staff call the RPC as authenticated')
   })
 })
 

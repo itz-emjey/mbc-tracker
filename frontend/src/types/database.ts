@@ -784,6 +784,7 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
+          image_path: string | null
           name: string
           position: number
           project_id: string
@@ -793,6 +794,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          image_path?: string | null
           name: string
           position?: number
           project_id: string
@@ -801,6 +803,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          image_path?: string | null
           name?: string
           position?: number
           project_id?: string
@@ -1484,6 +1487,10 @@ export type Database = {
         Returns: Json
       }
       poll_results: { Args: { p_poll_id: string }; Returns: Json }
+      set_jersey_design_image: {
+        Args: { p_design_id: string; p_image_path: string | null }
+        Returns: Json
+      }
       set_announcement_status: {
         Args: { p_announcement_id: string; p_status: string }
         Returns: Json

@@ -29,13 +29,15 @@ backend/
 14. `policies/007_training.sql`
 15. `migrations/008_club_activities.sql`
 16. `policies/008_club_activities.sql`
+17. `migrations/009_jersey_images.sql`
+18. `policies/009_jersey_images.sql`
 
 The migrations are **not** idempotent: re-running one fails at the first
 `CREATE`, by design. Never add `IF NOT EXISTS` or `DROP` to a migration.
 
 ### Applying to the hosted Supabase project
 
-Open **Supabase Dashboard → SQL Editor** and run the sixteen files above, in
+Open **Supabase Dashboard → SQL Editor** and run the eighteen files above, in
 order, as the project owner. No dashboard schema edits are required, and no
 service-role key or database password is involved. Confirm afterwards that
 `public` contains twenty-nine tables and every one has RLS enabled, that the six
@@ -53,7 +55,10 @@ activity functions from step 15 (`create_jersey_project`,
 `set_jersey_project_status`, `add_jersey_design`, `add_jersey_size`,
 `submit_jersey_order`, `cancel_jersey_order`, `create_poll`, `set_poll_status`,
 `cast_poll_vote`, `poll_results`, `create_announcement`,
-`set_announcement_status`) exist.
+`set_announcement_status`) exist (step 17 adds `set_jersey_design_image`), and
+that the `jersey-designs` bucket exists as public with a 5 MB limit. Storage
+policies are applied by step 18 and are skipped when the `storage` schema is
+absent, which is how the local harness runs.
 
 **Status:** all twelve files are applied to the hosted `mbc-arena` project.
 Files 1–5 went in on 2026-10-30 and files 6–8 on 2026-10-31; files 9–12
@@ -68,8 +73,8 @@ and that `profiles_insert_self_pending` is gone. A signed-in demo Super Admin
 reads `provisional-2026-11` (provisional, disabled) and gets
 `{checked: 7, consistent: true}` from reconciliation. The Phase 3 walkthrough,
 the Gate G replay, and the owner's Super Admin bootstrap are complete. Files
-13–14 (Phase 6, training and payments) and 15–16 (Phase 7, jerseys, polls, and
-announcements) are verified locally only; apply them to the hosted project
+13–18 (Phase 6 training and payments; Phase 7 jerseys, polls, announcements,
+and design images) are verified locally only; apply them to the hosted project
 before using those screens. Remaining work is product scope (§7 rules and the
 next phase), not hosted setup. The repository
 intentionally stores no credentials that would let an agent apply migrations
@@ -196,7 +201,12 @@ and all seven policy files, and asserts (124 checks):
   unknown options are refused, a closed poll or passed window refuses votes, and
   results only carry tallies when the poll is closed or results are enabled;
   drafts stay staff-only, announcements publish once, and `anon` can neither read
-  the tables nor call the RPCs.
+  the tables nor call the RPCs;
+- design images (Phase 7): `set_jersey_design_image` is staff-only and audited,
+  it refuses URLs, path traversal, and non-image extensions, a null path clears
+  the mockup, the column constraint rejects any path outside `designs/`, and
+  `anon` cannot execute the RPC. The bucket and its storage policies are
+  skipped locally because PGlite has no `storage` schema.
 
 PGlite is a development dependency only; it is not shipped to the frontend.
 
@@ -210,19 +220,20 @@ supabase gen types typescript --project-id <project-ref> --schema public \
   > ../frontend/src/types/database.ts
 ```
 
-The committed `frontend/src/types/database.ts` covers migrations 001–008: the
+The committed `frontend/src/types/database.ts` covers migrations 001–009: the
 `players` table and its profile relationship, the four auth-lifecycle RPCs, the
 three Group K RPCs (`set_profile_roles`, `link_player_account`,
 `unlink_player_account`), the tournament tables and RPCs, the
 `sp_rule_versions` table plus `reconcile_sp_balances()`, the four training
-tables plus their six RPCs, and the eight club activity tables plus their twelve
-RPCs. The Supabase CLI was unavailable in the development environment, so those
+tables plus their six RPCs, the eight club activity tables plus their twelve
+RPCs, and `jersey_designs.image_path` plus `set_jersey_design_image(uuid,text)`.
+The Supabase CLI was unavailable in the development environment, so those
 signatures were checked against `migrations/004_players.sql`,
 `migrations/005_tournaments.sql`, `migrations/006_shuttlepower_rules.sql`,
-`migrations/007_training.sql`, and `migrations/008_club_activities.sql` and
-added to the committed file; application builds treat it as authoritative.
-Regenerate it against the hosted project after step 16 and after every later
-migration. Never edit regenerated output by hand.
+`migrations/007_training.sql`, `migrations/008_club_activities.sql`, and
+`migrations/009_jersey_images.sql` and added to the committed file; application
+builds treat it as authoritative. Regenerate it against the hosted project after
+step 18 and after every later migration. Never edit regenerated output by hand.
 
 ## Security notes
 

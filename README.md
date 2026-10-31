@@ -86,6 +86,8 @@ backend/migrations/007_training.sql
 backend/policies/007_training.sql
 backend/migrations/008_club_activities.sql
 backend/policies/008_club_activities.sql
+backend/migrations/009_jersey_images.sql
+backend/policies/009_jersey_images.sql
 ```
 
 The migrations are **not** idempotent: re-running one fails at the first `CREATE` by design. There
@@ -206,8 +208,10 @@ schema (migration 007) and screens are verified locally and still need applying 
 Phase 7 adds jerseys, polls, and announcements: jersey projects with designs, sizes, and one active order
 per player; single- or multiple-choice polls that refuse late and duplicate votes; and announcements that
 staff publish and archive. Staff manage everything through audited RPCs, players view designs, vote, and
-update their own order before the deadline. Migration 008 and its screens are verified locally only; image
-upload is not built because no storage bucket is configured.
+update their own order before the deadline. Migration 009 adds design mockups: the bytes live in the public
+`jersey-designs` bucket (created by the migration), and only training staff may upload, replace, or delete an
+object. Migrations 008–009 and their screens are verified locally only; the bucket is created when the file is
+applied to the hosted project, since the local harness has no storage schema.
 
 Phase 4 is scaffolded, not activated. Migration 006 adds versioned SP rule configuration with a single
 provisional, **disabled** default and a reconciliation function; the pure engine in `domain/sp.ts` refuses

@@ -34,6 +34,8 @@ export interface JerseyDesignRecord {
   project_id: string
   name: string
   description: string | null
+  /** Storage object path inside the `jersey-designs` bucket, if a mockup exists. */
+  image_path: string | null
   position: number
 }
 
