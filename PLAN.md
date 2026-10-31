@@ -2,7 +2,7 @@
 
 > **Source of truth for requirements:** `AGENT.md`
 > **This document:** the approved working plan — architecture, design system, schema, phases, Phase 1 checklist, and open business rules.
-> **Status:** v11 — architecture, stack, design, and roadmap approved. Groups A–E are complete. Group F (identity schema, RLS policies, local SQL tests, generated types) is implemented, locally verified, and applied to the hosted Supabase project. Group G is not started and awaits explicit approval.
+> **Status:** v21 — architecture, stack, design, and roadmap approved. **Groups A–J are complete.** Phase 1 is code- and docs-complete. Verification: 75/75 SQL checks, 52/52 frontend tests, typecheck, lint, and build all clean. On the hosted project, migration 003 is live and the seed ran, but demo sign-in returns GoTrue `500 Database error querying schema`: the seeded `auth.users` rows leave its token/change columns NULL (supabase/auth#1940). Three repairs missed it: the first named only some token columns, the second aborted on the unique `phone`, and the third skipped every unique-indexed column — including the token columns, whose Supabase indexes are *partial* (`WHERE token !~ '^[0-9 ]*$'`) and accept `''` across rows. The seed now skips only unconditional unique indexes (`phone`, which GoTrue reads into a NULL-safe value) and fills the rest: every text/varchar column on a seeded row becomes `''`, and the non-string fields its model scans — `is_sso_user` and `is_anonymous` (bool) and `email_change_confirm_status` (int) — become their zero values. Column names are read from `information_schema`, so a renamed or version-specific column cannot be missed. Remaining hosted steps: re-run the seed, re-verify sign-in, confirm policy 004, bootstrap the owner's Super Admin, and run the Gate G approval.
 
 ### Approved decisions
 
@@ -317,7 +317,8 @@ Executed in order. Each group ends at a **gate** that must pass before moving on
 
 - **Routes:** `/sign-in`, `/pending`, `/unauthorized`, and a guarded shell at `/` containing `/` (Overview),
   every module in `app/navigation.ts` as a guarded placeholder, and a nested `*` 404. `/register` and
-  `/profile` are deliberately absent until Group G can make them real.
+  `/profile` were deliberately absent at v5; `/register` arrived in Group G, and `/profile` remains a
+  Phase 2 page.
   This extends D3: later-phase modules get a **guarded placeholder** so role filtering and direct-URL
   blocking can be exercised, but they render a "not built yet" state and contain no data or fake
   business logic.
@@ -374,9 +375,9 @@ Executed in order. Each group ends at a **gate** that must pass before moving on
   (`disable_signup: false`), and `mailer_autoconfirm: true`, so confirmation is off. A live `signInWithPassword`
   probe returns `invalid_credentials` instead of `email_provider_disabled`, confirming email authentication is
   active. This configuration is for development only: production must require confirmation.
-- **Group G not started:** approval RPCs, registration UI, role assignment, and the real session provider remain
-  outstanding. The development persona adapter is still the only session source, so nothing about authentication is
-  being presented as real.
+- **Group G (position at v10):** approval RPCs, registration UI, role assignment, and the real session provider were
+  still outstanding, and the development persona adapter was the only session source. Delivered in v12 — see the
+  Group G as-built note.
 
 #### Group F — Migrations and policies (identity + SP bootstrap)
 - [x] F1. `backend/migrations/001_identity.sql`: `profiles`, `players`, `roles`, `user_roles`, `registration_requests`, `audit_logs`, `app_settings`. A second migration, `002_shuttlepower_bootstrap.sql`, adds the minimal `sp_accounts` + append-only `sp_transactions` required by F6 and G6.
@@ -419,35 +420,163 @@ Executed in order. Each group ends at a **gate** that must pass before moving on
   generated from the same migrations against a local Postgres; they match the hosted schema, but regenerating them
   against the hosted project is still the authoritative refresh.
 
-#### Group G — Auth lifecycle
-- [ ] G1. Sign up form (email, password, full name) with Zod validation shared with the server check.
-- [ ] G2. Registering creates `profiles` (unapproved) + `registration_requests` (pending). **No player record, no SP yet.**
-- [ ] G3. `/pending` explains what happens next; pending users cannot reach club modules.
-- [ ] G4. Admin approval screen: list pending requests, approve or reject with a reason; suspension/deactivation supported.
-- [ ] G5. On approval, a single RPC (`approve_registration`) atomically assigns roles, creates or links the player record, and grants starting SP.
-- [ ] G6. `grant_starting_sp`: inserts one `1000` ledger transaction with idempotency key `player:{id}:initial`, guarded by a unique constraint. Called twice → still one row.
-- [ ] G7. Every approval/rejection/role change written to `audit_logs` with actor, target, and before/after.
-- **Gate G:** approve the same request twice → exactly one player, one role set, one 1,000 SP transaction.
+#### Group G — Auth lifecycle ✅ Approved and executed
+- [x] G1. Sign up form (email, password, full name) with Zod validation shared with the server check.
+- [x] G2. Registering creates `profiles` (unapproved) + `registration_requests` (pending). **No player record, no SP yet.**
+- [x] G3. `/pending` explains what happens next; pending users cannot reach club modules.
+- [x] G4. Admin approval screen: list pending requests, approve or reject with a reason; suspension/deactivation supported.
+- [x] G5. On approval, a single RPC (`approve_registration`) atomically assigns roles, creates or links the player record, and grants starting SP.
+- [x] G6. `grant_starting_sp`: inserts one `1000` ledger transaction with idempotency key `player:{id}:initial`, guarded by a unique constraint. Called twice → still one row.
+- [x] G7. Every approval/rejection/role change written to `audit_logs` with actor, target, and before/after.
+- **Gate G:** approve the same request twice → exactly one player, one role set, one 1,000 SP transaction. **Passed locally** (`approval is atomic and idempotent (Gate G)`); not yet repeatable against the hosted project, which is still missing the two SQL files.
 
-#### Group H — Ownership and privacy checks
-- [ ] H1. A player can read only their own `profiles` row and own private fields.
-- [ ] H2. A player cannot read another player's contact details.
-- [ ] H3. No client path can update `sp_accounts.sp`, role tables, or `audit_logs`.
-- [ ] H4. An unapproved user calling a club RPC gets an authorization error, not empty data.
-- **Gate H:** policy tests in `backend/tests/` cover each row of the §5 matrix that Phase 1 touches, including the negative cases.
+**Group G — as built (v12):**
 
-#### Group I — Seed data
-- [ ] I1. `seeds/001_fictional_players.sql` — clearly fictional names, 4–6 players, one per role, mixed statuses.
-- [ ] I2. Seeding is idempotent and refuses to run against a non-development project.
-- [ ] I3. No real member data, no real contact details, ever.
-- **Gate I:** reset database → migrate → seed → app shows a usable demo state with zero manual clicking.
+- **Real session, no fallback.** `features/auth/dev-session.tsx` is deleted. `SessionProvider` reads the
+  Supabase session, loads the profile plus role assignments, and exposes `status`, `user`, `signOut`, and
+  `refresh` through `session-context.ts`. A missing or invalid env var renders the configuration screen, not a
+  blank app; there is no persona or mock identity in any build.
+- **Registration is RPC-only.** `submit_registration(p_full_name)` creates or refreshes the caller's `pending`
+  profile and one open request, and is idempotent for a pending profile (an active profile is a no-op).
+  `policies/004_auth_lifecycle.sql` revokes the old direct `profiles` INSERT grant and drops its policy, so no
+  client can create a profile without a matching request. Sign-up calls Auth `signUp` then the RPC; `/pending`
+  shows the request, any rejection reason, a status refresh, and a resubmit path, and cannot reach club modules.
+- **Approval is atomic.** `approve_registration(p_request_id, p_role_keys, p_player_id)` re-checks
+  `super_admin` through `require_super_admin()`, locks the request and profile, creates or links exactly one
+  player, assigns roles, awards starting SP, marks the request approved, and writes one audit row — all in one
+  transaction. A replay returns the stored outcome with `already_processed = true` and changes nothing. Approval
+  refuses an unknown role and refuses a player record already linked to another account.
+- **Starting SP is exactly once.** `grant_starting_sp` is internal: execute is revoked from `public`, `anon`,
+  `authenticated`, and `service_role`, so only the definer path can call it. It inserts one `initial` ledger row
+  guarded by the unique key `player:{id}:initial` and updates the cached balance only when that insert happened.
+- **Rejection and access changes.** `reject_registration` requires a 3–1,000 character reason, is audited, cannot
+  run after approval, and lets a rejected member submit a fresh request while the old one stays on record.
+  `set_profile_status` covers suspend/deactivate/reactivate, refuses pending profiles (those go through
+  approval), and refuses self-lockout so a lone Super Admin cannot close their own access.
+- **UI.** `/register` (shared Zod schema, email-confirmation-aware), `/admin` with pending-requests and members
+  tabs, an approve dialog (multi-role picker, create-or-link player record), a reject dialog with a required
+  reason, and suspend/deactivate/reactivate confirmations. Pending and rejected states are explained on
+  `/pending`, with the reviewer's reason shown.
+- **Verification (local).** `npm run test:db` 56/56 — Gate G double approval, multi-role assignment plus audit,
+  unknown role, link/steal protection, rejection idempotency, starting SP once, suspension revoking access,
+  self-suspension refusal, and pending activation refusal. `npm test` 52/52. `typecheck` and `lint` clean.
+- **Hosted status (v14).** Migration 003 is **live**: a publishable-key probe with the real argument signatures
+  resolves all six functions and returns `401 42501 permission denied` for each (before the migration the same
+  calls returned `404 PGRST202`, and a deliberately missing function still returns `404 PGRST202`, so the change is
+  the migration, not a generic response). Policy 004 only narrows `authenticated`'s grants, which the API cannot
+  read back: confirm it in the SQL Editor with
+  `select has_table_privilege('authenticated', 'public.profiles', 'INSERT');` — expected `false` — and check that
+  `profiles_insert_self_pending` no longer appears in `pg_policies` for `profiles`. Gate G's end-to-end smoke test
+  still needs the Super Admin from Group J4.
 
-#### Group J — Tests and docs
-- [ ] J1. Vitest configured; first tests cover `domain/` placeholders and any pure helper in `lib/format.ts`.
-- [ ] J2. SQL assertions for: starting SP once, approval idempotency, RLS negatives.
-- [ ] J3. `README.md`: prerequisites, env vars, how to apply migrations and seeds, how to run tests, how to create the first Super Admin.
-- [ ] J4. `backend/seeds/bootstrap_super_admin.sql` implementing **D8**: one-time `super_admin` assignment for an existing Auth account, idempotent, safe to leave in the repo, **never callable through the API** (no RPC, no Edge Function, no frontend trigger). Documented in `README.md` as a manual step run by the developer.
-- **Gate J:** a new developer can go from clone to running app with seed data using only `README.md`.
+#### Group H — Ownership and privacy checks ✅ Approved and executed
+- [x] H1. A player can read only their own `profiles` row and own private fields.
+- [x] H2. A player cannot read another player's contact details.
+- [x] H3. No client path can update `sp_accounts.sp`, role tables, or `audit_logs`.
+- [x] H4. An unapproved user calling a club RPC gets an authorization error, not empty data.
+- **Gate H:** policy tests in `backend/tests/` cover each row of the §5 matrix that Phase 1 touches, including the negative cases. **Passed:** 11 new assertions, 67/67 total.
+
+**Group H — as built (v13):**
+
+- **No policy change was needed.** The ownership and no-write rules already held in `policies/001`–`004`; Group H
+  added the missing negative proof and widened the privilege assertions, so the guarantees are tested rather than
+  assumed. Nothing new to apply to the hosted project.
+- **H1 — own profile only.** `profiles_select_own_or_super_admin` plus the `full_name`-only UPDATE grant mean a player
+  reads and renames only their own row; another profile is filtered out of a `SELECT ... WHERE id = ...` and out of
+  an `UPDATE`, and `profiles.status` stays unupdatable by any client.
+- **H2 — contact details.** Phase 1 stores no contact fields on `profiles` or `players` (asserted against
+  `information_schema`), email lives only in `auth.users`, which no client role can read, and
+  `registration_requests.email` is visible only to its owner or a Super Admin. `players.gender` is readable by club
+  members because Mixed Doubles eligibility (D10) needs it; it is not contact information.
+- **H3 — no client writes.** `authenticated` holds SELECT only on `roles`, `user_roles`, `audit_logs`, `sp_accounts`,
+  and `sp_transactions`; INSERT/UPDATE/DELETE fail with `permission denied` for a player *and* for a Super Admin,
+  and `players.profile_id` remains ungranted, so account linking is RPC-only.
+- **H4 — authorization errors, not silence.** A pending account, an account with no profile, and a Tournament Manager
+  calling `approve_registration` receive `42501 not authorized`; a suspended Super Admin loses the authority
+  immediately; `anon` cannot execute any of the six auth-lifecycle functions.
+- **Gate H evidence.** 11 new assertions, total 67/67. The §5 rows Phase 1 touches are covered: approve/assign roles
+  (Super Admin only), create/link player records (staff, with linking through the RPC), manual SP adjustment (no
+  one), and `anon` holding no table privilege on any of the nine tables.
+
+#### Group I — Seed data ✅ Approved and executed
+- [x] I1. `seeds/001_fictional_players.sql` — clearly fictional names, 4–6 players, one per role, mixed statuses.
+- [x] I2. Seeding is idempotent and refuses to run against a non-development project.
+- [x] I3. No real member data, no real contact details, ever.
+- **Gate I:** reset database → migrate → seed → app shows a usable demo state with zero manual clicking. **Passed at the data layer locally (70/70); the hosted seed run and sign-in as a demo account are still developer steps.**
+
+**Group I — as built (v15):**
+
+- **Dataset.** `seeds/001_fictional_players.sql` creates six clearly fictional accounts (`@example.test`, shared
+  development password `mbc-demo-2026`), all four roles — Super Admin, Tournament Manager, Trainer, two Players —
+  four approved profiles, one pending registration with no player record, and one suspended account. Five linked
+  player records each receive 1,000 SP through `grant_starting_sp`, the same RPC approval uses, so the demo ledger
+  has the shape of real data. The suspended member also gets an approved historical request.
+- **Guard (I2).** The file aborts with `42501` unless `app_settings.club.environment` is exactly `"development"`.
+  The owner marks the project once in the SQL Editor; the seed deliberately does not create its own permission, so
+  an unmarked or production project cannot be seeded even if the file is pasted there.
+- **Idempotency (I2).** Fixed ids plus `on conflict do nothing`, and the ledger's unique `player:{id}:initial` key,
+  make a second run add nothing: 6 accounts, 6 identities, 6 profiles, 5 players, 5 role assignments, 2 requests,
+  and 5 initial SP rows.
+- **No real data (I3).** Every seeded address ends in `example.test`, which the test asserts. The demo password is
+  development-only and committed intentionally; no real member data or contact details are present.
+- **Verification.** Three new checks — refusal without the marker, full dataset shape (role coverage, mixed
+  statuses, pending has no player, five funded players, reserved-domain emails), and a second-run no-op. Total
+  **70/70**.
+- **Hosted finding and fix (v17–v18).** The hosted walkthrough did exactly what the harness could not: GoTrue
+  returned `500 Database error querying schema` for all six demo accounts, while an unknown email correctly returned
+  `400 invalid_credentials`. Cause (supabase/auth#1940): GoTrue scans its token/change columns into non-nullable Go
+  strings, and the seed left them NULL. A first fix that set five named columns to `''` did **not** clear the hosted
+  500, so the repair is now version-proof: on every run the seed walks `information_schema.columns` for
+  `auth.users` and sets **every** NULL text/varchar column on a seeded id to `''`. That avoids both a missed
+  column (GoTrue's scanned set varies by version) and a hard failure if a named column is absent. Regression
+  tests assert no seeded row leaves a string column NULL and that a second run repairs deliberately NULLed ones;
+  hosted sign-in still needs a repair re-run to confirm.
+- **Second hosted repair failure and the real field set (v19).** The text-only repair also left the hosted 500 in
+  place, so the fix was driven by GoTrue's own model instead of by guesswork. `internal/models/user.go` scans, into
+  **non-nullable** Go values, the strings `confirmation_token`, `recovery_token`, `email_change`,
+  `email_change_token_current`, `email_change_token_new`, `phone_change`, `phone_change_token`,
+  `reauthentication_token` (plus `aud`, `role`); the bools `is_sso_user`, `is_anonymous`; and the int
+  `email_change_confirm_status`. A NULL in any of them raises the same unnamed
+  `500 Database error querying schema` (supabase/auth#1940), so a text sweep is only part of the repair. The seed
+  now runs two passes over `information_schema.columns` for `auth.users`: `''` for every text/varchar column, and
+  `false`/`false`/`0` for those three non-string fields. The harness models them as nullable so the assertion
+  fails if either pass is removed.
+- **Unique index on `auth.users.phone` (v20).** The second hosted repair died with `23505 duplicate key value
+  violates unique constraint "users_phone_key"` on `update auth.users set phone = ''`: hosted `auth.users` has a
+  unique index on `phone`, so six demo rows cannot all hold the empty string. `phone` is `storage.NullString` in
+  GoTrue's model, so NULL is safe; the string pass now excludes every column that carries a unique index (read from
+  `pg_index`) and every generated column, and wraps each statement so a
+  `unique_violation` from an expression index it cannot predict raises a notice instead of aborting the run and
+  leaving every later column NULL. The harness now declares `phone text unique`, which reproduces the failure, and
+  the repair test asserts `phone` stays NULL while every non-nullable field is restored.
+
+#### Group J — Tests and docs ✅ Approved and executed
+- [x] J1. Vitest configured; first tests cover `domain/` placeholders and any pure helper in `lib/format.ts`.
+- [x] J2. SQL assertions for: starting SP once, approval idempotency, RLS negatives.
+- [x] J3. `README.md`: prerequisites, env vars, how to apply migrations and seeds, how to run tests, how to create the first Super Admin.
+- [x] J4. `backend/seeds/bootstrap_super_admin.sql` implementing **D8**: one-time `super_admin` assignment for an existing Auth account, idempotent, safe to leave in the repo, **never callable through the API** (no RPC, no Edge Function, no frontend trigger). Documented in `README.md` as a manual step run by the developer.
+- **Gate J:** a new developer can go from clone to running app with seed data using only `README.md`. **Every documented command was run and passes; a genuine fresh-clone walkthrough, including the hosted seed and demo sign-in, has not been performed.**
+
+**Group J — as built (v16):**
+
+- **J1 — frontend tests.** Vitest covers env validation, status labels, navigation/permission unions, formatters,
+  auth mapping, and the Zod schemas (52 tests). `domain/` is intentionally empty until the Phase 3 bracket engine, so
+  those placeholder tests belong to Phase 3, not here.
+- **J2 — SQL tests.** `npm run test:db` holds 75 assertions: schema and RLS coverage, column privileges, starting SP
+  once, approval/rejection idempotency, ownership/privacy negatives, the seed (including the GoTrue token repair),
+  and the bootstrap.
+- **J3 — docs.** The new root `README.md` covers prerequisites, env vars, the seven-file apply order, the development
+  seed, the first Super Admin, running the app, checks, and security notes. `backend/README.md` keeps the SQL-only
+  detail (apply order, seeds, tests, hosted status).
+- **J4 — bootstrap.** `seeds/bootstrap_super_admin.sql` requires the address through
+  `set mbc.bootstrap_super_admin_email = '…'` in the same execution, so a copied file cannot grant Super Admin by
+  default. It activates a pending profile (nobody exists to approve the first admin), grants `super_admin` once,
+  writes one `audit_logs` row with before/after state, refuses unknown or suspended accounts, and is a no-op when
+  re-run. It creates no function or endpoint; a test asserts `pg_proc` contains no bootstrap function.
+- **Gate J evidence.** `npm run test:db` 75/75, `npm test` 52/52, `typecheck`, `lint`, and `build` all exit 0, and the
+  README commands match the actual scripts. The hosted walkthrough then caught a seed defect the harness could not
+  (see the Group I v17 note), which is exactly why the gate asks for the human path; it stays open until sign-in and
+  approval are demonstrated on the hosted project.
 
 #### Phase 1 definition of done
 - Product: pending → approved → player with 1,000 SP works end-to-end and persists.
@@ -547,24 +676,29 @@ Payment gateway integration, ELO ratings, public API, native mobile app, light t
 | C — Design system foundation | ✅ Complete (19 primitives, 8 shared components, `/dev/ui` gallery at `dev-gallery.html`) |
 | D — App shell and routing | ✅ Complete and approved (shell, role-aware nav, guards, 403/404/loading/error, dev-only session) |
 | E — Supabase wiring | ✅ Complete (E1–E5; E4 closed in F; client typed; Gate E reconciled) |
-| F — Identity migration | ✅ Complete — local 41/41; five SQL files applied to the hosted project; anon is denied on all nine tables; awaiting approval for G |
-| G–J | ⏸ Not started |
+| F — Identity migration | ✅ Complete — local 41/41; five SQL files applied to the hosted project; anon is denied on all nine tables |
+| G — Auth lifecycle | ✅ Complete — implemented, 67/67 SQL (56 at v12, plus 11 Group H negatives) and 52/52 frontend checks locally; migration 003 confirmed live on the hosted project, policy 004 pending the dashboard check |
+| H — Ownership and privacy | ✅ Complete — 11 new negative checks; 67/67 locally; no policy change required |
+| I — Seed data | ✅ Complete — 4 new checks; 75/75 locally; hosted seed run needs a repair re-run (GoTrue string + bool/int fields, unique columns skipped) |
+| J — Tests and docs | ✅ Complete — 75/75 SQL, 52/52 frontend, typecheck/lint/build clean; hosted walkthrough in progress |
 
-**What exists now:** the production frontend shell plus the Phase 1 database schema, applied to the hosted
-project. `backend/` contains two migrations and three policy files for nine tables: profiles, players, roles, role
-assignments, registration requests, audit logs, app settings, and the minimal SP account/ledger bootstrap. Locally,
-the schema applies to a real PostgreSQL engine and re-running it fails loudly; RLS and column privileges are
-covered by 41 assertions. On the hosted project, a PostgREST probe with the publishable key returns
-`42501 permission denied` for all nine tables to `anon`, confirming they exist and that anon grants are revoked.
-There is **no authentication and no UI data access yet**: the production build stays signed out, and development
-still uses the clearly labelled persona switcher compiled out of `dist/`.
+**What exists now:** the production frontend with real Supabase authentication, plus the Phase 1 database
+schema applied to the hosted project. `backend/` holds three migrations and four policy files: the nine
+identity/SP tables and the six auth-lifecycle functions. Sign-up, pending review, admin approval/rejection, role
+assignment, account suspension, and the one-time 1,000 SP award are implemented end to end and covered by 75
+local SQL assertions and 52 frontend tests (including the Group H ownership/privacy negatives, the Group I seed,
+and the Group J bootstrap); the development persona adapter is gone. Migration 003 is live there — all six functions resolve and `anon` is denied — so the lifecycle is real;
+policy 004's grant revocation still needs the one-line check listed under "Steps only you can do".
 
 **Supabase status (Groups E–F):** the project is connected and verified with the publishable key: GoTrue v2.197.0,
 database API reachable, no stored session. Migrations 001–002 and policies 001–003 are committed, verified locally,
 and **applied to the hosted project**; `npm run check:supabase` passes. Generated types for the nine tables live in
 `frontend/src/types/database.ts` and the client is typed. Email confirmation is disabled for development and
-verified (`mailer_autoconfirm: true`, Email provider enabled); production must require confirmation. No approval
-RPC, registration UI, or real session provider exists yet — that is Group G.
+verified (`mailer_autoconfirm: true`, Email provider enabled); production must require confirmation. Group G's
+real session provider, registration UI, and approval RPCs are implemented and **migration 003 is live** there: a
+publishable-key probe resolves all six functions and denies `anon` with `42501`. Policy 004 narrows only
+`authenticated` grants, so it needs the `has_table_privilege('authenticated', 'public.profiles', 'INSERT')` check
+described in the Group G note rather than an API probe.
 
 **Design note (Group C):** `--color-text-faint` was raised from `#61707F` to `#7A8998` because the original
 measured 3.64:1 and failed WCAG AA for small text. It now measures 4.83:1 on the darkest surface and 5.43:1 on `bg`.
@@ -574,9 +708,14 @@ access, role unions for 1/2/3 roles, unknown routes, skip link, mobile bar at 39
 trap and focus return, persona persistence) and the production build was checked separately: `/` and
 `/players` both resolve to `/sign-in`, and the dev persona strings are absent from `dist/`.
 
-Next action: **give explicit approval to start Group G.** Group F is applied and verified: local harness 41/41, hosted
-project reachable, and anon denied on all nine tables. Group G (real authentication, registration approval, role
-assignment, starting SP) remains unstarted until that approval.
+Next action: **re-run `seeds/001_fictional_players.sql` on the hosted project** (the development marker is already
+set). Its repair pass now normalizes every NULL value GoTrue scans into a non-nullable field — every string column
+to `''` (skipping unique-indexed columns such as `phone`), `is_sso_user`/`is_anonymous` to `false`, and
+`email_change_confirm_status` to `0` — which is the only reason demo sign-in fails. If it still fails afterwards,
+the offending column is named only in Supabase's Auth log.
+Then: verify `ada.demo@example.test` signs in, confirm policy 004 with the one-line check in the Group G note,
+bootstrap the owner's own Super Admin with `seeds/bootstrap_super_admin.sql`, and approve the demo pending request
+once (and again, to prove Gate G). After that, Phase 2 (player directory) is the next phase in §6.
 
 **Steps only you can do:**
 
@@ -589,8 +728,21 @@ assignment, starting SP) remains unstarted until that approval.
   `supabase gen types typescript --project-id ehftzafmsirzrffrekzk --schema public > frontend/src/types/database.ts`.
   The committed types were generated from the same migrations and typecheck cleanly; regeneration is the final
   authoritative refresh, not a blocker.
-- **Approve Group G** when you are ready for real authentication, registration approval, role assignment, and
-  starting SP.
+- **Migration 003 — applied and verified.** All six functions resolve and deny `anon` with `42501`.
+- **Policy 004 — confirm the revocation.** In the Supabase SQL Editor run
+  `select has_table_privilege('authenticated', 'public.profiles', 'INSERT');` — expected `false` — and
+  `select policyname from pg_policies where schemaname = 'public' and tablename = 'profiles';` —
+  `profiles_insert_self_pending` should be absent.
+- **Re-run the development seed (Group I) — outstanding.** The seeded auth rows are unreadable by GoTrue
+  (`500 Database error querying schema`) because they leave NULL values in columns it scans into non-nullable Go
+  fields: strings, plus the bools `is_sso_user`/`is_anonymous` and the int `email_change_confirm_status`. Re-running
+  `backend/seeds/001_fictional_players.sql` (marker already set) repairs all of them, skipping unique-indexed
+  columns like `phone`; then confirm sign-in as `ada.demo@example.test` / `mbc-demo-2026`. If it still fails,
+  Supabase → Logs → Auth names the column (`scan error on column ...`).
+- **Bootstrap the owner's Super Admin (Group J) — outstanding.** After the owner's own account exists, run
+  `set mbc.bootstrap_super_admin_email = '…';` plus `backend/seeds/bootstrap_super_admin.sql`.
+- **Gate G approval — outstanding.** With the demo Super Admin signed in, approve the Erin example pending request
+  twice (the second call must report `already_processed`), which closes Gate G end to end.
 
 **Resolved:** first Super Admin bootstrap method (D8), Round Robin tie-break (D9), Mixed Doubles pairing (D10). Remaining open items are the SP and season rules in §7.
 
@@ -611,4 +763,14 @@ assignment, starting SP) remains unstarted until that approval.
 | v9 | 2026-10-30 | Email provider re-enabled with confirmation off. Live verification: `mailer_autoconfirm: true`, sign-ups allowed, and a sign-in probe returns `invalid_credentials` rather than `email_provider_disabled`. Email configuration marked verified for development; production must require confirmation. Gate E still open on the E4 deferral; Group F still awaits explicit approval. |
 | v10 | 2026-10-30 | Group F executed. Added the identity migration (7 tables), the minimal Phase 1 SP bootstrap (accounts + append-only ledger), three RLS/policy files with least-privilege column grants and `has_role()`, and a PGlite-backed `npm run test:db` harness (41/41 checks). Decided checked text over Postgres enums. Generated and wired the `Database` types, closing E4 and reconciling Gate E. Hosted application of the five SQL files and a type refresh against the hosted schema remained manual developer steps. Group G not started. |
 | v11 | 2026-10-30 | Hosted application confirmed. The developer ran migrations 001–002 and policies 001–003 in the Supabase SQL Editor. Verification: `npm run check:supabase` passes; a PostgREST probe with the publishable key returns `42501 permission denied` for all nine tables to `anon`, so the tables exist and anon grants are revoked. Gate F recorded as passed; Group G still awaits explicit approval. |
+| v12 | 2026-10-31 | Group G approved and executed. Real Supabase session provider replaced the dev persona adapter; registration became RPC-only; atomic approval (roles, player create/link, starting SP), rejection with a required reason, and suspend/deactivate/reactivate were added, each `super_admin`-guarded and written to `audit_logs`. Local verification: 56/56 SQL checks including Gate G replay, 52/52 frontend tests, typecheck and lint clean. Hosted project still lacks migration 003 and policy 004 — a publishable-key probe returns `PGRST202` for all six functions. |
+| v13 | 2026-10-31 | Group H executed. No policy change was required. Added 11 ownership/privacy negatives: own-profile-only reads and updates, no contact columns, `auth.users` and other members' request emails unreachable, no client writes to roles/`user_roles`/`audit_logs`/SP tables even as a Super Admin, authorization errors for pending, profile-less, manager, and suspended-admin callers, and `anon` holding no table privilege. Widened the column-privilege assertions; 67/67 SQL checks. |
+| v14 | 2026-10-31 | Hosted auth lifecycle applied by the project owner. A publishable-key probe with real argument signatures resolves all six functions and returns `42501 permission denied` (they returned `404 PGRST202` before); a missing-function control still returns `404`, confirming the difference is the migration. Policy 004's grant revocation cannot be read back through the API, so the dashboard check is recorded. Local checks unchanged at 67/67. |
+| v15 | 2026-10-31 | Group I executed. Added `seeds/001_fictional_players.sql`: six fictional accounts with email identities and hashed development passwords, all four roles, mixed statuses, five player records, an approved and a pending registration request, and five 1,000 SP awards through `grant_starting_sp`. The seed refuses any project not marked `club.environment = "development"` and is idempotent (fixed ids + `on conflict do nothing` + the ledger idempotency key). Three new checks, 70/70. Hosted seed run is still a developer step; the harness stubs auth/pgcrypto. |
+| v16 | 2026-10-31 | Group J executed, closing Phase 1. Added the root `README.md` (prerequisites, env vars, seven-file apply order, seed, first Super Admin, commands, security notes) and `seeds/bootstrap_super_admin.sql` (requires a session email, activates a pending profile, grants `super_admin` once, audits once, refuses unknown/suspended accounts, creates no callable function). Four new checks, 74/74; `typecheck`, `lint`, and `build` pass. Remaining: the hosted walkthrough (policy 004 check, seed, bootstrap, demo sign-in) and Gate G/I end-to-end demos. |
+| v17 | 2026-10-31 | Hosted walkthrough found a real seed defect. All six demo accounts returned `500 Database error querying schema` on password sign-in while an unknown email returned `400 invalid_credentials`, proving the rows existed but were unreadable by GoTrue. Cause: NULL `confirmation_token`/`recovery_token`/`email_change`/`email_change_token_new`/`email_change_token_current` (supabase/auth#1940). The seed now sets those to `''` and its conflict path repairs existing rows; a regression test covers both. 75/75. Hosted sign-in stays open until the seed is re-run. |
+| v18 | 2026-10-31 | The first hosted repair re-run still returned `500 Database error querying schema`. The named-column repair was replaced with a version-proof one: on each run, every NULL text/varchar column in `auth.users` for seeded ids is set to `''`, so a missed, renamed, or version-specific string column (`phone`, tokens, change fields) cannot leave sign-in broken. Tests cover the phone and reauth columns; 75/75. Hosted sign-in remains open pending another seed re-run. |
+| v20 | 2026-10-31 | The second hosted repair aborted with `23505` on `users_phone_key`: hosted `auth.users.phone` is unique, so six demo rows cannot share `''`. `phone` is NULL-safe in GoTrue (`storage.NullString`), so the string pass now excludes unique-indexed and generated columns (read from `pg_index`/`information_schema`) and turns an unpredicted `unique_violation` into a notice instead of an abort. The harness declares `phone text unique`, reproducing the failure; 75/75. Hosted sign-in remains open pending the re-run. |
+| v21 | 2026-10-31 | Root-caused the surviving hosted 500. Supabase's token indexes (`confirmation_token_idx`, `recovery_token_idx`, `email_change_token_new_idx`, `email_change_token_current_idx`, `reauthentication_token_idx`) are *partial* unique indexes (`WHERE token !~ '^[0-9 ]*$'`), so `''` is outside the index and all six rows can share it. The v20 filter skipped every unique-indexed column, silently skipping exactly the token columns GoTrue scans into plain Go strings, so they stayed NULL. The repair now skips only unconditional unique indexes (`i.indpred is null`) — in practice `phone` alone, which GoTrue reads into `storage.NullString`. The harness declares the five partial indexes and breaks all six rows, so reverting the predicate fails the suite; 75/75. Hosted sign-in remains open pending the re-run. |
+| v19 | 2026-10-31 | The text-only repair still left the hosted 500. Rather than guess again, the repair was derived from GoTrue's `internal/models/user.go`: besides the strings, it scans `is_sso_user` and `is_anonymous` into plain `bool` and `email_change_confirm_status` into plain `int`, so a NULL in any of them raises the same unnamed `500 Database error querying schema`. The seed now runs two `information_schema`-driven passes over `auth.users` — `''` for every text/varchar column, `false`/`false`/`0` for those three fields. The harness declares them nullable and the repair assertion covers them, so dropping either pass fails the suite; 75/75. Hosted sign-in remains open pending the re-run. |
 
