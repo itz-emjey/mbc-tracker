@@ -118,7 +118,7 @@ export function TournamentsPage() {
       <PageHeader
         kicker="Competition floor"
         title="Tournaments"
-        description="Every draw, every event, and the official record of who won. Tournaments carry double ShuttlePower impact once rules are live."
+        description="Every draw, every event, and the official record of who won. A completed tournament match awards double ShuttlePower impact."
         actions={
           canManage ? (
             <Button onClick={() => setFormOpen(true)}>

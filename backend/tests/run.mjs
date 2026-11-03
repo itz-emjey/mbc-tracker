@@ -34,6 +34,7 @@ const [
   registrationMigration,
   receiptMigration,
   approvedSpRuleMigration,
+  tournamentSpMigration,
   seasonPolicies,
   playerSocialPolicies,
   registrationPolicies,
@@ -68,6 +69,7 @@ const [
   readFile(join(backendDir, 'migrations', '014_tournament_registration.sql'), 'utf8'),
   readFile(join(backendDir, 'migrations', '015_payment_receipts.sql'), 'utf8'),
   readFile(join(backendDir, 'migrations', '016_approved_sp_rule.sql'), 'utf8'),
+  readFile(join(backendDir, 'migrations', '017_tournament_sp_award.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '012_seasons.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '013_players_social.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '014_tournament_registration.sql'), 'utf8'),
@@ -407,6 +409,7 @@ await db.exec(playerSocialMigration)
 await db.exec(registrationMigration)
 await db.exec(receiptMigration)
 await db.exec(approvedSpRuleMigration)
+await db.exec(tournamentSpMigration)
 await db.exec(identityPolicies)
 await db.exec(operationPolicies)
 await db.exec(spPolicies)
@@ -4215,6 +4218,310 @@ await test('P4: auto-approval awards SP once, and the helper is internal', async
   assert(rows[0].anon === false, 'anon cannot award SP')
 })
 
+/**
+ * Gives the players a starting balance so a tournament award can run. Mirrors
+ * registration approval: 1,000 SP with a matching initial ledger row.
+ */
+async function ensureTournamentAccounts(playerIds) {
+  await actAs('postgres')
+
+  for (const playerId of playerIds) {
+    const existing = await db.query(
+      `select current_sp from public.sp_accounts where player_id = '${playerId}'`,
+    )
+
+    if (existing.rows.length > 0) continue
+
+    await db.query(
+      `insert into public.sp_transactions (
+         player_id, transaction_type, sp_before, sp_delta, sp_after,
+         reference_type, idempotency_key, metadata
+       ) values (
+         '${playerId}', 'initial', 0, 1000, 1000,
+         'registration', 'player:${playerId}:initial',
+         '{"source":"test fixture"}'::jsonb
+       )`,
+    )
+    await db.query(
+      `insert into public.sp_accounts (player_id, current_sp) values ('${playerId}', 1000)`,
+    )
+  }
+}
+
+/** Creates a one-match event, records the result, and returns the award. */
+async function playTournamentMatch({
+  discipline = 'singles',
+  homePlayers,
+  awayPlayers,
+  homeWins = true,
+}) {
+  await actAs('authenticated', D)
+  const tournament = await createTournament('SP Cup')
+  const event = await createEvent(tournament.id, discipline)
+  const home = (await registerEntry(event.id, homePlayers, 1)).rows[0].result.entry_id
+  const away = (await registerEntry(event.id, awayPlayers, 2)).rows[0].result.entry_id
+
+  await saveDraw(event.id, [
+    {
+      key: 'm1',
+      bracket: 'winners',
+      round: 1,
+      position: 1,
+      home_entry_id: home,
+      away_entry_id: away,
+    },
+  ])
+
+  const matchId = await matchIdFor(event.id, 'winners', 1)
+  const games = homeWins
+    ? [
+        { home_points: 21, away_points: 10 },
+        { home_points: 21, away_points: 12 },
+      ]
+    : [
+        { home_points: 10, away_points: 21 },
+        { home_points: 12, away_points: 21 },
+      ]
+
+  const recorded = await recordResult(matchId, games)
+
+  return { tournament, event, matchId, home, away, result: recorded.rows[0].result }
+}
+
+await test('P5: a completed tournament match awards the 2x adjustment to both players', async () => {
+  await inTransaction(async () => {
+    await ensureTournamentAccounts([P1, P4])
+    const { matchId, result } = await playTournamentMatch({
+      homePlayers: [P1],
+      awayPlayers: [P4],
+      homeWins: true,
+    })
+
+    assert(result.sp_award.status === 'awarded', 'the award runs')
+    assert(
+      result.sp_award.team_total === 40,
+      `expected a 40-point team total, got ${result.sp_award.team_total}`,
+    )
+
+    await actAs('postgres')
+    const rows = await db.query(`
+      select player_id, transaction_type, sp_delta, sp_after, rule_version, idempotency_key
+        from public.sp_transactions
+       where reference_type = 'match' and reference_id = '${matchId}'
+       order by player_id
+    `)
+    assert(rows.rows.length === 2, 'one row per player')
+
+    const byPlayer = Object.fromEntries(rows.rows.map((row) => [row.player_id, row]))
+    assert(byPlayer[P1].transaction_type === 'tournament', 'the row is a tournament row')
+    assert(byPlayer[P1].sp_delta === 40, 'the winner gains 40')
+    assert(byPlayer[P4].sp_delta === -40, 'the loser drops 40')
+    assert(byPlayer[P1].sp_after === 1040, 'the winner balance is cached')
+    assert(byPlayer[P4].sp_after === 960, 'the loser balance is cached')
+    assert(byPlayer[P1].rule_version === 'approved-2026-11', 'the approved version is recorded')
+    assert(
+      byPlayer[P1].idempotency_key === `tournament:${matchId}:${P1}`,
+      'the idempotency key is deterministic',
+    )
+  })
+})
+
+await test('P5: replaying the tournament award writes nothing', async () => {
+  await inTransaction(async () => {
+    await ensureTournamentAccounts([P1, P4])
+    const { matchId } = await playTournamentMatch({ homePlayers: [P1], awayPlayers: [P4] })
+
+    await actAs('postgres')
+    const replay = await db.query(`select public.award_tournament_sp('${matchId}') as result`)
+    assert(replay.rows[0].result.awarded === 0, 'a replay awards nothing')
+
+    const count = await db.query(
+      `select count(*)::int as n
+         from public.sp_transactions
+        where reference_id = '${matchId}' and transaction_type = 'tournament'`,
+    )
+    assert(count.rows[0].n === 2, 'still exactly two rows')
+  })
+})
+
+await test('P5: doubles splits the team adjustment between rated partners', async () => {
+  await inTransaction(async () => {
+    await ensureTournamentAccounts([P1, P2, P3, P4])
+    const { matchId, result } = await playTournamentMatch({
+      discipline: 'mixed_doubles',
+      homePlayers: [P1, P4],
+      awayPlayers: [P3, P2],
+      homeWins: true,
+    })
+
+    assert(result.sp_award.team_total === 40, 'the team adjustment is 40')
+
+    await actAs('postgres')
+    const rows = await db.query(`
+      select player_id, sp_delta
+        from public.sp_transactions
+       where reference_type = 'match' and reference_id = '${matchId}'
+       order by player_id
+    `)
+    const byPlayer = Object.fromEntries(rows.rows.map((row) => [row.player_id, row.sp_delta]))
+
+    assert(rows.rows.length === 4, 'one row per rated player')
+    assert(byPlayer[P1] === 20 && byPlayer[P4] === 20, 'each winner partner gains half')
+    assert(byPlayer[P2] === -20 && byPlayer[P3] === -20, 'each loser partner drops half')
+  })
+})
+
+await test('P5: a correction reverses the award and re-awards under the original version', async () => {
+  await inTransaction(async () => {
+    await ensureTournamentAccounts([P1, P4])
+    const { matchId, result } = await playTournamentMatch({
+      homePlayers: [P1],
+      awayPlayers: [P4],
+      homeWins: true,
+    })
+    assert(result.sp_award.awarded === 2, 'the first result awards both players')
+
+    await actAs('authenticated', D)
+    const corrected = await db.query(
+      `select public.correct_match_result(
+         '${matchId}',
+         '[{"home_points":10,"away_points":21},{"home_points":12,"away_points":21}]'::jsonb,
+         'Winner corrected'
+       ) as result`,
+    )
+    const correctedResult = corrected.rows[0].result
+
+    assert(correctedResult.sp_reversal.reversed === 2, 'the original awards are reversed')
+    assert(correctedResult.sp_award.awarded === 2, 'the corrected result is re-awarded')
+
+    await actAs('postgres')
+    const reversals = await db.query(`
+      select transaction_type, sp_delta, reference_type, rule_version
+        from public.sp_transactions
+       where reference_type = 'correction' and metadata ->> 'match_id' = '${matchId}'
+       order by player_id
+    `)
+    assert(reversals.rows.length === 2, 'two compensating rows')
+    assert(
+      reversals.rows.every((row) => row.transaction_type === 'reversal'),
+      'the compensating rows are reversals',
+    )
+    assert(
+      reversals.rows.every((row) => row.rule_version === 'approved-2026-11'),
+      'the reversal keeps the original rule version',
+    )
+
+    const balances = await db.query(`
+      select player_id, current_sp
+        from public.sp_accounts
+       where player_id in ('${P1}', '${P4}')
+    `)
+    const balanceByPlayer = Object.fromEntries(
+      balances.rows.map((row) => [row.player_id, row.current_sp]),
+    )
+    assert(balanceByPlayer[P1] === 960, 'the former winner now loses')
+    assert(balanceByPlayer[P4] === 1040, 'the corrected winner now gains')
+
+    const awards = await db.query(`
+      select idempotency_key, rule_version
+        from public.sp_transactions
+       where reference_type = 'match' and reference_id = '${matchId}'
+         and transaction_type = 'tournament'
+       order by created_at, id
+    `)
+    assert(awards.rows.length === 4, 'two original plus two re-award rows')
+    assert(
+      awards.rows.every((row) => row.rule_version === 'approved-2026-11'),
+      'the re-award uses the original rule version',
+    )
+    assert(
+      awards.rows.some((row) => row.idempotency_key === `tournament:${matchId}:${P1}:2`),
+      'the re-award gets a new key',
+    )
+  })
+})
+
+await test('P5: a score-only correction that keeps the winner writes no SP rows', async () => {
+  await inTransaction(async () => {
+    await ensureTournamentAccounts([P1, P4])
+    const { matchId } = await playTournamentMatch({
+      homePlayers: [P1],
+      awayPlayers: [P4],
+      homeWins: true,
+    })
+
+    await actAs('authenticated', D)
+    const corrected = await db.query(
+      `select public.correct_match_result(
+         '${matchId}',
+         '[{"home_points":21,"away_points":15},{"home_points":21,"away_points":18}]'::jsonb,
+         'Scores corrected, same winner'
+       ) as result`,
+    )
+    const correctedResult = corrected.rows[0].result
+
+    assert(
+      correctedResult.sp_reversal.status === 'unchanged',
+      'no reversal runs when the winner is unchanged',
+    )
+    assert(
+      correctedResult.sp_award.status === 'unchanged',
+      'no re-award runs when the winner is unchanged',
+    )
+
+    await actAs('postgres')
+    const ledger = await db.query(
+      `select count(*)::int as n from public.sp_transactions where reference_id = '${matchId}'`,
+    )
+    assert(ledger.rows[0].n === 2, 'the original two awards are untouched')
+
+    const balances = await db.query(`
+      select player_id, current_sp
+        from public.sp_accounts
+       where player_id in ('${P1}', '${P4}')
+    `)
+    const balanceByPlayer = Object.fromEntries(
+      balances.rows.map((row) => [row.player_id, row.current_sp]),
+    )
+    assert(balanceByPlayer[P1] === 1040, 'the winner keeps the original gain')
+    assert(balanceByPlayer[P4] === 960, 'the loser keeps the original loss')
+  })
+})
+
+await test('P5: no tournament award runs while no rule version is enabled', async () => {
+  await inTransaction(async () => {
+    await ensureTournamentAccounts([P1, P4])
+    await disableEnabledRules()
+
+    const { matchId, result } = await playTournamentMatch({
+      homePlayers: [P1],
+      awayPlayers: [P4],
+    })
+
+    assert(result.sp_award.status === 'disabled', 'the award reports disabled')
+
+    await actAs('postgres')
+    const count = await db.query(
+      `select count(*)::int as n from public.sp_transactions where reference_id = '${matchId}'`,
+    )
+    assert(count.rows[0].n === 0, 'no ledger row without an enabled rule')
+  })
+})
+
+await test('P5: the tournament award helpers are internal', async () => {
+  const { rows } = await db.query(`
+    select
+      has_function_privilege('authenticated', 'public.award_tournament_sp(uuid,text)', 'EXECUTE') as member_award,
+      has_function_privilege('anon', 'public.award_tournament_sp(uuid,text)', 'EXECUTE') as anon_award,
+      has_function_privilege('authenticated', 'public.reverse_tournament_sp(uuid,text)', 'EXECUTE') as member_reverse,
+      has_function_privilege('anon', 'public.reverse_tournament_sp(uuid,text)', 'EXECUTE') as anon_reverse
+  `)
+  assert(rows[0].member_award === false, 'members cannot award tournament SP directly')
+  assert(rows[0].anon_award === false, 'anon cannot award tournament SP')
+  assert(rows[0].member_reverse === false, 'members cannot reverse tournament SP')
+  assert(rows[0].anon_reverse === false, 'anon cannot reverse tournament SP')
+})
+
 /** Creates and starts a season as the Super Admin, then returns its id. */
 async function openSeason(label = 'Season 2026', starts = '2026-01-01', ends = '2026-12-31') {
   await actAs('authenticated', C)
@@ -4314,6 +4621,26 @@ await test('S1/S13: an awarded friendly accrues Seasonal SP in the active season
       `select count(*)::int as n from public.sp_transactions where reference_id = '${matchId}'`,
     )
     assert(matchRows.rows[0].n === 2, 'the award still writes two ledger rows')
+  })
+})
+
+await test('S1/S13: a tournament award accrues Seasonal SP in the active season', async () => {
+  await inTransaction(async () => {
+    await ensureTournamentAccounts([P1, P4])
+    const seasonId = await openSeason()
+    await playTournamentMatch({ homePlayers: [P1], awayPlayers: [P4] })
+
+    await actAs('postgres')
+    const balances = await db.query(
+      `select seasonal_sp from public.season_balances where season_id = '${seasonId}' order by seasonal_sp`,
+    )
+    assert(balances.rows.length === 2, 'both players get a seasonal balance')
+
+    const values = balances.rows.map((row) => row.seasonal_sp)
+    assert(
+      JSON.stringify(values) === JSON.stringify([-40, 40]),
+      'seasonal SP mirrors the 2x tournament award',
+    )
   })
 })
 

@@ -43,13 +43,14 @@ backend/
 28. `migrations/015_payment_receipts.sql`
 29. `policies/015_payment_receipts.sql`
 30. `migrations/016_approved_sp_rule.sql`
+31. `migrations/017_tournament_sp_award.sql`
 
 The migrations are **not** idempotent: re-running one fails at the first
 `CREATE`, by design. Never add `IF NOT EXISTS` or `DROP` to a migration.
 
 ### Applying to the hosted Supabase project
 
-Open **Supabase Dashboard → SQL Editor** and run the thirty files above, in
+Open **Supabase Dashboard → SQL Editor** and run the thirty-one files above, in
 order, as the project owner. No dashboard schema edits are required, and no
 service-role key or database password is involved. Confirm afterwards that
 `public` contains every expected table and every one has RLS enabled, that the six
@@ -89,7 +90,15 @@ self-entry, and draw eligibility; they also create the public
 payment receipts. Step 30 (`016_approved_sp_rule.sql`) inserts the club-approved
 `approved-2026-11` rule version and enables it, which is the deliberate step that
 lets a confirmed friendly award SP; the applied `provisional-2026-11` row is left
-untouched.
+untouched. Step 31 (`017_tournament_sp_award.sql`) adds the internal
+`award_tournament_sp` and `reverse_tournament_sp` helpers and supersedes
+`record_match_result` and `correct_match_result`. A completed tournament match
+now awards the approved 2× adjustment from the two team averages, split across
+the rated players, with ledger keys `tournament:<match>:<player>`; a winner-flip
+correction writes append-only `reversal` rows keyed to the original row and
+re-awards under the **original** rule version (F4, D14), while a score-only
+correction that keeps the winner writes no SP rows. Guests and unlinked players
+without an SP account are skipped, and Seasonal SP accrues for the active season.
 
 **Status:** files 1–20 are applied to the hosted `mbc-arena` project.
 Files 1–5 went in on 2026-10-30 and files 6–8 on 2026-10-31; files 9–12
@@ -110,11 +119,13 @@ and design images; Phase 5 friendly matches) are verified locally only; apply
 them to the hosted project before using those screens. Migration 011 (the
 friendly SP award), migration 012 (the seasonal schema), migrations 013–015
 (player IDs, friendships, notifications, tournament registration, and payment
-receipts), and migration 016 (the approved SP rule) are verified locally only as
-well. Migration 016 is what turns the friendly award on; the seasonal schema
-stays inert until a Super Admin starts a season. Remaining work is product scope
-(§7 rules and the next phase), not hosted setup. The repository intentionally
-stores no credentials that would let an agent apply migrations automatically.
+receipts), migration 016 (the approved SP rule), and migration 017 (the
+tournament award and F4 reversals) are verified locally only as well. Migration
+016 is what turns the friendly award on, and migration 017 turns the tournament
+award on; the seasonal schema stays inert until a Super Admin starts a season.
+Remaining work is product scope (§7 rules and the next phase), not hosted setup.
+The repository intentionally stores no credentials that would let an agent apply
+migrations automatically.
 
 ## Seeds
 
@@ -198,8 +209,8 @@ npm run test:db
 `backend/tests/run.mjs` runs a real PostgreSQL engine compiled to WebAssembly
 (PGlite), stubs `auth.users` and `auth.uid()` with the same shape Supabase
 provides (the token, bool, and integer columns GoTrue reads are declared
-nullable so the seed's repair pass is exercised), applies all sixteen migrations
-and all fourteen policy files, and asserts (168 checks):
+nullable so the seed's repair pass is exercised), applies all seventeen migrations
+and all fourteen policy files, and asserts (176 checks):
 
 - every expected table exists and has RLS enabled;
 - the migrations fail loudly on a second run;
@@ -239,7 +250,10 @@ and all fourteen policy files, and asserts (168 checks):
   time, clients read but never write rule versions, reconciliation confirms a
   matching ledger and reports drift without repairing it, and only a Super Admin
   can run it. A confirmed friendly at equal ratings awards +20 / −20 under the
-  approved rule and records its version on both ledger rows;
+  approved rule and records its version on both ledger rows. A completed
+  tournament match awards the 2× team adjustment from the two team averages,
+  splits it across the rated players, and is idempotent per player; a correction
+  writes append-only `reversal` rows and re-awards under the original version;
 - training and payments (Phase 6): every table is read-only to clients, a
   player or tournament manager cannot create sessions or fee periods, session
   creation is audited, times and forward-only status transitions are enforced,
@@ -272,6 +286,13 @@ and all fourteen policy files, and asserts (168 checks):
   with a replay awarding nothing and reconciliation still exact, participants
   and Super Admins see a match while an unrelated member sees none, `anon` is
   denied, and the internal award helper is callable by nobody but the finalizers;
+- tournament SP award and reversals (Phase 4, migration 017): a completed match
+  awards both sides from the approved rule, a replay writes nothing, a doubles
+  team splits evenly, a winner-flip correction reverses every prior row and
+  re-awards under the original version while a score-only correction writes
+  nothing, no award runs while no rule version is enabled, an
+  awarded tournament match accrues Seasonal SP in the active season, and the
+  internal award and reversal helpers are callable by nobody;
 - seasons (S1–S23, migration 012): every seasonal table is read-only to clients
   and `anon` is denied, only a Super Admin creates, starts, closes, and decides a
   season, one season is active at a time and overlapping ranges are refused, an
@@ -345,8 +366,8 @@ migration. Never edit regenerated output by hand.
   row is provisional and disabled; `approved-2026-11` (migration 016) is the
   single enabled row. A CHECK constraint makes an unapproved version impossible
   to enable, and a partial unique index allows only one enabled version. Clients
-  cannot award SP: the internal friendly finalizers do, and tournament awarding
-  and corrections (F4) are not built.
+  cannot award SP: the internal friendly and tournament helpers do, and the
+  correction RPC writes the compensating reversal.
 - `reconcile_sp_balances()` is Super Admin only, reports every cached balance
   that differs from its ledger sum, and never writes a correction.
 - Training and payment tables are read-only to clients. Sessions, attendance,

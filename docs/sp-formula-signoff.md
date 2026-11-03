@@ -7,9 +7,10 @@
 **Covers:** `PLAN.md` §7 rules 1 (the formula), 2 (minimum and ceiling), 6 (doubles distribution), and the new §7.1.11
 (the rule for corrected and invalidated results, decision F4).
 
-**Status:** F1–F3 **approved 2026-11-03 by the club owner** and recorded in `PLAN.md` §7 as decision **D13**. Migration
-016 inserts the approved `approved-2026-11` rule version and enables it, so confirmed friendlies now award SP. **F4
-(corrected and invalidated results) is still open** and is not authorised by that approval.
+**Status:** F1–F3 **approved 2026-11-03 by the club owner** and recorded in `PLAN.md` §7 as decision **D13**. F4
+(corrected and invalidated results) was **approved the same day as D14** and implemented in migration 017. Migration
+016 inserts and enables the `approved-2026-11` rule version, so confirmed friendlies and completed tournament matches
+now award SP, and a corrected tournament result reverses and re-awards under the original rule version.
 
 **Read time:** about 5 minutes. Every number has a one-line reason, and every example is computed from the formula
 on this page.
@@ -18,9 +19,9 @@ on this page.
 
 ## Why this page exists
 
-The app records matches. **F1–F3 were approved on 2026-11-03 and confirmed friendlies now award SP.** F4 remains open,
-so a corrected or invalidated result still has no approved SP treatment. That is deliberate: the numbers are the
-club's decision, never a developer's guess.
+The app records matches. **F1–F3 were approved on 2026-11-03 and confirmed friendlies and completed tournament matches
+now award SP. F4 was approved the same day**, so a corrected or invalidated played result now has an approved SP
+treatment. That is deliberate: the numbers are the club's decision, never a developer's guess.
 
 This page asked for the three formula decisions that switch SP on, and nothing else. It deliberately leaves out the
 placement system for new players, the treatment of unplayed matches, and disputes — each is a separate gate.
@@ -138,10 +139,10 @@ a formula question, and it only matters if placement is approved.
 
 A result can be changed after it is finalized — a score is entered wrongly, a winner is corrected, a match is
 invalidated — and a winner flip is possible. The ledger can never delete or edit a row, so without a rule for this
-two players can both end up holding a win from the same match. F4 is the last decision that stands between the
-approved formula and a correction-safe award; friendly awards work today because they do not implement reversals.
+two players can both end up holding a win from the same match. F4 was the last decision between the approved formula
+and a correction-safe award.
 
-**Proposed — still open:**
+**Approved 2026-11-03 — D14, implemented in migration 017:**
 
 - A finalized result awards SP **once**.
 - A later correction writes **compensating rows only**. Nothing is edited or deleted, and the compensation is written
@@ -165,11 +166,11 @@ history as a reversal plus a new award rather than a tidy edit. That is the pric
 
 ---
 
-## What the F1–F3 approval created (2026-11-03)
+## What the F1–F4 approval created (2026-11-03)
 
 1. The decision is recorded in `PLAN.md` §7 as **D13** with the date, the approver, and every value. F1–F3 created
-   the rule version described next; **F4 would add no configuration** — it is a behaviour rule the awarding function
-   must implement.
+   the rule version described next; **F4 added no configuration** — it is a behaviour rule the awarding function
+   implements (D14, migration 017).
 2. A **new** rule version, `approved-2026-11`, was inserted by migration 016 with exactly this configuration and
    enabled:
 
@@ -194,40 +195,41 @@ both `Math.round` and SQL `round()` for positive values.
 3. The applied `provisional-2026-11` row was **never edited**, so every past calculation stays auditable against the
    version that produced it.
 4. The approved order of operations and the doubles remainder rule were implemented in `domain/sp.ts` and in the
-   friendly awarding function, with tests proving SP is awarded **exactly once**.
+   friendly and tournament awarding functions, with tests proving SP is awarded **exactly once**.
 5. The version is **enabled** and is the single enabled row; the unapproved proposal remains disabled.
 
-## What F4 would create
+## What F4 created
 
 F4 adds no config and no rule version. It is a behaviour contract for the awarding and correction functions:
-compensating `reversal` rows, re-award under the original rule version, and one transaction per correction. It must be
-approved and implemented before a tournament awarding or correction RPC ships.
+compensating `reversal` rows, re-award under the original rule version, and one transaction per correction. Migration
+017 implements it for tournament matches through `reverse_tournament_sp()` and the superseded `correct_match_result()`.
 
 ## What is still missing
 
-F1–F3 are approved and the friendly award is live. These items remain:
+F1–F4 are approved and both the friendly and tournament awards are live. These items remain:
 
 | # | What | Why it matters |
 | --- | --- | --- |
-| 1 | **F4 approval** | Corrected and invalidated results still have no approved SP treatment. It must be in force before a tournament awarding or correction RPC ships. |
-| 2 | **Tournament awarding** | Only confirmed friendlies award SP today; a completed tournament match still moves nothing. |
-| 3 | **Placement, seasons, and their implementation** | Separate gates; see below. |
+| 1 | **Placement** | New-player placement (§7 rules 16, 20–25) is a separate gate and is not implemented. |
+| 2 | **Unplayed-match SP** | Walkovers, no-shows, forfeits, disqualifications, and withdrawals have no approved SP rule. |
+| 3 | **Seasonal implementation** | The rules are approved (S1–S23) and migration 012 provides the storage layer, but the scheduler, notification, recovery view, and leaderboard are unbuilt. |
 
 ## What this page does not approve
 
 - **Placement for new players** (§7 rules 16, 20–25) — a separate gate.
 - **SP for unplayed matches** — walkovers, no-shows, forfeits before play, disqualifications, and withdrawals
-  (§7 rule 9, part of F4).
+  (§7 rule 9; still open after F4).
 - **Dispute resolution** (§7 rule 8).
-- **Seasons and deductions** — the rules are approved (S1–S23) but nothing is built.
-- **Any code, migration, or rule change beyond migration 016.** F1–F3 are in force; F4 would create no version.
+- **Seasons and deductions** — the rules are approved (S1–S23) and the storage layer exists, but the scheduled job,
+  notifications, recovery view, and leaderboard are unbuilt.
+- **Any further code, migration, or rule change.** F1–F4 are in force; F4 created no version.
 
 ---
 
 ## Sign-off
 
 Initial each line you approve, or write the value you prefer. F1–F3 were approved on 2026-11-03 by the club owner and
-are recorded as D13; F4 remains open.
+are recorded as D13; F4 was approved the same day as D14.
 
 | # | Decision | Recommended | Your decision | Initials | Date |
 | --- | --- | --- | --- | --- | --- |
@@ -237,9 +239,9 @@ are recorded as D13; F4 remains open.
 | F2 | Minimum SP / ceiling | 0 / none | **Approved** | Club owner | 2026-11-03 |
 | F3 | Doubles split | Even, odd point to the lower player id | **Approved** | Club owner | 2026-11-03 |
 | F3 | Doubles parameters | One set for singles and doubles | **Approved** | Club owner | 2026-11-03 |
-| F4 | Corrected / invalidated results | Compensating rows only; re-award under the original rule version | **Open** | | |
+| F4 | Corrected / invalidated results | Compensating rows only; re-award under the original rule version | **Approved** | Club owner | 2026-11-03 |
 
-**Approved by:** Club owner  **Role:** Club owner  **Date:** 2026-11-03 (F1–F3 only; F4 open)
+**Approved by:** Club owner  **Role:** Club owner  **Date:** 2026-11-03 (F1–F4)
 
 ---
 

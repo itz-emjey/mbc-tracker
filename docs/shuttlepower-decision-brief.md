@@ -5,8 +5,10 @@
 **Prepared:** 2026-11-01
 
 **Status:** the formula decisions (F1–F3, rows 1–6) were **approved 2026-11-03 by the club owner** and recorded as
-D13 in `PLAN.md` §7. Migration 016 enabled the `approved-2026-11` rule, so confirmed friendlies now award SP. The
-placement and unplayed-match rows (7–8) and F4 (corrected/invalidated results) remain open.
+D13 in `PLAN.md` §7. **F4 (corrected/invalidated results) was approved the same day as D14.** Migration 016 enabled the
+`approved-2026-11` rule, and migration 017 added the tournament award and F4 reversals, so confirmed friendlies and
+completed tournament matches now award SP and a corrected tournament result reverses and re-awards. The placement and
+unplayed-match rows (7–8) remain open.
 
 **Read time:** about 5 minutes. Every number has a one-line reason.
 
@@ -14,15 +16,15 @@ placement and unplayed-match rows (7–8) and F4 (corrected/invalidated results)
 
 ## Why you are being asked
 
-The app already records friendly matches, tournament results, and player profiles. **Confirmed friendlies now award
-SP** under the approved formula. Tournament results, placement, and corrections still do not, because those paths are
-unbuilt or unapproved. The exact numbers were approved by the club, never guessed by a developer.
+The app already records friendly matches, tournament results, and player profiles. **Confirmed friendlies and completed
+tournament matches now award SP** under the approved formula. Placement and unplayed matches still do not, because
+those paths are unbuilt or unapproved. The exact numbers were approved by the club, never guessed by a developer.
 
-This page originally asked for every number in one sitting. The formula half is now decided; what remains is placement,
-the unplayed-match rule, and corrections/reversals.
+This page originally asked for every number in one sitting. The formula and correction rules are now decided; what
+remains is placement and the unplayed-match rule.
 
-**Formula only, nothing else?** `docs/sp-formula-signoff.md` packages just §7 rules 1, 2, and 6; its F1–F3 rows are
-approved, and its F4 row is still open.
+**Formula only, nothing else?** `docs/sp-formula-signoff.md` packages just §7 rules 1, 2, and 6 plus F4; its F1–F4 rows
+are all approved.
 
 ## Already decided — please do not re-decide these
 
@@ -178,15 +180,19 @@ These are real, but they block only later phases. Approving the five decisions a
 
 ## What happened after the formula approval
 
-1. The decision was recorded in `PLAN.md` §7 as D13 with the date, the approver, and every value.
+1. The decision was recorded in `PLAN.md` §7 as D13 with the date, the approver, and every value. F4 followed the same
+   day as D14.
 2. A **new** rule version, `approved-2026-11`, was created by migration 016 and enabled. The old provisional version
    was never edited, so past calculations stay auditable.
-3. The approved rounding order and doubles remainder rule were implemented in the calculation engine and the
+3. The approved rounding order and doubles remainder rule were implemented in the calculation engine and in the
    friendly awarding database function, with tests proving SP is awarded exactly once.
-4. The version was **enabled**, and confirmed friendlies now move SP.
+4. Migration 017 added the tournament award and F4's compensating reversals. A completed tournament match now awards
+   the 2× adjustment; a winner-flip correction reverses its prior rows and re-awards under the original rule version,
+   while a score-only correction that keeps the winner writes no SP rows.
+5. The version is **enabled**, and confirmed friendlies and completed tournament matches now move SP.
 
-**What is still not switched on:** tournament awarding, placement, and corrections/reversals (F4). Those remain
-separate approvals and implementation work.
+**What is still not switched on:** placement and SP for unplayed matches. Those remain separate approvals and
+implementation work.
 
 ---
 
@@ -202,10 +208,11 @@ Initial each line you approve, or write the value you prefer.
 | 4 | Minimum SP / ceiling | 0 / none | **Approved** | Club owner | 2026-11-03 |
 | 5 | Doubles split | Even, odd point to lower id | **Approved** | Club owner | 2026-11-03 |
 | 6 | Doubles parameters | One set for singles and doubles | **Approved** | Club owner | 2026-11-03 |
+| F4 | Corrected / invalidated results | Compensating rows only; re-award under the original rule version | **Approved** | Club owner | 2026-11-03 |
 | 7 | Placement system | Path B (10 matches, hidden, publish unchanged) or Path A (defer) | **Open** | | |
 | 8 | Unplayed matches | No SP | **Open** | | |
 
-**Approved by:** Club owner  **Role:** Club owner  **Date:** 2026-11-03 (rows 1–6 only; rows 7–8 open)
+**Approved by:** Club owner  **Role:** Club owner  **Date:** 2026-11-03 (rows 1–6 and F4; rows 7–8 open)
 
 ---
 

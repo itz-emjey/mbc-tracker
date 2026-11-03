@@ -297,8 +297,9 @@ Confirmed rules:
     applied **before** the multiplier, tournament **×2**, floor **0**, no
     ceiling, and an **even** doubles split with the odd point to the lower
     player id. It is recorded as the enabled `approved-2026-11` rule version
-    in migration 016. Confirmed friendlies now award SP; tournament
-    awarding and corrections/reversals are still unbuilt.
+    in migration 016. Confirmed friendlies and completed tournament matches
+    now award SP, and F4 (D14, migration 017) adds compensating reversals so a
+    corrected tournament result re-awards under the original rule version.
 
 > **Reconciliation (2026-11-02).** These bullets now reflect the approved
 > decisions S1–S23 in `PLAN.md` §7.3. Superseded drafts: three-month seasons
@@ -310,35 +311,33 @@ Confirmed rules:
 
 The match-SP formula is **approved** (D13, `PLAN.md` §7.1,
 `docs/sp-formula-signoff.md` F1–F3) and the enabled `approved-2026-11` rule
-awards confirmed friendlies. Do not change its values without a new recorded
-approval and a new rule version; never edit the applied `provisional-2026-11`
-or `approved-2026-11` rows.
+awards confirmed friendlies and completed tournament matches. F4 (D14,
+migration 017) adds the compensating reversals. Do not change its values
+without a new recorded approval and a new rule version; never edit the applied
+`provisional-2026-11` or `approved-2026-11` rows.
 
 Still open:
 
-1.  **F4 — corrected and invalidated results.** Compensating rows only,
-    re-award under the original rule version, one transaction per correction
-    (`PLAN.md` §7.1.11). Must be approved and implemented before a tournament
-    awarding or correction RPC ships.
-2.  **Tournament awarding.** Only friendlies award SP today.
-3.  **Walkover, withdrawal, disqualification, and forfeit SP treatment.**
-    Placement eligibility is approved (D12), but SP treatment is part of F4.
-4.  **The near-zero doubles floor interaction.** If one partner is clamped at
+1.  **Walkover, withdrawal, disqualification, and forfeit SP treatment.**
+    Placement eligibility is approved (D12), but unplayed-match SP is
+    unapproved.
+2.  **The near-zero doubles floor interaction.** If one partner is clamped at
     0, whether the other partner's share is reduced is still open
     (`PLAN.md` §7.1.5 #18).
-5.  **Placement implementation.** The 10-match system, initial provisional
+3.  **Placement implementation.** The 10-match system, initial provisional
     value, visibility, qualification, and the D11 Unrated-share question are
     still unapproved.
-6.  **Seasonal implementation.** The business rules are approved (S1–S23,
+4.  **Seasonal implementation.** The business rules are approved (S1–S23,
     `PLAN.md` §7.3); the scheduler, notifications, recovery view, leaderboard,
     and award integration are unbuilt.
 
-Decided and no longer open: the friendly formula and curve (D13), the
-per-match minimum and maximum (D13), whether SP can go below zero (D13: no,
-floor 0), the seasonal deduction amounts (S8: fixed 40 / 30 / 20 / 10 by
-fixed position), the seasonal rank basis (S8, S10–S12), the deduction target
-(S1 and S8: current SP only), and the doubles split and rounding (D13: even
-split, lower-id odd point, half-up before the multiplier).
+Decided and no longer open: the friendly and tournament formula and curve
+(D13), the per-match minimum and maximum (D13), whether SP can go below zero
+(D13: no, floor 0), the seasonal deduction amounts (S8: fixed 40 / 30 / 20 / 10
+by fixed position), the seasonal rank basis (S8, S10–S12), the deduction target
+(S1 and S8: current SP only), the doubles split and rounding (D13: even split,
+lower-id odd point, half-up before the multiplier), and corrected/invalidated
+results (D14: compensating rows only, re-award under the original version).
 
 Recommended separation of values:
 
@@ -1002,8 +1001,9 @@ must not be silently decided by the coding agent.
 > season boundaries (S2), and the archive (S19) — see `PLAN.md` §7.3. The table
 > below is retained for history; where it disagrees with §7.3, §7.3 governs.
 > **The match-SP formula was approved 2026-11-03 (D13)** and the enabled
-> `approved-2026-11` rule awards confirmed friendlies; F4 (corrected and
-> invalidated results) is still open (`docs/sp-formula-signoff.md`).
+> `approved-2026-11` rule awards confirmed friendlies and completed tournament
+> matches. **F4 was approved the same day (D14)** and is implemented in
+> migration 017 (`docs/sp-formula-signoff.md`).
 
   -----------------------------------------------------------------------
   Topic                   Current understanding   Still needs
@@ -1040,7 +1040,8 @@ must not be silently decided by the coding agent.
                                                   rule
 
   Walkovers/forfeits      Tournament matches      Whether and how they
-                          supported               affect SP (F4, open)
+                          supported               affect SP (unplayed-match
+                                                  SP, still open)
 
   SP lower bound          Not specified           **Decided — D13: floor
                                                   0**
