@@ -56,3 +56,28 @@ export interface JerseyOrderRecord {
   status: JerseyOrderStatus
   created_at: string
 }
+
+export type JerseyPaymentStatus = 'unpaid' | 'paid' | 'waived'
+
+export const JERSEY_PAYMENT_STATUSES: readonly JerseyPaymentStatus[] = ['unpaid', 'paid', 'waived']
+
+export const JERSEY_PAYMENT_STATUS_LABELS: Record<JerseyPaymentStatus, string> = {
+  unpaid: 'Unpaid',
+  paid: 'Paid',
+  waived: 'Waived',
+}
+
+/** One fee row per jersey order; the total is snapshotted from the project price. */
+export interface JerseyOrderPaymentRecord {
+  id: string
+  order_id: string
+  player_id: string
+  /** PostgREST may return `numeric` as a string. */
+  amount: string | number
+  status: JerseyPaymentStatus
+  marked_by: string | null
+  marked_at: string | null
+  note: string | null
+  created_at: string
+  updated_at: string
+}

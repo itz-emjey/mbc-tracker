@@ -1,11 +1,13 @@
-import { Download, ImagePlus, Plus, Shirt, Trash2 } from 'lucide-react'
+import { Download, ImagePlus, Plus, Receipt, Shirt, Trash2 } from 'lucide-react'
 import * as React from 'react'
 import { toast } from 'sonner'
 
+import { ArenaStatStrip } from '@/components/arena/arena-ui'
 import { EmptyState } from '@/components/shared/empty-state'
 import { ErrorState } from '@/components/shared/error-state'
 import { LoadingState } from '@/components/shared/loading-state'
 import { PageHeader } from '@/components/shared/page-header'
+import { StatusBadge } from '@/components/shared/status-badge'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -41,6 +43,12 @@ import { hasAnyRole } from '@/features/auth/types'
 import { getPlayerByProfile, listPlayers } from '@/features/players/api'
 import type { PlayerRecord } from '@/features/players/types'
 import {
+  listPendingJerseyReceipts,
+  submitPaymentReceipt,
+  type PendingJerseyReceiptRecord,
+} from '@/features/receipts/api'
+import { RECEIPT_ACCEPT, validateReceiptFile } from '@/features/receipts/files'
+import {
   addJerseyDesign,
   addJerseySize,
   cancelJerseyOrder,
@@ -48,24 +56,37 @@ import {
   createJerseyProject,
   jerseyDesignImageUrl,
   listJerseyDesigns,
+  listJerseyOrderPayments,
   listJerseyOrders,
   listJerseyProjects,
   listJerseySizes,
   saveJerseyDesignImage,
+  setJerseyOrderPayment,
   setJerseyProjectStatus,
   submitJerseyOrder,
 } from '@/features/jerseys/api'
 import { downloadCsv, ordersToCsv } from '@/features/jerseys/csv'
 import { JERSEY_IMAGE_ACCEPT, validateJerseyImage } from '@/features/jerseys/images'
+import { paymentsByOrder, summarizeJerseyPayments } from '@/features/jerseys/payments'
 import {
+  JERSEY_PAYMENT_STATUS_LABELS,
+  JERSEY_PAYMENT_STATUSES,
   JERSEY_STAFF_ROLES,
   JERSEY_STATUS_LABELS,
   type JerseyDesignRecord,
+  type JerseyOrderPaymentRecord,
   type JerseyOrderRecord,
+  type JerseyPaymentStatus,
   type JerseyProjectRecord,
   type JerseyProjectStatus,
   type JerseySizeRecord,
 } from '@/features/jerseys/types'
+import { formatMoney, toAmount } from '@/features/training/money'
+import {
+  PAYMENT_METHODS,
+  PAYMENT_METHOD_LABELS,
+  type PaymentMethod,
+} from '@/features/training/types'
 import { formatDateTime } from '@/lib/format'
 
 function formatPrice(value: string | null): string {
@@ -92,12 +113,15 @@ export function JerseysPage() {
   const [designs, setDesigns] = React.useState<JerseyDesignRecord[]>([])
   const [sizes, setSizes] = React.useState<JerseySizeRecord[]>([])
   const [orders, setOrders] = React.useState<JerseyOrderRecord[]>([])
+  const [payments, setPayments] = React.useState<JerseyOrderPaymentRecord[]>([])
+  const [pendingReceipts, setPendingReceipts] = React.useState<PendingJerseyReceiptRecord[]>([])
   const [players, setPlayers] = React.useState<PlayerRecord[]>([])
   const [ownPlayer, setOwnPlayer] = React.useState<PlayerRecord | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [reloadKey, setReloadKey] = React.useState(0)
   const [projectOpen, setProjectOpen] = React.useState(false)
+  const [busyPaymentId, setBusyPaymentId] = React.useState<string | null>(null)
   /** Captured when the data arrives, so deadline checks stay out of render. */
   const [loadedAt, setLoadedAt] = React.useState(0)
   const [assetTarget, setAssetTarget] = React.useState<{
@@ -105,6 +129,10 @@ export function JerseysPage() {
     kind: 'design' | 'size'
   } | null>(null)
   const [imageTarget, setImageTarget] = React.useState<JerseyDesignRecord | null>(null)
+  const [receiptTarget, setReceiptTarget] = React.useState<{
+    payment: JerseyOrderPaymentRecord
+    projectName: string
+  } | null>(null)
 
   React.useEffect(() => {
     let active = true
@@ -114,11 +142,21 @@ export function JerseysPage() {
       setError(null)
 
       try {
-        const [nextProjects, nextDesigns, nextSizes, nextOrders, nextPlayers] = await Promise.all([
+        const [
+          nextProjects,
+          nextDesigns,
+          nextSizes,
+          nextOrders,
+          nextPayments,
+          nextReceipts,
+          nextPlayers,
+        ] = await Promise.all([
           listJerseyProjects(),
           listJerseyDesigns(),
           listJerseySizes(),
           listJerseyOrders(),
+          listJerseyOrderPayments(),
+          listPendingJerseyReceipts(),
           listPlayers(),
         ])
         const player = user ? await getPlayerByProfile(user.id) : null
@@ -129,6 +167,8 @@ export function JerseysPage() {
         setDesigns(nextDesigns)
         setSizes(nextSizes)
         setOrders(nextOrders)
+        setPayments(nextPayments)
+        setPendingReceipts(nextReceipts)
         setPlayers(nextPlayers)
         setOwnPlayer(player)
         setLoadedAt(Date.now())
@@ -153,6 +193,23 @@ export function JerseysPage() {
     [players],
   )
 
+  const paymentByOrder = React.useMemo(() => paymentsByOrder(payments), [payments])
+
+  const pendingReceiptByPayment = React.useMemo(() => {
+    const grouped = new Map<string, PendingJerseyReceiptRecord>()
+
+    for (const receipt of pendingReceipts) {
+      if (receipt.jersey_payment_id) grouped.set(receipt.jersey_payment_id, receipt)
+    }
+
+    return grouped
+  }, [pendingReceipts])
+
+  const openProjects = projects.filter((project) => project.status === 'open').length
+  const myOrders = ownPlayer
+    ? orders.filter((order) => order.player_id === ownPlayer.id && order.status === 'submitted')
+    : []
+
   async function moveStatus(project: JerseyProjectRecord, status: JerseyProjectStatus) {
     try {
       await setJerseyProjectStatus(project.id, status)
@@ -160,6 +217,22 @@ export function JerseysPage() {
       reload()
     } catch (statusError) {
       toast.error(errorMessage(statusError))
+    }
+  }
+
+  async function markPayment(payment: JerseyOrderPaymentRecord, status: JerseyPaymentStatus) {
+    if (payment.status === status) return
+
+    setBusyPaymentId(payment.id)
+
+    try {
+      await setJerseyOrderPayment(payment.id, status)
+      toast.success(`Payment marked ${JERSEY_PAYMENT_STATUS_LABELS[status].toLowerCase()}.`)
+      reload()
+    } catch (paymentError) {
+      toast.error(errorMessage(paymentError))
+    } finally {
+      setBusyPaymentId(null)
     }
   }
 
@@ -206,6 +279,7 @@ export function JerseysPage() {
   return (
     <>
       <PageHeader
+        kicker="Club kit"
         title="Jerseys"
         description="Designs, sizes, and the order list. One active order per player and project."
         actions={
@@ -218,8 +292,22 @@ export function JerseysPage() {
         }
       />
 
+      <ArenaStatStrip
+        className="mt-5"
+        stats={[
+          { label: 'Projects', value: String(projects.length), detail: 'All kit projects' },
+          { label: 'Open', value: String(openProjects), detail: 'Accepting orders' },
+          { label: 'Designs', value: String(designs.length), detail: 'Mockups on file' },
+          {
+            label: 'Your orders',
+            value: String(myOrders.length),
+            detail: myOrders.length > 0 ? 'Submitted' : 'Nothing ordered yet',
+          },
+        ]}
+      />
+
       {projects.length === 0 ? (
-        <Card className="mt-5">
+        <Card className="mt-4">
           <CardContent className="p-5">
             <EmptyState
               icon={Shirt}
@@ -241,7 +329,7 @@ export function JerseysPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="mt-5 flex flex-col gap-4">
+        <div className="mt-4 grid gap-4 xl:grid-cols-2">
           {projects.map((project) => {
             const projectDesigns = designs.filter((design) => design.project_id === project.id)
             const projectSizes = sizes.filter((size) => size.project_id === project.id)
@@ -249,6 +337,14 @@ export function JerseysPage() {
               (order) => order.project_id === project.id && order.status === 'submitted',
             )
             const myOrder = projectOrders.find((order) => order.player_id === ownPlayer?.id)
+            const myPayment = myOrder ? paymentByOrder.get(myOrder.id) : undefined
+            const myPendingReceipt = myPayment
+              ? pendingReceiptByPayment.get(myPayment.id)
+              : undefined
+            const projectPayments = projectOrders
+              .map((order) => paymentByOrder.get(order.id))
+              .filter((payment): payment is JerseyOrderPaymentRecord => payment !== undefined)
+            const paymentSummary = summarizeJerseyPayments(projectPayments)
             const deadlinePassed =
               project.order_deadline !== null &&
               new Date(project.order_deadline).getTime() < loadedAt
@@ -379,6 +475,15 @@ export function JerseysPage() {
                           </Button>
                         </div>
 
+                        {projectOrders.length > 0 ? (
+                          <p className="mb-2 text-xs text-text-muted">
+                            {paymentSummary.settled} of {projectOrders.length} fees settled
+                            {paymentSummary.outstandingAmount > 0
+                              ? ` · ${formatMoney(paymentSummary.outstandingAmount)} outstanding`
+                              : ''}
+                          </p>
+                        ) : null}
+
                         {projectOrders.length === 0 ? (
                           <p className="text-sm text-text-muted">No orders yet.</p>
                         ) : (
@@ -389,26 +494,69 @@ export function JerseysPage() {
                                 <TableHead>Design</TableHead>
                                 <TableHead>Size</TableHead>
                                 <TableHead className="text-right">Qty</TableHead>
+                                <TableHead className="text-right">Fee</TableHead>
+                                <TableHead>Payment</TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {projectOrders.map((order) => (
-                                <TableRow key={order.id}>
-                                  <TableCell className="text-text">
-                                    {playersById.get(order.player_id)?.full_name ?? 'Unknown'}
-                                  </TableCell>
-                                  <TableCell className="text-text-muted">
-                                    {designs.find((design) => design.id === order.design_id)
-                                      ?.name ?? '—'}
-                                  </TableCell>
-                                  <TableCell className="text-text-muted">
-                                    {sizes.find((size) => size.id === order.size_id)?.label ?? '—'}
-                                  </TableCell>
-                                  <TableCell className="text-right tabular-nums">
-                                    {order.quantity}
-                                  </TableCell>
-                                </TableRow>
-                              ))}
+                              {projectOrders.map((order) => {
+                                const payment = paymentByOrder.get(order.id)
+                                const playerName =
+                                  playersById.get(order.player_id)?.full_name ?? 'Unknown'
+
+                                return (
+                                  <TableRow key={order.id}>
+                                    <TableCell className="text-text">{playerName}</TableCell>
+                                    <TableCell className="text-text-muted">
+                                      {designs.find((design) => design.id === order.design_id)
+                                        ?.name ?? '—'}
+                                    </TableCell>
+                                    <TableCell className="text-text-muted">
+                                      {sizes.find((size) => size.id === order.size_id)?.label ??
+                                        '—'}
+                                    </TableCell>
+                                    <TableCell className="text-right tabular-nums">
+                                      {order.quantity}
+                                    </TableCell>
+                                    <TableCell className="text-right tabular-nums text-text-muted">
+                                      {payment ? formatMoney(payment.amount) : '—'}
+                                    </TableCell>
+                                    <TableCell>
+                                      {payment ? (
+                                        <div className="flex items-center gap-2">
+                                          <StatusBadge status={payment.status} />
+                                          <Select
+                                            value={payment.status}
+                                            onValueChange={(value) =>
+                                              void markPayment(
+                                                payment,
+                                                value as JerseyPaymentStatus,
+                                              )
+                                            }
+                                            disabled={busyPaymentId === payment.id}
+                                          >
+                                            <SelectTrigger
+                                              className="w-28"
+                                              aria-label={`Payment for ${playerName}`}
+                                            >
+                                              <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                              {JERSEY_PAYMENT_STATUSES.map((status) => (
+                                                <SelectItem key={status} value={status}>
+                                                  {JERSEY_PAYMENT_STATUS_LABELS[status]}
+                                                </SelectItem>
+                                              ))}
+                                            </SelectContent>
+                                          </Select>
+                                        </div>
+                                      ) : (
+                                        '—'
+                                      )}
+                                    </TableCell>
+                                  </TableRow>
+                                )
+                              })}
                             </TableBody>
                           </Table>
                         )}
@@ -418,12 +566,39 @@ export function JerseysPage() {
                     <div className="flex flex-col gap-3 rounded-sm border border-border p-3">
                       {myOrder ? (
                         <div className="flex flex-wrap items-center justify-between gap-2">
-                          <p className="text-sm text-text">
-                            Your order:{' '}
-                            {projectDesigns.find((d) => d.id === myOrder.design_id)?.name ?? '—'} ·{' '}
-                            {projectSizes.find((s) => s.id === myOrder.size_id)?.label ?? '—'} · qty{' '}
-                            {myOrder.quantity}
-                          </p>
+                          <div className="flex flex-col gap-1">
+                            <p className="text-sm text-text">
+                              Your order:{' '}
+                              {projectDesigns.find((d) => d.id === myOrder.design_id)?.name ?? '—'}{' '}
+                              · {projectSizes.find((s) => s.id === myOrder.size_id)?.label ?? '—'} ·
+                              qty {myOrder.quantity}
+                            </p>
+                            {myPayment ? (
+                              <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted">
+                                <StatusBadge status={myPayment.status} />
+                                {formatMoney(myPayment.amount)}
+                                {myPayment.status === 'unpaid' ? (
+                                  myPendingReceipt ? (
+                                    <Badge tone="warning">Receipt pending review</Badge>
+                                  ) : (
+                                    <Button
+                                      variant="secondary"
+                                      size="sm"
+                                      onClick={() =>
+                                        setReceiptTarget({
+                                          payment: myPayment,
+                                          projectName: project.name,
+                                        })
+                                      }
+                                    >
+                                      <Receipt aria-hidden="true" />
+                                      Upload receipt
+                                    </Button>
+                                  )
+                                ) : null}
+                              </div>
+                            ) : null}
+                          </div>
                           <Button
                             variant="ghost"
                             size="sm"
@@ -489,6 +664,23 @@ export function JerseysPage() {
           onOpenChange={() => setImageTarget(null)}
           onSaved={() => {
             setImageTarget(null)
+            reload()
+          }}
+        />
+      ) : null}
+
+      {receiptTarget ? (
+        <ReceiptDialog
+          key={receiptTarget.payment.id}
+          open
+          payment={receiptTarget.payment}
+          projectName={receiptTarget.projectName}
+          profileId={user?.id ?? ''}
+          onOpenChange={(open) => {
+            if (!open) setReceiptTarget(null)
+          }}
+          onSubmitted={() => {
+            setReceiptTarget(null)
             reload()
           }}
         />
@@ -993,6 +1185,177 @@ function DesignImageDialog({
             Upload
           </Button>
         </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function today(): string {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function ReceiptDialog({
+  open,
+  payment,
+  projectName,
+  profileId,
+  onOpenChange,
+  onSubmitted,
+}: {
+  open: boolean
+  payment: JerseyOrderPaymentRecord
+  projectName: string
+  profileId: string
+  onOpenChange: (open: boolean) => void
+  onSubmitted: () => void
+}) {
+  const [file, setFile] = React.useState<File | null>(null)
+  const [method, setMethod] = React.useState<PaymentMethod>('gcash')
+  const [reference, setReference] = React.useState('')
+  const [paidOn, setPaidOn] = React.useState(today())
+  const [error, setError] = React.useState<string | null>(null)
+  const [submitting, setSubmitting] = React.useState(false)
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setError(null)
+
+    if (!file) {
+      setError('Attach a photo or PDF of your receipt.')
+      return
+    }
+
+    const problem = validateReceiptFile(file)
+
+    if (problem) {
+      setError(problem)
+      return
+    }
+
+    const amount = toAmount(payment.amount)
+
+    if (amount <= 0) {
+      setError('This order has no fee to pay.')
+      return
+    }
+
+    if (!paidOn) {
+      setError('Choose the date you paid.')
+      return
+    }
+
+    if (paidOn > today()) {
+      setError('The payment date cannot be in the future.')
+      return
+    }
+
+    setSubmitting(true)
+
+    try {
+      await submitPaymentReceipt({
+        purpose: 'jersey',
+        targetId: payment.id,
+        amount,
+        method,
+        referenceNo: reference.trim() === '' ? null : reference.trim(),
+        paidOn,
+        file,
+        profileId,
+      })
+      toast.success('Receipt submitted. Staff will review it before the fee is settled.')
+      onSubmitted()
+    } catch (submitError) {
+      setError(errorMessage(submitError))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Submit payment receipt</DialogTitle>
+          <DialogDescription>
+            {projectName} · {formatMoney(payment.amount)}. The fee stays unpaid until staff accept
+            your proof.
+          </DialogDescription>
+        </DialogHeader>
+
+        <form onSubmit={(event) => void submit(event)} noValidate>
+          <div className="mt-5 flex flex-col gap-4">
+            {error ? (
+              <p role="alert" className="text-sm font-medium text-danger">
+                {error}
+              </p>
+            ) : null}
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="receipt-file">Receipt file</Label>
+              <Input
+                id="receipt-file"
+                type="file"
+                accept={RECEIPT_ACCEPT}
+                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+              />
+              <p className="text-xs text-text-faint">PNG, JPEG, WebP, or PDF up to 5 MB.</p>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="receipt-method">Method</Label>
+                <Select value={method} onValueChange={(value) => setMethod(value as PaymentMethod)}>
+                  <SelectTrigger id="receipt-method">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAYMENT_METHODS.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {PAYMENT_METHOD_LABELS[option]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="receipt-paid-on">Paid on</Label>
+                <Input
+                  id="receipt-paid-on"
+                  type="date"
+                  max={today()}
+                  value={paidOn}
+                  onChange={(event) => setPaidOn(event.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="receipt-reference">Reference no. (optional)</Label>
+              <Input
+                id="receipt-reference"
+                maxLength={120}
+                value={reference}
+                placeholder="GCash or bank reference"
+                onChange={(event) => setReference(event.target.value)}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => onOpenChange(false)}
+              disabled={submitting}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" loading={submitting}>
+              Submit for review
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   )

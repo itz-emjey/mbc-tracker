@@ -1,7 +1,7 @@
 import {
   BarChart3,
   CalendarCheck,
-  LayoutDashboard,
+  Crosshair,
   Megaphone,
   Shirt,
   ShieldCheck,
@@ -42,10 +42,10 @@ export interface AppModule {
 export const APP_MODULES: readonly AppModule[] = [
   {
     path: '/',
-    label: 'Overview',
-    shortLabel: 'Home',
-    icon: LayoutDashboard,
-    description: 'Your current standing and what needs your attention.',
+    label: 'Arena',
+    shortLabel: 'Arena',
+    icon: Crosshair,
+    description: 'Your clash card, ladder position, and what is waiting on you.',
     group: 'main',
   },
   {
@@ -53,9 +53,8 @@ export const APP_MODULES: readonly AppModule[] = [
     label: 'Tournaments',
     shortLabel: 'Events',
     icon: Trophy,
-    description: 'Create tournaments, generate brackets, and enter official results.',
+    description: 'Browse tournaments, join events, and follow draws and official results.',
     group: 'main',
-    roles: ['super_admin', 'tournament_manager'],
   },
   {
     path: '/shuttlepower',

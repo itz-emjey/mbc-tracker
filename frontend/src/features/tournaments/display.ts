@@ -25,7 +25,21 @@ export function entryPlayerIds(
   if (entry.team_id === null) return []
 
   const members = teamMembersByTeam.get(entry.team_id) ?? []
-  return members.map((member) => member.player_id)
+  return members
+    .map((member) => member.player_id)
+    .filter((playerId): playerId is string => playerId !== null)
+}
+
+/** A player's name, or the free-text name recorded for a guest partner. */
+export function memberLabel(
+  member: TeamMemberRecord,
+  playersById: ReadonlyMap<string, PlayerRecord>,
+): string | null {
+  if (member.player_id !== null) {
+    return playersById.get(member.player_id)?.full_name ?? 'Unknown player'
+  }
+
+  return member.guest_name
 }
 
 export function entryName(
@@ -42,7 +56,7 @@ export function entryName(
 
   const members = lookups.teamMembersByTeam.get(entry.team_id) ?? []
   const names = members
-    .map((member) => lookups.playersById.get(member.player_id)?.full_name)
+    .map((member) => memberLabel(member, lookups.playersById))
     .filter((name): name is string => Boolean(name))
     .sort((left, right) => left.localeCompare(right))
 

@@ -1,24 +1,30 @@
 /**
- * ShuttlePower calculation engine (Phase 4 scaffold).
+ * ShuttlePower calculation engine.
  *
- * The club has not approved the numeric formula (PLAN.md §7 rules 1, 2, 5, and
- * 6), so this module never decides a live value on its own: every call takes a
- * rule version, and a version that is not both approved *and* enabled is
- * refused. `PROVISIONAL_SP_RULE` holds the proposed defaults for club review —
- * they mirror the disabled `provisional-2026-11` row in migration 006.
+ * The club approved the numeric formula on 2026-11-03 (PLAN.md §7 rules 1, 2,
+ * 6, and 11-14; docs/sp-formula-signoff.md decisions F1-F3). The approved
+ * values live in the `approved-2026-11` row created by migration 016; this
+ * module never hardcodes them. Every call still takes a rule version, and a
+ * version that is not both approved *and* enabled is refused, so an unapproved
+ * or retired formula can never move a balance. `PROVISIONAL_SP_RULE` mirrors
+ * the older `provisional-2026-11` proposal for audit and fallback display only.
  *
  * Pure by design: no React, no Supabase, no Date, and no database cache. Time
  * and stored balances are inputs, so the same inputs always produce the same
  * result and the ledger can be replayed.
  *
- * What is already approved and therefore safe to encode: tournament matches
- * carry twice the friendly impact, doubles use the team average rating, and
- * stats are strength-based (beating a stronger side gains more, losing to a
- * stronger side costs less).
+ * Approved operation order: clamp the magnitude to the per-match limits, round
+ * half-up, then apply the tournament multiplier. Friendly matches use 1x, so
+ * only tournament results depend on the order. Tournament matches carry twice
+ * the friendly impact, doubles use the team average rating, and stats are
+ * strength-based (beating a stronger side gains more, losing to a stronger
+ * side costs less).
  */
 
 export type SpRuleStatus = 'provisional' | 'approved' | 'retired'
 export type SpRounding = 'round' | 'floor' | 'ceil'
+
+const ROUNDING_POLICIES: readonly SpRounding[] = ['round', 'floor', 'ceil']
 export type SpScope = 'friendly' | 'tournament'
 
 /**
@@ -35,7 +41,7 @@ export interface SpRuleConfig {
   maxGainPerMatch: number
   minLossPerMatch: number
   maxLossPerMatch: number
-  /** Lowest reachable balance, or `null` while "can SP go negative" is open. */
+  /** Lowest reachable balance. The approved rule uses 0; `null` allows negatives. */
   floor: number | null
   /** Official tournament impact relative to friendly play (club rule: 2). */
   tournamentMultiplier: number
@@ -52,9 +58,10 @@ export interface SpRuleVersion {
 }
 
 /**
- * Proposed defaults for club approval — **not** approved club rules. The row in
- * the database is provisional and disabled, so these numbers never reach a
- * ledger entry until the formula is approved and a version is enabled.
+ * Historical proposal from 2026-11-01 — **not** the approved club rule. It
+ * mirrors the disabled `provisional-2026-11` row in migration 006 and is kept
+ * for audit and fallback display. The approved values are the
+ * `approved-2026-11` row in migration 016; read them from the database.
  */
 export const PROVISIONAL_SP_RULE: SpRuleVersion = {
   version: 'provisional-2026-11',
@@ -74,9 +81,8 @@ export const PROVISIONAL_SP_RULE: SpRuleVersion = {
   },
 }
 
-/** Wording the UI must show wherever an unapproved rule is involved. */
-export const PROVISIONAL_RULE_NOTICE =
-  'Provisional rule — awaiting club approval. No match awards SP yet.'
+/** Wording the UI must show when no approved rule version is enabled. */
+export const PROVISIONAL_RULE_NOTICE = 'No approved rule version is enabled. No match awards SP.'
 
 export interface SpSideInput {
   playerIds: readonly string[]
@@ -163,8 +169,30 @@ function assertConfig(config: SpRuleConfig): void {
     throw new Error('The tournament multiplier cannot be below 1.')
   }
 
+  // The approved multiplier is 2. A fractional multiplier would make the
+  // rounded team change fractional too, and the ledger only stores whole
+  // points, so require a whole number rather than silently rounding again.
+  if (!Number.isInteger(config.tournamentMultiplier)) {
+    throw new Error('The tournament multiplier must be a whole number.')
+  }
+
   if (config.floor !== null && !Number.isFinite(config.floor)) {
     throw new Error('The floor must be a finite number or null.')
+  }
+
+  if (config.minGainPerMatch < 0 || config.minLossPerMatch < 0) {
+    throw new Error('A per-match minimum cannot be negative.')
+  }
+
+  // The rule row comes from a JSON document the database only checks for being
+  // an object, so an unknown enum value is reachable. Validate it here, where
+  // the error names the field, rather than letting it surface as a bad split.
+  if (!ROUNDING_POLICIES.includes(config.rounding)) {
+    throw new Error(`Unknown rounding policy: ${String(config.rounding)}.`)
+  }
+
+  if (config.doublesSplit !== 'even') {
+    throw new Error(`Unknown doubles split: ${String(config.doublesSplit)}.`)
   }
 }
 
@@ -180,7 +208,22 @@ function roundMagnitude(value: number, rounding: SpRounding): number {
       return Math.ceil(value)
     case 'round':
       return Math.round(value)
+    default:
+      throw new Error(`Unknown rounding policy: ${String(rounding)}.`)
   }
+}
+
+/**
+ * Byte-order comparison, not a locale collation: the documented rule gives an
+ * odd point to the partner whose player id sorts first, and the database's
+ * `ORDER BY player_id` is code-unit order. `localeCompare` depends on the
+ * runtime's ICU data and can order mixed-case ids differently, which would hand
+ * the extra point to a different partner than the auditor's query does.
+ */
+function comparePlayerIds(left: string, right: string): number {
+  if (left === right) return 0
+
+  return left < right ? -1 : 1
 }
 
 /** Average SP of a side — the approved team-strength basis for doubles. */
@@ -200,9 +243,9 @@ export interface TeamShare {
 /**
  * Splits a team change into whole per-player deltas that sum exactly to
  * `total`. Partners receive an equal share; when the change does not divide
- * evenly, the extra point goes to the lowest player id, so the split is
- * deterministic and documented. Zero shares are dropped: the ledger rejects a
- * zero delta.
+ * evenly, the extra point goes to the lowest player id under byte order, so the
+ * split is deterministic and matches the database's ordering. Zero shares are
+ * dropped: the ledger rejects a zero delta.
  */
 export function distributeEqually(playerIds: readonly string[], total: number): TeamShare[] {
   if (playerIds.length === 0) {
@@ -213,7 +256,7 @@ export function distributeEqually(playerIds: readonly string[], total: number): 
     throw new Error('A team change must be a whole number of points.')
   }
 
-  const ids = [...playerIds].sort((left, right) => left.localeCompare(right))
+  const ids = [...playerIds].sort(comparePlayerIds)
   const sign = total < 0 ? -1 : 1
   const magnitude = Math.abs(total)
   const base = Math.floor(magnitude / ids.length)
@@ -286,31 +329,34 @@ export function calculateSpChange(rule: SpRuleVersion, input: SpMatchInput): SpC
   const advantage = loserRating - winnerRating
   const multiplier = input.scope === 'tournament' ? rule.config.tournamentMultiplier : 1
 
-  const gain = Math.max(
-    1,
+  // Approved order: clamp the normal magnitude, round half-up, then apply the
+  // multiplier. A friendly uses 1x; an official tournament uses 2x, so a
+  // tournament change is exactly twice the rounded friendly change.
+  //
+  // No implicit floor of 1: the configured minimum governs, and a result that
+  // rounds to 0 produces no share and therefore no ledger row (`sp_delta <> 0`
+  // forbids a zero row). With the approved minimum of 5 this changes nothing.
+  const gain =
     roundMagnitude(
       clamp(
         rule.config.baseChange + rule.config.strengthSensitivity * advantage,
         rule.config.minGainPerMatch,
         rule.config.maxGainPerMatch,
-      ) * multiplier,
+      ),
       rule.config.rounding,
-    ),
-  )
+    ) * multiplier
 
   // Losing costs more to a weaker opponent and less to a stronger one, which is
   // the same curve read from the loser's side of the same rating gap.
-  const loss = Math.max(
-    1,
+  const loss =
     roundMagnitude(
       clamp(
         rule.config.baseChange + rule.config.strengthSensitivity * advantage,
         rule.config.minLossPerMatch,
         rule.config.maxLossPerMatch,
-      ) * multiplier,
+      ),
       rule.config.rounding,
-    ),
-  )
+    ) * multiplier
 
   const winner = applyFloor(
     distributeEqually(input.winner.playerIds, gain),

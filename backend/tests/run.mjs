@@ -28,6 +28,16 @@ const [
   clubMigration,
   jerseyImageMigration,
   friendlyMigration,
+  friendlySpMigration,
+  seasonMigration,
+  playerSocialMigration,
+  registrationMigration,
+  receiptMigration,
+  approvedSpRuleMigration,
+  seasonPolicies,
+  playerSocialPolicies,
+  registrationPolicies,
+  receiptPolicies,
   identityPolicies,
   operationPolicies,
   spPolicies,
@@ -39,6 +49,7 @@ const [
   jerseyImagePolicies,
   friendlyPolicies,
   seed,
+  demoTournamentSeed,
   bootstrap,
 ] = await Promise.all([
   readFile(join(backendDir, 'migrations', '001_identity.sql'), 'utf8'),
@@ -51,6 +62,16 @@ const [
   readFile(join(backendDir, 'migrations', '008_club_activities.sql'), 'utf8'),
   readFile(join(backendDir, 'migrations', '009_jersey_images.sql'), 'utf8'),
   readFile(join(backendDir, 'migrations', '010_friendly_matches.sql'), 'utf8'),
+  readFile(join(backendDir, 'migrations', '011_friendly_sp_award.sql'), 'utf8'),
+  readFile(join(backendDir, 'migrations', '012_seasons.sql'), 'utf8'),
+  readFile(join(backendDir, 'migrations', '013_players_friends_notifications.sql'), 'utf8'),
+  readFile(join(backendDir, 'migrations', '014_tournament_registration.sql'), 'utf8'),
+  readFile(join(backendDir, 'migrations', '015_payment_receipts.sql'), 'utf8'),
+  readFile(join(backendDir, 'migrations', '016_approved_sp_rule.sql'), 'utf8'),
+  readFile(join(backendDir, 'policies', '012_seasons.sql'), 'utf8'),
+  readFile(join(backendDir, 'policies', '013_players_social.sql'), 'utf8'),
+  readFile(join(backendDir, 'policies', '014_tournament_registration.sql'), 'utf8'),
+  readFile(join(backendDir, 'policies', '015_payment_receipts.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '001_identity.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '002_operations.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '003_shuttlepower.sql'), 'utf8'),
@@ -62,6 +83,7 @@ const [
   readFile(join(backendDir, 'policies', '009_jersey_images.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '010_friendly_matches.sql'), 'utf8'),
   readFile(join(backendDir, 'seeds', '001_fictional_players.sql'), 'utf8'),
+  readFile(join(backendDir, 'seeds', '002_tournament_demo.sql'), 'utf8'),
   readFile(join(backendDir, 'seeds', 'bootstrap_super_admin.sql'), 'utf8'),
 ])
 
@@ -110,10 +132,22 @@ const tables = [
   'poll_votes',
   'announcements',
   'friendly_matches',
+  'seasons',
+  'season_balances',
+  'season_player_results',
+  'season_deduction_batches',
+  'season_deduction_entries',
+  'season_transition_steps',
   'tournament_events',
   'teams',
   'team_members',
   'tournament_entries',
+  'tournament_entry_payments',
+  'tournament_partner_invitations',
+  'jersey_order_payments',
+  'payment_receipts',
+  'player_friendships',
+  'notifications',
   'matches',
   'match_games',
 ]
@@ -194,11 +228,7 @@ async function actAs(role, uid = null) {
 }
 
 async function expectErrorAs(uid, sql, pattern) {
-  return expectError(
-    `denied query as ${uid}`,
-    () => asUser(uid, sql),
-    pattern,
-  )
+  return expectError(`denied query as ${uid}`, () => asUser(uid, sql), pattern)
 }
 
 /** Runs an expected-to-fail query inside the current transaction, preserving it. */
@@ -371,6 +401,12 @@ await db.exec(trainingMigration)
 await db.exec(clubMigration)
 await db.exec(jerseyImageMigration)
 await db.exec(friendlyMigration)
+await db.exec(friendlySpMigration)
+await db.exec(seasonMigration)
+await db.exec(playerSocialMigration)
+await db.exec(registrationMigration)
+await db.exec(receiptMigration)
+await db.exec(approvedSpRuleMigration)
 await db.exec(identityPolicies)
 await db.exec(operationPolicies)
 await db.exec(spPolicies)
@@ -381,6 +417,10 @@ await db.exec(trainingPolicies)
 await db.exec(clubPolicies)
 await db.exec(jerseyImagePolicies)
 await db.exec(friendlyPolicies)
+await db.exec(seasonPolicies)
+await db.exec(playerSocialPolicies)
+await db.exec(registrationPolicies)
+await db.exec(receiptPolicies)
 
 // ---------------------------------------------------------------------------
 // Schema and catalogue
@@ -408,8 +448,7 @@ await test('row level security is enabled on every table', async () => {
 await test('roles are seeded once', async () => {
   const { rows } = await db.query(`select key from public.roles order by key`)
   assert(
-    rows.map((row) => row.key).join(',') ===
-      'player,super_admin,tournament_manager,trainer',
+    rows.map((row) => row.key).join(',') === 'player,super_admin,tournament_manager,trainer',
     `unexpected roles: ${rows.map((row) => row.key).join(',')}`,
   )
 })
@@ -554,8 +593,14 @@ await test('suspension revokes role-based access immediately', async () => {
     await db.exec(`set local role authenticated; set local request.jwt.claim.sub = '${A}'`)
     const players = await db.query(`select id from public.players`)
     const own = await db.query(`select id from public.profiles`)
-    assert(players.rows.length === 0, `suspended player must see 0 players, got ${players.rows.length}`)
-    assert(own.rows.length === 1 && own.rows[0].id === A, 'suspended player may still read their own profile')
+    assert(
+      players.rows.length === 0,
+      `suspended player must see 0 players, got ${players.rows.length}`,
+    )
+    assert(
+      own.rows.length === 1 && own.rows[0].id === A,
+      'suspended player may still read their own profile',
+    )
   } finally {
     await db.exec('rollback')
   }
@@ -624,9 +669,7 @@ await test('review state must match status', async () => {
   await expectError(
     'approve without review metadata',
     () =>
-      db.exec(
-        `update public.registration_requests set status = 'approved' where id = '${RR1}'`,
-      ),
+      db.exec(`update public.registration_requests set status = 'approved' where id = '${RR1}'`),
     /registration_requests_review_state_check/i,
   )
 })
@@ -679,7 +722,10 @@ await test('least-privilege column grants are in place', async () => {
   assert(row.profile_insert === false, 'authenticated must not insert profiles directly')
   assert(row.profile_status_update === false, 'authenticated must not update profiles.status')
   assert(row.profile_name_update === true, 'authenticated should update profiles.full_name')
-  assert(row.player_link_update === false, 'authenticated must not link a player to an account directly')
+  assert(
+    row.player_link_update === false,
+    'authenticated must not link a player to an account directly',
+  )
   assert(row.roles_insert === false, 'authenticated must not insert roles')
   assert(row.roles_update === false, 'authenticated must not update roles')
   assert(row.user_roles_update === false, 'authenticated must not update role assignments')
@@ -706,7 +752,7 @@ await test('N0: tournament tables are read-only and tournament RPCs are authenti
       has_table_privilege('authenticated', 'public.tournament_entries', 'INSERT') as entry_insert,
       has_table_privilege('authenticated', 'public.matches', 'UPDATE') as match_update,
       has_table_privilege('authenticated', 'public.match_games', 'DELETE') as game_delete,
-      has_function_privilege('authenticated', 'public.create_tournament(text,date,date,text,text,timestamptz)', 'EXECUTE') as create_execute,
+      has_function_privilege('authenticated', 'public.create_tournament(text,date,date,text,text,timestamptz,numeric)', 'EXECUTE') as create_execute,
       has_function_privilege('authenticated', 'public.register_tournament_entry(uuid,uuid[],integer)', 'EXECUTE') as entry_execute,
       has_function_privilege('authenticated', 'public.save_tournament_draw(uuid,jsonb,boolean)', 'EXECUTE') as draw_execute,
       has_function_privilege('authenticated', 'public.record_match_result(uuid,jsonb)', 'EXECUTE') as result_execute,
@@ -779,8 +825,14 @@ await test('app settings are readable by active club members only', async () => 
   const member = await asUser(A, `select key, value from public.app_settings`)
   const pending = await asUser(B, `select key from public.app_settings`)
   const admin = await asUser(C, `select key from public.app_settings`)
-  assert(member.rows.length === 1 && member.rows[0].key === 'club.name', 'A should read club settings')
-  assert(pending.rows.length === 0, `pending user should see 0 settings, got ${pending.rows.length}`)
+  assert(
+    member.rows.length === 1 && member.rows[0].key === 'club.name',
+    'A should read club settings',
+  )
+  assert(
+    pending.rows.length === 0,
+    `pending user should see 0 settings, got ${pending.rows.length}`,
+  )
   assert(admin.rows.length === 1, `admin should see 1 setting, got ${admin.rows.length}`)
 })
 
@@ -807,14 +859,10 @@ await test('submit_registration creates one pending profile and request', async 
   await inTransaction(async () => {
     await actAs('authenticated', G)
 
-    const first = await db.query(
-      `select public.submit_registration($1) as result`,
-      ['Gina New'],
-    )
-    const second = await db.query(
-      `select public.submit_registration($1) as result`,
-      ['Gina Renamed'],
-    )
+    const first = await db.query(`select public.submit_registration($1) as result`, ['Gina New'])
+    const second = await db.query(`select public.submit_registration($1) as result`, [
+      'Gina Renamed',
+    ])
 
     assert(first.rows[0].result.status === 'pending', 'first submission should be pending')
     assert(
@@ -823,10 +871,9 @@ await test('submit_registration creates one pending profile and request', async 
     )
 
     await actAs('postgres')
-    const profile = await db.query(
-      `select full_name, status from public.profiles where id = $1`,
-      [G],
-    )
+    const profile = await db.query(`select full_name, status from public.profiles where id = $1`, [
+      G,
+    ])
     const requests = await db.query(
       `select status, full_name, count(*) over ()::int as total
          from public.registration_requests
@@ -836,7 +883,10 @@ await test('submit_registration creates one pending profile and request', async 
 
     assert(profile.rows[0].status === 'pending', 'profile should stay pending')
     assert(profile.rows[0].full_name === 'Gina Renamed', 'latest full name should be stored')
-    assert(requests.rows.length === 1 && requests.rows[0].total === 1, 'exactly one request expected')
+    assert(
+      requests.rows.length === 1 && requests.rows[0].total === 1,
+      'exactly one request expected',
+    )
     assert(requests.rows[0].status === 'pending', 'request should be pending')
   })
 })
@@ -844,11 +894,7 @@ await test('submit_registration creates one pending profile and request', async 
 await test('submit_registration refuses an anonymous caller', async () => {
   await expectError(
     'anonymous registration',
-    () =>
-      asRole(
-        'authenticated',
-        `select public.submit_registration('Anonymous')`,
-      ),
+    () => asRole('authenticated', `select public.submit_registration('Anonymous')`),
     /authentication required/i,
   )
 })
@@ -933,7 +979,10 @@ await test('club members read SP accounts, pending users do not', async () => {
   const member = await asUser(A, `select player_id, current_sp from public.sp_accounts`)
   const pending = await asUser(B, `select player_id from public.sp_accounts`)
   assert(member.rows.length === 1 && member.rows[0].current_sp === 1000, 'A should see 1000 SP')
-  assert(pending.rows.length === 0, `pending user should see 0 accounts, got ${pending.rows.length}`)
+  assert(
+    pending.rows.length === 0,
+    `pending user should see 0 accounts, got ${pending.rows.length}`,
+  )
 })
 
 await test('the SP ledger is visible to its owner and a super admin only', async () => {
@@ -941,7 +990,10 @@ await test('the SP ledger is visible to its owner and a super admin only', async
   const other = await asUser(B, `select id from public.sp_transactions`)
   const admin = await asUser(C, `select id from public.sp_transactions`)
   assert(owner.rows.length === 1, `owner should see 1 transaction, got ${owner.rows.length}`)
-  assert(other.rows.length === 0, `pending user should see 0 transactions, got ${other.rows.length}`)
+  assert(
+    other.rows.length === 0,
+    `pending user should see 0 transactions, got ${other.rows.length}`,
+  )
   assert(admin.rows.length === 1, `admin should see 1 transaction, got ${admin.rows.length}`)
 })
 
@@ -976,7 +1028,9 @@ async function expectAppendOnly(sql) {
 await test('the SP ledger rejects update, delete, and truncate', async () => {
   await expectAppendOnly(`update public.sp_transactions set sp_delta = 2000, sp_after = 2000`)
   await expectAppendOnly(`delete from public.sp_transactions`)
-  await expectAppendOnly(`truncate public.sp_transactions`)
+  // CASCADE is what it takes to reach the ledger now that season deductions
+  // reference it; the append-only trigger must still refuse.
+  await expectAppendOnly(`truncate public.sp_transactions cascade`)
 })
 
 await test('SP idempotency keys are unique', async () => {
@@ -1009,11 +1063,7 @@ await test('SP ledger arithmetic must reconcile', async () => {
 await test('a non-admin cannot approve a registration', async () => {
   await expectError(
     'player approval attempt',
-    () =>
-      asUser(
-        A,
-        `select public.approve_registration('${RR1}', array['player'], null)`,
-      ),
+    () => asUser(A, `select public.approve_registration('${RR1}', array['player'], null)`),
     /not authorized/i,
   )
 })
@@ -1075,9 +1125,7 @@ await test('approval is atomic and idempotent (Gate G)', async () => {
 await test('approval can assign several roles and audits the set', async () => {
   await inTransaction(async () => {
     await actAs('authenticated', C)
-    await db.query(
-      `select public.approve_registration('${RR1}', array['player','trainer'], null)`,
-    )
+    await db.query(`select public.approve_registration('${RR1}', array['player','trainer'], null)`)
 
     await actAs('postgres')
     const roles = await db.query(`
@@ -1108,11 +1156,7 @@ await test('approval can assign several roles and audits the set', async () => {
 await test('approval refuses an unknown role', async () => {
   await expectError(
     'unknown role approval',
-    () =>
-      asUser(
-        C,
-        `select public.approve_registration('${RR1}', array['player','wizard'], null)`,
-      ),
+    () => asUser(C, `select public.approve_registration('${RR1}', array['player','wizard'], null)`),
     /unknown role/i,
   )
 })
@@ -1127,9 +1171,7 @@ await test('approval links an existing unlinked player record', async () => {
     assert(result.rows[0].result.player_id === P2, 'approval should use the selected player')
 
     await actAs('postgres')
-    const player = await db.query(
-      `select profile_id from public.players where id = '${P2}'`,
-    )
+    const player = await db.query(`select profile_id from public.players where id = '${P2}'`)
     const linkedCount = await db.query(
       `select count(*)::int as total from public.players where profile_id = '${E}'`,
     )
@@ -1154,9 +1196,7 @@ await test('approval cannot steal a player already linked to another account', a
 
     let caught
     try {
-      await db.query(
-        `select public.approve_registration('${RR3}', array['player'], '${P1}')`,
-      )
+      await db.query(`select public.approve_registration('${RR3}', array['player'], '${P1}')`)
     } catch (error) {
       caught = error
     }
@@ -1258,9 +1298,7 @@ await test('starting SP is awarded once even when called twice directly', async 
 await test('suspension revokes access and is audited', async () => {
   await inTransaction(async () => {
     await actAs('authenticated', C)
-    const result = await db.query(
-      `select public.set_profile_status('${A}', 'suspended') as result`,
-    )
+    const result = await db.query(`select public.set_profile_status('${A}', 'suspended') as result`)
     assert(result.rows[0].result.changed === true, 'status should change')
 
     const role = await db.query(`select public.has_role('${A}', 'player') as allowed`)
@@ -1284,11 +1322,7 @@ await test('suspension revokes access and is audited', async () => {
 await test('a Super Admin cannot suspend themselves', async () => {
   await expectError(
     'self suspension',
-    () =>
-      asUser(
-        C,
-        `select public.set_profile_status('${C}', 'suspended')`,
-      ),
+    () => asUser(C, `select public.set_profile_status('${C}', 'suspended')`),
     /cannot change your own access/i,
   )
 })
@@ -1296,11 +1330,7 @@ await test('a Super Admin cannot suspend themselves', async () => {
 await test('pending profiles cannot be activated outside approval', async () => {
   await expectError(
     'pending profile activation',
-    () =>
-      asUser(
-        C,
-        `select public.set_profile_status('${B}', 'active')`,
-      ),
+    () => asUser(C, `select public.set_profile_status('${B}', 'active')`),
     /registration approval/i,
   )
 })
@@ -1407,7 +1437,11 @@ await test('H2: a player cannot read another member\u2019s request or email', as
 await test('H2: the auth email table is unreachable from a client role', async () => {
   await expectErrorAs(A, `select email from auth.users`, /permission denied/i)
   await expectErrorAs(C, `select email from auth.users`, /permission denied/i)
-  await expectError('anon auth read', () => asRole('anon', `select email from auth.users`), /permission denied/i)
+  await expectError(
+    'anon auth read',
+    () => asRole('anon', `select email from auth.users`),
+    /permission denied/i,
+  )
 })
 
 await test('H3: no client can write roles, role assignments, audit logs, or SP', async () => {
@@ -1423,11 +1457,23 @@ await test('H3: no client can write roles, role assignments, audit logs, or SP',
       `insert into public.user_roles (profile_id, role_id) select '${uid}', id from public.roles where key = 'player'`,
       /permission denied/i,
     )
-    await expectErrorAs(uid, `update public.user_roles set granted_by = '${uid}'`, /permission denied/i)
-    await expectErrorAs(uid, `delete from public.user_roles where profile_id = '${uid}'`, /permission denied/i)
+    await expectErrorAs(
+      uid,
+      `update public.user_roles set granted_by = '${uid}'`,
+      /permission denied/i,
+    )
+    await expectErrorAs(
+      uid,
+      `delete from public.user_roles where profile_id = '${uid}'`,
+      /permission denied/i,
+    )
     await expectErrorAs(uid, `update public.audit_logs set action = 'forged'`, /permission denied/i)
     await expectErrorAs(uid, `delete from public.audit_logs`, /permission denied/i)
-    await expectErrorAs(uid, `update public.sp_accounts set current_sp = 9999`, /permission denied/i)
+    await expectErrorAs(
+      uid,
+      `update public.sp_accounts set current_sp = 9999`,
+      /permission denied/i,
+    )
     await expectErrorAs(uid, `delete from public.sp_transactions`, /permission denied/i)
   }
 })
@@ -1713,6 +1759,113 @@ await test('I2: re-running the seed adds nothing', async () => {
   })
 })
 
+await test('I3: the tournament demo seed is idempotent and ready to draw', async () => {
+  await inTransaction(async () => {
+    await db.exec(
+      `insert into public.app_settings (key, value)
+       values ('club.environment', '"development"'::jsonb)`,
+    )
+    await db.exec(seed)
+    await db.exec(demoTournamentSeed)
+    await db.exec(demoTournamentSeed)
+
+    const { rows } = await db.query(`
+      select
+        (select count(*)::int from public.players
+          where id::text like '5eed3000-%') as players,
+        (select count(*)::int from public.tournaments
+          where id::text like '5eed4000-%') as tournaments,
+        (select count(*)::int from public.tournaments
+          where id::text like '5eed4000-%' and status = 'published') as published,
+        (select count(*)::int from public.tournament_events
+          where id::text like '5eed4100-%') as events,
+        (select count(*)::int from public.tournament_events
+          where id::text like '5eed4100-%' and draw_generated_at is null) as undrawn,
+        (select count(*)::int from public.teams
+          where id::text like '5eed4200-%') as teams,
+        (select count(*)::int from public.team_members
+          where id::text like '5eed4500-%') as members,
+        (select count(*)::int from public.tournament_entries
+          where id::text like '5eed4300-%') as entries,
+        (select count(*)::int from public.tournament_entry_payments
+          where id::text like '5eed4400-%') as payments,
+        (select count(*)::int from public.tournament_entry_payments
+          where id::text like '5eed4400-%' and status = 'paid' and marked_at is not null) as paid,
+        (select count(*)::int from public.tournament_entries
+          where id::text like '5eed4300-%'
+            and public.entry_payment_complete(id)) as eligible
+    `)
+
+    const row = rows[0]
+    assert(row.players === 8, `sample players duplicated: ${row.players}`)
+    assert(row.tournaments === 1, `demo tournament duplicated: ${row.tournaments}`)
+    assert(row.published === 1, 'the demo tournament must be published')
+    assert(row.events === 2, `demo events duplicated: ${row.events}`)
+    assert(row.undrawn === 2, 'both demo events must start without a draw')
+    assert(row.teams === 4, `demo teams duplicated: ${row.teams}`)
+    assert(row.members === 8, `demo team members duplicated: ${row.members}`)
+    assert(row.entries === 12, `demo entries duplicated: ${row.entries}`)
+    assert(row.payments === 16, `demo payments duplicated: ${row.payments}`)
+    assert(row.paid === 16, 'every demo participant must be marked paid')
+    assert(row.eligible === 12, 'every demo entry must be draw-eligible')
+
+    // Draw both demo events as the tournament manager the seed attributes them to.
+    await actAs('authenticated', '5eed0000-0000-4000-8000-000000000001')
+
+    const singlesDraw = [
+      ['5eed4300-0000-4000-8000-000000000001', '5eed4300-0000-4000-8000-000000000002'],
+      ['5eed4300-0000-4000-8000-000000000003', '5eed4300-0000-4000-8000-000000000004'],
+      ['5eed4300-0000-4000-8000-000000000005', '5eed4300-0000-4000-8000-000000000006'],
+      ['5eed4300-0000-4000-8000-000000000007', '5eed4300-0000-4000-8000-000000000008'],
+    ].map(([home, away], index) => ({
+      key: `S-R1M${index + 1}`,
+      bracket: 'winners',
+      round: 1,
+      position: index + 1,
+      home_entry_id: home,
+      away_entry_id: away,
+    }))
+
+    const doublesDraw = [
+      ['5eed4300-0000-4000-8000-000000000011', '5eed4300-0000-4000-8000-000000000012'],
+      ['5eed4300-0000-4000-8000-000000000013', '5eed4300-0000-4000-8000-000000000014'],
+    ].map(([home, away], index) => ({
+      key: `D-R1M${index + 1}`,
+      bracket: 'winners',
+      round: 1,
+      position: index + 1,
+      home_entry_id: home,
+      away_entry_id: away,
+    }))
+
+    await db.query(
+      `select public.save_tournament_draw(
+         '5eed4100-0000-4000-8000-000000000001',
+         $json$${JSON.stringify(singlesDraw)}$json$::jsonb
+       )`,
+    )
+    await db.query(
+      `select public.save_tournament_draw(
+         '5eed4100-0000-4000-8000-000000000002',
+         $json$${JSON.stringify(doublesDraw)}$json$::jsonb
+       )`,
+    )
+
+    const drawn = await db.query(`
+      select
+        (select count(*)::int from public.matches
+          where event_id::text like '5eed4100-%') as matches,
+        (select count(*)::int from public.tournament_events
+          where id::text like '5eed4100-%' and draw_generated_at is not null) as drawn_events
+    `)
+    assert(
+      drawn.rows[0].matches === 6,
+      `both demo draws should create 6 matches: ${drawn.rows[0].matches}`,
+    )
+    assert(drawn.rows[0].drawn_events === 2, 'both demo events should be locked after the draw')
+  })
+})
+
 // ---------------------------------------------------------------------------
 // Group J: one-time first Super Admin bootstrap (D8)
 // ---------------------------------------------------------------------------
@@ -1759,7 +1912,11 @@ await test('J4: the bootstrap rejects an unknown or suspended account', async ()
   await inTransaction(async () => {
     await db.exec(`update public.profiles set status = 'suspended' where id = '${A}'`)
     await db.exec(`set local mbc.bootstrap_super_admin_email = 'alex@example.test'`)
-    await expectError('bootstrap suspended profile', () => db.exec(bootstrap), /refusing to bootstrap/i)
+    await expectError(
+      'bootstrap suspended profile',
+      () => db.exec(bootstrap),
+      /refusing to bootstrap/i,
+    )
   })
 })
 
@@ -1782,8 +1939,16 @@ await test('J4: the bootstrap is not exposed as an API function', async () => {
 // Group K: player directory lifecycle (Phase 2)
 // ---------------------------------------------------------------------------
 await test('K1: only a super admin can replace roles', async () => {
-  await expectErrorAs(A, `select public.set_profile_roles('${D}', array['player'])`, /not authorized/i)
-  await expectErrorAs(D, `select public.set_profile_roles('${A}', array['player'])`, /not authorized/i)
+  await expectErrorAs(
+    A,
+    `select public.set_profile_roles('${D}', array['player'])`,
+    /not authorized/i,
+  )
+  await expectErrorAs(
+    D,
+    `select public.set_profile_roles('${A}', array['player'])`,
+    /not authorized/i,
+  )
 })
 
 await test('K1: role replacement replaces the set and audits once', async () => {
@@ -1863,11 +2028,7 @@ await test('K1: pending accounts are handled through approval, not role edits', 
 })
 
 await test('K2: only a super admin can link or unlink accounts', async () => {
-  await expectErrorAs(
-    A,
-    `select public.link_player_account('${A}', '${P2}')`,
-    /not authorized/i,
-  )
+  await expectErrorAs(A, `select public.link_player_account('${A}', '${P2}')`, /not authorized/i)
   await expectErrorAs(D, `select public.unlink_player_account('${P1}')`, /not authorized/i)
 })
 
@@ -1875,15 +2036,11 @@ await test('K2: linking an approved account is idempotent and audited', async ()
   await inTransaction(async () => {
     await actAs('authenticated', C)
 
-    const first = await db.query(
-      `select public.link_player_account('${D}', '${P2}') as result`,
-    )
+    const first = await db.query(`select public.link_player_account('${D}', '${P2}') as result`)
     assert(first.rows[0].result.changed === true, 'the first link must change the record')
     assert(first.rows[0].result.already_linked === false, 'the first link is not a replay')
 
-    const second = await db.query(
-      `select public.link_player_account('${D}', '${P2}') as result`,
-    )
+    const second = await db.query(`select public.link_player_account('${D}', '${P2}') as result`)
     assert(second.rows[0].result.changed === false, 'a repeated link must not change anything')
     assert(second.rows[0].result.already_linked === true, 'a repeated link must report the replay')
 
@@ -1895,7 +2052,10 @@ await test('K2: linking an approved account is idempotent and audited', async ()
         from public.audit_logs
        where action = 'player.account_linked' and target_id = '${P2}'
     `)
-    assert(audit.rows[0].entries === 1, 'a link must write exactly one audit row, even after a replay')
+    assert(
+      audit.rows[0].entries === 1,
+      'a link must write exactly one audit row, even after a replay',
+    )
   })
 })
 
@@ -2152,11 +2312,7 @@ await test('N2: clients cannot write tournament tables directly', async () => {
      values ('Direct', '2026-11-01', '2026-11-02')`,
     /permission denied/i,
   )
-  await expectErrorAs(
-    D,
-    `update public.tournaments set name = 'Changed'`,
-    /permission denied/i,
-  )
+  await expectErrorAs(D, `update public.tournaments set name = 'Changed'`, /permission denied/i)
   await expectErrorAs(A, `delete from public.tournament_entries`, /permission denied/i)
 })
 
@@ -2172,7 +2328,7 @@ await test('N3: a draw must cover every entry and use earlier sources', async ()
 
     await expectQueryError(
       `select public.save_tournament_draw('${event.id}', '[{"key":"m1","bracket":"winners","round":1,"position":1,"home_entry_id":"${first}","away_entry_id":"${second}"}]'::jsonb)`,
-      /place every registered entry/i,
+      /place every paid entry/i,
     )
 
     const brokenSource = JSON.stringify([
@@ -2240,19 +2396,54 @@ await test('N3: round robin stores every pair exactly once', async () => {
     const third = (await registerEntry(event.id, [P4], 3)).rows[0].result.entry_id
 
     const missingPair = JSON.stringify([
-      { key: 'r1', bracket: 'round_robin', round: 1, position: 1, home_entry_id: first, away_entry_id: second },
-      { key: 'r2', bracket: 'round_robin', round: 2, position: 1, home_entry_id: second, away_entry_id: third },
+      {
+        key: 'r1',
+        bracket: 'round_robin',
+        round: 1,
+        position: 1,
+        home_entry_id: first,
+        away_entry_id: second,
+      },
+      {
+        key: 'r2',
+        bracket: 'round_robin',
+        round: 2,
+        position: 1,
+        home_entry_id: second,
+        away_entry_id: third,
+      },
     ]).replaceAll("'", "''")
 
     await expectQueryError(
       `select public.save_tournament_draw('${event.id}', '${missingPair}'::jsonb)`,
-      /every pair exactly once/i,
+      /every paid pair exactly once/i,
     )
 
     const duplicatePair = JSON.stringify([
-      { key: 'r1', bracket: 'round_robin', round: 1, position: 1, home_entry_id: first, away_entry_id: second },
-      { key: 'r2', bracket: 'round_robin', round: 2, position: 1, home_entry_id: second, away_entry_id: first },
-      { key: 'r3', bracket: 'round_robin', round: 3, position: 1, home_entry_id: second, away_entry_id: third },
+      {
+        key: 'r1',
+        bracket: 'round_robin',
+        round: 1,
+        position: 1,
+        home_entry_id: first,
+        away_entry_id: second,
+      },
+      {
+        key: 'r2',
+        bracket: 'round_robin',
+        round: 2,
+        position: 1,
+        home_entry_id: second,
+        away_entry_id: first,
+      },
+      {
+        key: 'r3',
+        bracket: 'round_robin',
+        round: 3,
+        position: 1,
+        home_entry_id: second,
+        away_entry_id: third,
+      },
     ]).replaceAll("'", "''")
 
     await expectQueryError(
@@ -2261,9 +2452,30 @@ await test('N3: round robin stores every pair exactly once', async () => {
     )
 
     const saved = await saveDraw(event.id, [
-      { key: 'r1', bracket: 'round_robin', round: 1, position: 1, home_entry_id: first, away_entry_id: second },
-      { key: 'r2', bracket: 'round_robin', round: 2, position: 1, home_entry_id: first, away_entry_id: third },
-      { key: 'r3', bracket: 'round_robin', round: 3, position: 1, home_entry_id: second, away_entry_id: third },
+      {
+        key: 'r1',
+        bracket: 'round_robin',
+        round: 1,
+        position: 1,
+        home_entry_id: first,
+        away_entry_id: second,
+      },
+      {
+        key: 'r2',
+        bracket: 'round_robin',
+        round: 2,
+        position: 1,
+        home_entry_id: first,
+        away_entry_id: third,
+      },
+      {
+        key: 'r3',
+        bracket: 'round_robin',
+        round: 3,
+        position: 1,
+        home_entry_id: second,
+        away_entry_id: third,
+      },
     ])
     assert(saved.match_count === 3, 'three entries need three round-robin matches')
   })
@@ -2612,8 +2824,22 @@ await test('N4: a result cannot be corrected after a downstream match is played'
     const fourth = (await registerEntry(event.id, [P5], 4)).rows[0].result.entry_id
 
     await saveDraw(event.id, [
-      { key: 's1', bracket: 'winners', round: 1, position: 1, home_entry_id: first, away_entry_id: second },
-      { key: 's2', bracket: 'winners', round: 1, position: 2, home_entry_id: third, away_entry_id: fourth },
+      {
+        key: 's1',
+        bracket: 'winners',
+        round: 1,
+        position: 1,
+        home_entry_id: first,
+        away_entry_id: second,
+      },
+      {
+        key: 's2',
+        bracket: 'winners',
+        round: 1,
+        position: 2,
+        home_entry_id: third,
+        away_entry_id: fourth,
+      },
       {
         key: 'f1',
         bracket: 'winners',
@@ -2672,11 +2898,7 @@ await test('N5: drafts are staff-only and published tournaments are readable', a
 await test('N5: anon cannot execute any tournament RPC', async () => {
   await expectError(
     'anon tournament create',
-    () =>
-      asRole(
-        'anon',
-        `select public.create_tournament('Anon', '2026-11-01', '2026-11-02')`,
-      ),
+    () => asRole('anon', `select public.create_tournament('Anon', '2026-11-01', '2026-11-02')`),
     /permission denied/i,
   )
   await expectError(
@@ -2693,17 +2915,32 @@ await test('N5: anon cannot execute any tournament RPC', async () => {
 // ---------------------------------------------------------------------------
 // ShuttlePower rules and reconciliation (Phase 4)
 // ---------------------------------------------------------------------------
-await test('N6: SP ships one provisional rule version and it is disabled', async () => {
+await test('N6: SP ships the provisional proposal disabled and the approved rule enabled', async () => {
   const { rows } = await db.query(
-    `select version, status, is_enabled, config from public.sp_rule_versions`,
+    `select version, status, is_enabled, config, notes
+       from public.sp_rule_versions
+      order by version`,
   )
 
-  assert(rows.length === 1, `expected exactly one rule version, got ${rows.length}`)
+  assert(rows.length === 2, `expected two rule versions, got ${rows.length}`)
 
-  const rule = rows[0]
+  const provisional = rows.find((row) => row.version === 'provisional-2026-11')
+  const approved = rows.find((row) => row.version === 'approved-2026-11')
 
-  assert(rule.status === 'provisional', `expected a provisional rule, got ${rule.status}`)
-  assert(rule.is_enabled === false, 'the provisional rule must ship disabled')
+  assert(provisional, 'the provisional proposal must remain for audit')
+  assert(approved, 'the approved club rule must exist')
+
+  assert(
+    provisional.status === 'provisional',
+    `expected the proposal to stay provisional, got ${provisional.status}`,
+  )
+  assert(provisional.is_enabled === false, 'the provisional proposal must stay disabled')
+  assert(approved.status === 'approved', `expected an approved rule, got ${approved.status}`)
+  assert(approved.is_enabled === true, 'the approved rule must be enabled')
+  assert(
+    rows.filter((row) => row.is_enabled).length === 1,
+    'exactly one rule version may be enabled',
+  )
 
   for (const key of [
     'baseChange',
@@ -2712,23 +2949,37 @@ await test('N6: SP ships one provisional rule version and it is disabled', async
     'maxGainPerMatch',
     'minLossPerMatch',
     'maxLossPerMatch',
+    'floor',
     'tournamentMultiplier',
     'rounding',
     'doublesSplit',
   ]) {
-    assert(key in rule.config, `the config is missing ${key}`)
+    assert(key in approved.config, `the approved config is missing ${key}`)
   }
 
+  assert(approved.config.baseChange === 20, 'the approved base change must be 20')
   assert(
-    rule.config.tournamentMultiplier === 2,
-    'the approved tournament multiplier must stay 2',
+    approved.config.strengthSensitivity === 0.02,
+    'the approved strength sensitivity must be 0.02',
   )
+  assert(approved.config.minGainPerMatch === 5, 'the approved minimum gain must be 5')
+  assert(approved.config.maxGainPerMatch === 40, 'the approved maximum gain must be 40')
+  assert(approved.config.minLossPerMatch === 5, 'the approved minimum loss must be 5')
+  assert(approved.config.maxLossPerMatch === 40, 'the approved maximum loss must be 40')
+  assert(approved.config.floor === 0, 'the approved floor must be 0')
+  assert(approved.config.tournamentMultiplier === 2, 'the tournament multiplier must stay 2')
+  assert(approved.config.rounding === 'round', 'the approved rounding policy must be round')
+  assert(approved.config.doublesSplit === 'even', 'the approved doubles split must be even')
+  assert(!('ceiling' in approved.config), 'the approved rule has no ceiling key')
+  assert(/2026-11-03/.test(approved.notes ?? ''), 'the approval date must be recorded')
+  assert(/club owner/i.test(approved.notes ?? ''), 'the approver must be recorded')
 })
 
 await test('N6: an unapproved rule version cannot be enabled', async () => {
   await inTransaction(async () => {
     await expectQueryError(
-      `update public.sp_rule_versions set is_enabled = true`,
+      `update public.sp_rule_versions set is_enabled = true
+        where version = 'provisional-2026-11'`,
       /sp_rule_versions_enabled_check/i,
     )
   })
@@ -2736,10 +2987,6 @@ await test('N6: an unapproved rule version cannot be enabled', async () => {
 
 await test('N6: only one rule version can be enabled at a time', async () => {
   await inTransaction(async () => {
-    await db.query(
-      `update public.sp_rule_versions set status = 'approved', is_enabled = true`,
-    )
-
     await expectQueryError(
       `insert into public.sp_rule_versions (version, status, config, is_enabled)
        values ('second-enabled', 'approved', '{}'::jsonb, true)`,
@@ -2769,8 +3016,11 @@ await test('N6: clients read rule versions but cannot write them', async () => {
   const member = await asUser(A, `select id from public.sp_rule_versions`)
   const pending = await asUser(B, `select id from public.sp_rule_versions`)
 
-  assert(member.rows.length === 1, `a player should read the rule, got ${member.rows.length}`)
-  assert(pending.rows.length === 0, `a pending account should read 0 rules, got ${pending.rows.length}`)
+  assert(member.rows.length === 2, `a player should read both rules, got ${member.rows.length}`)
+  assert(
+    pending.rows.length === 0,
+    `a pending account should read 0 rules, got ${pending.rows.length}`,
+  )
 
   await expectError(
     'anon rule select',
@@ -2807,10 +3057,7 @@ await test('N7: reconciliation reports a drifted balance without repairing it', 
     const result = report.rows[0].result
 
     assert(result.consistent === false, 'drift must be reported')
-    assert(
-      result.mismatches.length === 1,
-      `expected 1 mismatch, got ${result.mismatches.length}`,
-    )
+    assert(result.mismatches.length === 1, `expected 1 mismatch, got ${result.mismatches.length}`)
     assert(result.mismatches[0].player_id === playerId, 'the mismatch must name the drifted player')
     assert(
       Number(result.mismatches[0].cached_sp) === cachedSp + 25,
@@ -2826,10 +3073,7 @@ await test('N7: reconciliation reports a drifted balance without repairing it', 
       `select current_sp from public.sp_accounts where player_id = '${playerId}'`,
     )
 
-    assert(
-      after.rows[0].current_sp === cachedSp + 25,
-      'reconciliation must never repair a balance',
-    )
+    assert(after.rows[0].current_sp === cachedSp + 25, 'reconciliation must never repair a balance')
   })
 })
 
@@ -2866,7 +3110,10 @@ await test('N8: training tables are read-only and RPCs are authenticated-only', 
   assert(row.attendance_update === false, 'attendance must be marked by the RPC only')
   assert(row.payment_insert === false, 'payments must be recorded by the RPC only')
   assert(row.payment_delete === false, 'payments are never deleted')
-  assert(row.session_execute === true && row.mark_execute === true, 'staff RPCs should be executable')
+  assert(
+    row.session_execute === true && row.mark_execute === true,
+    'staff RPCs should be executable',
+  )
   assert(row.pay_execute === true && row.void_execute === true, 'payment RPCs should be executable')
   assert(row.anon_session_execute === false, 'anon must not create sessions')
 })
@@ -2965,7 +3212,10 @@ await test('N8: attendance upserts and is visible only to staff or its player', 
 
     await actAs('authenticated', A)
     const own = await db.query(`select player_id from public.training_attendance`)
-    assert(own.rows.length === 1 && own.rows[0].player_id === P1, 'a player sees only their own row')
+    assert(
+      own.rows.length === 1 && own.rows[0].player_id === P1,
+      'a player sees only their own row',
+    )
 
     await actAs('authenticated', D)
     const manager = await db.query(`select player_id from public.training_attendance`)
@@ -3100,7 +3350,12 @@ await test('N9: club activity tables are read-only and RPCs are authenticated-on
   assert(row.vote_delete === false, 'votes must cross the RPC')
   assert(row.announcement_insert === false, 'announcements must cross the RPC')
   assert(
-    row.project_execute && row.order_execute && row.poll_execute && row.vote_execute && row.results_execute && row.news_execute,
+    row.project_execute &&
+      row.order_execute &&
+      row.poll_execute &&
+      row.vote_execute &&
+      row.results_execute &&
+      row.news_execute,
     'the club activity RPCs should be executable by authenticated members',
   )
   assert(row.anon_results_execute === false, 'anon must not read poll results')
@@ -3157,9 +3412,7 @@ await test('N9: a player orders once, can update, and cannot see another player�
     const design = await db.query(
       `select public.add_jersey_design('${projectId}', 'Home', null) as result`,
     )
-    const size = await db.query(
-      `select public.add_jersey_size('${projectId}', 'L') as result`,
-    )
+    const size = await db.query(`select public.add_jersey_size('${projectId}', 'L') as result`)
     const designId = design.rows[0].result.id
     const sizeId = size.rows[0].result.id
     await db.query(`select public.set_jersey_project_status('${projectId}', 'open')`)
@@ -3201,9 +3454,7 @@ await test('N9: a closed project and a passed deadline refuse orders', async () 
     const design = await db.query(
       `select public.add_jersey_design('${projectId}', 'Home', null) as result`,
     )
-    const size = await db.query(
-      `select public.add_jersey_size('${projectId}', 'S') as result`,
-    )
+    const size = await db.query(`select public.add_jersey_size('${projectId}', 'S') as result`)
     await db.query(`select public.set_jersey_project_status('${projectId}', 'open')`)
 
     await actAs('authenticated', A)
@@ -3420,7 +3671,10 @@ await test('N9: drafts stay staff-only and announcements publish once', async ()
     const published = await db.query(
       `select status, published_at from public.announcements where id = '${announcementId}'`,
     )
-    assert(published.rows.length === 1 && published.rows[0].status === 'published', 'members see it')
+    assert(
+      published.rows.length === 1 && published.rows[0].status === 'published',
+      'members see it',
+    )
     assert(published.rows[0].published_at !== null, 'publishing stamps a date')
 
     await actAs('authenticated', C)
@@ -3431,16 +3685,9 @@ await test('N9: drafts stay staff-only and announcements publish once', async ()
     assert(archived.rows.length === 0, 'archived news leaves the member view')
 
     await actAs('authenticated', A)
-    await expectQueryError(
-      `select public.create_announcement('Nope', 'Nope')`,
-      /not authorized/i,
-    )
+    await expectQueryError(`select public.create_announcement('Nope', 'Nope')`, /not authorized/i)
 
-    await expectErrorAs(
-      D,
-      `select public.create_announcement('Nope', 'Nope')`,
-      /not authorized/i,
-    )
+    await expectErrorAs(D, `select public.create_announcement('Nope', 'Nope')`, /not authorized/i)
   })
 })
 
@@ -3600,7 +3847,7 @@ await test('N10: only the challenged player responds and only the challenger can
 
 await test('N10: only the winner submits and only the loser approves, without moving SP', async () => {
   await inTransaction(async () => {
-    await actAs('postgres')
+    await disableEnabledRules()
     const baseline = await db.query(`
       select
         (select count(*)::int from public.sp_transactions) as transactions,
@@ -3638,7 +3885,9 @@ await test('N10: only the winner submits and only the loser approves, without mo
     )
 
     await actAs('authenticated', rivalProfile)
-    const confirmed = await db.query(`select public.approve_friendly_result('${matchId}') as result`)
+    const confirmed = await db.query(
+      `select public.approve_friendly_result('${matchId}') as result`,
+    )
     assert(confirmed.rows[0].result.status === 'confirmed', 'the loser confirms')
     await expectQueryError(
       `select public.approve_friendly_result('${matchId}')`,
@@ -3713,9 +3962,526 @@ await test('N10: the loser disputes with a reason and the result is not confirme
   })
 })
 
+/**
+ * Gives P1 and P4 what a real approved player has: a linked account and a
+ * starting SP account. The fixtures create player records without balances, so
+ * an award would otherwise — correctly — refuse to run.
+ */
+async function ensureFriendlyAccounts() {
+  await actAs('postgres')
+  await db.query(`update public.players set profile_id = '${D}' where id = '${P4}'`)
+  // Create any missing account the way registration approval would: 1,000 SP
+  // with a matching initial ledger row, so reconciliation stays exact.
+  const created = await db.query(`
+    insert into public.sp_accounts (player_id, current_sp)
+    values ('${P1}', 0), ('${P4}', 0)
+    on conflict (player_id) do nothing
+    returning player_id
+  `)
+
+  for (const row of created.rows) {
+    await db.query(
+      `insert into public.sp_transactions (
+         player_id, transaction_type, sp_before, sp_delta, sp_after,
+         reference_type, idempotency_key, metadata
+       ) values (
+         '${row.player_id}', 'initial', 0, 1000, 1000,
+         'registration', 'player:${row.player_id}:initial',
+         '{"source":"test fixture"}'::jsonb
+       )`,
+    )
+    await db.query(
+      `update public.sp_accounts set current_sp = 1000 where player_id = '${row.player_id}'`,
+    )
+  }
+}
+
+/**
+ * Plays one friendly between P1 (winner) and P4 and returns the match id.
+ * Leaves P4 linked to the tournament manager's account, as the other friendly
+ * tests do, so either side can act.
+ */
+async function playFriendly({ approve = true } = {}) {
+  await ensureFriendlyAccounts()
+
+  await actAs('authenticated', A)
+  const created = await db.query(`select public.create_friendly_challenge('${P4}', null) as result`)
+  const matchId = created.rows[0].result.id
+
+  await actAs('authenticated', D)
+  await db.query(`select public.respond_friendly_challenge('${matchId}', true)`)
+
+  await actAs('authenticated', A)
+  await db.query(`select public.submit_friendly_result('${matchId}', '${P1}')`)
+
+  if (approve) {
+    await actAs('authenticated', D)
+    await db.query(`select public.approve_friendly_result('${matchId}')`)
+  }
+
+  await actAs('postgres')
+  return matchId
+}
+
+/**
+ * Turns the club rule off for one rolled-back transaction. Workflow tests that
+ * are not about awards use this so an enabled club rule cannot change the
+ * scenario under test.
+ */
+async function disableEnabledRules() {
+  await actAs('postgres')
+  await db.query(`update public.sp_rule_versions set is_enabled = false where is_enabled`)
+}
+
+/**
+ * Turns on a synthetic approved rule version for one test transaction. The
+ * numbers are test inputs, not club values.
+ */
+async function enableTestRule(version = 'test-award', overrides = {}) {
+  const config = {
+    baseChange: 10,
+    strengthSensitivity: 0.01,
+    minGainPerMatch: 2,
+    maxGainPerMatch: 16,
+    minLossPerMatch: 2,
+    maxLossPerMatch: 16,
+    floor: 0,
+    tournamentMultiplier: 2,
+    rounding: 'round',
+    doublesSplit: 'even',
+    ...overrides,
+  }
+
+  await disableEnabledRules()
+  await db.query(
+    `insert into public.sp_rule_versions (version, status, config, is_enabled, notes)
+     values ('${version}', 'approved', '${JSON.stringify(config)}'::jsonb, true, 'test harness rule')`,
+  )
+}
+
+await test('P4: a confirmed friendly awards nothing while no rule version is enabled', async () => {
+  await inTransaction(async () => {
+    await disableEnabledRules()
+    await ensureFriendlyAccounts()
+    const snapshot = `
+      select (select count(*)::int from public.sp_transactions) as tx,
+             (select current_sp from public.sp_accounts where player_id = '${P1}') as p1,
+             (select current_sp from public.sp_accounts where player_id = '${P4}') as p4
+    `
+    const before = await db.query(snapshot)
+
+    const matchId = await playFriendly()
+
+    const after = await db.query(snapshot)
+    assert(after.rows[0].tx === before.rows[0].tx, 'no ledger row without an enabled rule')
+    assert(after.rows[0].p1 === before.rows[0].p1, 'the winner balance is unchanged')
+    assert(after.rows[0].p4 === before.rows[0].p4, 'the loser balance is unchanged')
+
+    const award = await db.query(`select public.award_friendly_sp('${matchId}') as result`)
+    assert(award.rows[0].result.status === 'disabled', 'the award reports disabled')
+    assert(award.rows[0].result.awarded === 0, 'nothing is awarded')
+  })
+})
+
+await test('P4: an approved, enabled rule awards both players exactly once', async () => {
+  await inTransaction(async () => {
+    await ensureFriendlyAccounts()
+    await enableTestRule()
+    await db.query(
+      `update public.sp_accounts set current_sp = 1000 where player_id in ('${P1}', '${P4}')`,
+    )
+    const matchId = await playFriendly()
+
+    const rows = await db.query(
+      `select player_id, sp_before, sp_delta, sp_after, idempotency_key, rule_version
+         from public.sp_transactions
+        where reference_id = '${matchId}'
+        order by player_id`,
+    )
+    assert(rows.rows.length === 2, 'one ledger row per player')
+
+    const deltas = rows.rows.map((row) => row.sp_delta).sort((a, b) => a - b)
+    assert(JSON.stringify(deltas) === JSON.stringify([-10, 10]), 'equal ratings move ±10')
+
+    for (const row of rows.rows) {
+      assert(row.sp_before + row.sp_delta === row.sp_after, 'each row balances')
+      assert(row.rule_version === 'test-award', 'the row records the rule version')
+      assert(row.idempotency_key.startsWith('friendly:'), 'the key names the source')
+    }
+
+    const replay = await db.query(`select public.award_friendly_sp('${matchId}') as result`)
+    assert(replay.rows[0].result.awarded === 0, 'a replay awards nothing')
+    assert(replay.rows[0].result.skipped === 2, 'both players are already processed')
+
+    const total = await db.query(
+      `select count(*)::int as n from public.sp_transactions where reference_id = '${matchId}'`,
+    )
+    assert(total.rows[0].n === 2, 'no duplicate rows')
+
+    await actAs('authenticated', C)
+    const recon = await db.query(`select public.reconcile_sp_balances() as result`)
+    assert(recon.rows[0].result.consistent === true, 'the ledger still reconciles')
+  })
+})
+
+await test('P4: the approved club rule awards 20 points at equal ratings', async () => {
+  await inTransaction(async () => {
+    await ensureFriendlyAccounts()
+    await db.query(
+      `update public.sp_accounts set current_sp = 1000 where player_id in ('${P1}', '${P4}')`,
+    )
+    const matchId = await playFriendly()
+
+    const rows = await db.query(
+      `select player_id, sp_delta, rule_version
+         from public.sp_transactions
+        where reference_id = '${matchId}'
+        order by player_id`,
+    )
+    assert(rows.rows.length === 2, 'one ledger row per player')
+
+    const deltas = rows.rows.map((row) => row.sp_delta).sort((a, b) => a - b)
+    assert(JSON.stringify(deltas) === JSON.stringify([-20, 20]), 'the approved base moves ±20')
+    assert(
+      rows.rows.every((row) => row.rule_version === 'approved-2026-11'),
+      'the ledger records the approved rule version',
+    )
+  })
+})
+
+await test('P4: the award rounds half-up on the size of the change', async () => {
+  await inTransaction(async () => {
+    await ensureFriendlyAccounts()
+    await db.query(`update public.sp_accounts set current_sp = 1000 where player_id = '${P1}'`)
+    // P4 starts 25 points above P1, so the raw change is 20.5 -> 21.
+    await db.query(`update public.sp_accounts set current_sp = 1025 where player_id = '${P4}'`)
+    await enableTestRule('test-rounding', {
+      baseChange: 20,
+      strengthSensitivity: 0.02,
+      minGainPerMatch: 5,
+      maxGainPerMatch: 40,
+      minLossPerMatch: 5,
+      maxLossPerMatch: 40,
+    })
+
+    const matchId = await playFriendly()
+
+    const winner = await db.query(
+      `select sp_delta from public.sp_transactions
+        where reference_id = '${matchId}' and player_id = '${P1}'`,
+    )
+    const loser = await db.query(
+      `select sp_delta from public.sp_transactions
+        where reference_id = '${matchId}' and player_id = '${P4}'`,
+    )
+
+    assert(winner.rows[0].sp_delta === 21, `expected +21, got ${winner.rows[0].sp_delta}`)
+    assert(loser.rows[0].sp_delta === -21, `expected -21, got ${loser.rows[0].sp_delta}`)
+  })
+})
+
+await test('P4: auto-approval awards SP once, and the helper is internal', async () => {
+  await inTransaction(async () => {
+    await enableTestRule()
+    const matchId = await playFriendly({ approve: false })
+
+    await actAs('postgres')
+    await db.query(
+      `update public.friendly_matches
+          set auto_approval_due_at = now() - interval '1 minute'
+        where id = '${matchId}'`,
+    )
+    // The scheduler has no JWT.
+    await db.exec(`set local request.jwt.claim.sub = ''`)
+
+    const first = await db.query(`select public.auto_approve_friendly_matches() as result`)
+    const second = await db.query(`select public.auto_approve_friendly_matches() as result`)
+
+    assert(first.rows[0].result === 1, 'the overdue match is approved')
+    assert(second.rows[0].result === 0, 'a replay approves nothing')
+
+    const total = await db.query(
+      `select count(*)::int as n from public.sp_transactions where reference_id = '${matchId}'`,
+    )
+    assert(total.rows[0].n === 2, 'the job awards exactly once per player')
+  })
+
+  const { rows } = await db.query(`
+    select
+      has_function_privilege('authenticated', 'public.award_friendly_sp(uuid)', 'EXECUTE') as member,
+      has_function_privilege('anon', 'public.award_friendly_sp(uuid)', 'EXECUTE') as anon
+  `)
+  assert(rows[0].member === false, 'members cannot award SP directly')
+  assert(rows[0].anon === false, 'anon cannot award SP')
+})
+
+/** Creates and starts a season as the Super Admin, then returns its id. */
+async function openSeason(label = 'Season 2026', starts = '2026-01-01', ends = '2026-12-31') {
+  await actAs('authenticated', C)
+  const created = await db.query(
+    `select public.create_season('${label}', '${starts}', '${ends}') as result`,
+  )
+  const seasonId = created.rows[0].result.id
+  await db.query(`select public.start_season('${seasonId}')`)
+  await actAs('postgres')
+  return seasonId
+}
+
+await test('S1: seasonal tables are read-only to clients and callable through audited RPCs', async () => {
+  const { rows } = await db.query(`
+    select
+      has_table_privilege('authenticated', 'public.seasons', 'INSERT') as seasons_insert,
+      has_table_privilege('authenticated', 'public.season_balances', 'UPDATE') as balances_update,
+      has_table_privilege('authenticated', 'public.season_player_results', 'DELETE') as results_delete,
+      has_table_privilege('authenticated', 'public.season_deduction_entries', 'INSERT') as entries_insert,
+      has_table_privilege('anon', 'public.seasons', 'SELECT') as anon_seasons,
+      has_table_privilege('authenticated', 'public.season_balances', 'SELECT') as member_balances,
+      has_function_privilege('authenticated', 'public.close_season(uuid)', 'EXECUTE') as member_close
+  `)
+  const row = rows[0]
+
+  assert(row.member_balances === true, 'members read the seasonal leaderboard')
+  assert(row.member_close === true, 'members may call the guarded RPC')
+  assert(row.seasons_insert === false, 'seasons are created through the RPC')
+  assert(row.balances_update === false, 'seasonal balances are RPC-only')
+  assert(row.results_delete === false, 'a snapshot is never deleted by a client')
+  assert(row.entries_insert === false, 'deduction entries are never inserted by a client')
+  assert(row.anon_seasons === false, 'anon cannot read seasons')
+})
+
+await test('S2/S3: only a Super Admin creates a season and only one may be active', async () => {
+  await inTransaction(async () => {
+    await actAs('authenticated', A)
+    await expectQueryError(
+      `select public.create_season('Season 2026', '2026-01-01', '2026-12-31')`,
+      /not authorized/i,
+    )
+
+    await actAs('authenticated', C)
+    const created = await db.query(
+      `select public.create_season('Season 2026', '2026-01-01', '2026-12-31') as result`,
+    )
+    const seasonId = created.rows[0].result.id
+    assert(created.rows[0].result.status === 'scheduled', 'a new season starts scheduled')
+
+    await expectQueryError(
+      `select public.create_season('Overlapping', '2026-06-01', '2027-06-01')`,
+      /overlaps/i,
+    )
+
+    const next = await db.query(
+      `select public.create_season('Season 2027', '2027-01-01', '2027-12-31') as result`,
+    )
+    const nextId = next.rows[0].result.id
+
+    const started = await db.query(`select public.start_season('${seasonId}') as result`)
+    assert(started.rows[0].result.status === 'active', 'the season becomes active')
+
+    await expectQueryError(`select public.start_season('${seasonId}')`, /already active/i)
+    await expectQueryError(`select public.start_season('${nextId}')`, /another season/i)
+
+    await actAs('postgres')
+    const steps = await db.query(
+      `select step from public.season_transition_steps where season_id = '${seasonId}'`,
+    )
+    assert(
+      steps.rows.length === 1 && steps.rows[0].step === 'activated',
+      'activation is checkpointed',
+    )
+  })
+})
+
+await test('S1/S13: an awarded friendly accrues Seasonal SP in the active season', async () => {
+  await inTransaction(async () => {
+    await ensureFriendlyAccounts()
+    await enableTestRule()
+    await db.query(
+      `update public.sp_accounts set current_sp = 1000 where player_id in ('${P1}', '${P4}')`,
+    )
+
+    const seasonId = await openSeason()
+    const matchId = await playFriendly()
+
+    await actAs('postgres')
+    const balances = await db.query(
+      `select seasonal_sp from public.season_balances where season_id = '${seasonId}' order by seasonal_sp`,
+    )
+    assert(balances.rows.length === 2, 'both players get a seasonal balance')
+    const values = balances.rows.map((row) => row.seasonal_sp)
+    assert(JSON.stringify(values) === JSON.stringify([-10, 10]), 'seasonal SP mirrors the award')
+
+    const matchRows = await db.query(
+      `select count(*)::int as n from public.sp_transactions where reference_id = '${matchId}'`,
+    )
+    assert(matchRows.rows[0].n === 2, 'the award still writes two ledger rows')
+  })
+})
+
+await test('S8/S12/S19: closing a season snapshots shared ranks and generates a pending batch', async () => {
+  await inTransaction(async () => {
+    await ensureFriendlyAccounts()
+    const seasonId = await openSeason()
+
+    await actAs('postgres')
+    await db.query(`
+      insert into public.season_balances (season_id, player_id, seasonal_sp)
+      values
+        ('${seasonId}', '${P1}', 1200),
+        ('${seasonId}', '${P4}', 1200),
+        ('${seasonId}', '${P5}', 900),
+        ('${seasonId}', '${P6}', -20)
+    `)
+
+    await actAs('authenticated', C)
+    const closed = await db.query(`select public.close_season('${seasonId}') as result`)
+    const result = closed.rows[0].result
+    assert(result.status === 'closed', 'the season closes')
+    assert(result.snapshots === 4, `expected 4 snapshots, got ${result.snapshots}`)
+    assert(
+      result.deduction_entries === 3,
+      `expected 3 deduction entries, got ${result.deduction_entries}`,
+    )
+
+    const replay = await db.query(`select public.close_season('${seasonId}') as result`)
+    assert(replay.rows[0].result.already_processed === true, 'replaying the close is a no-op')
+
+    await actAs('postgres')
+    const rows = await db.query(`
+      select player_id, position, excluded_reason
+        from public.season_player_results
+       where season_id = '${seasonId}'
+       order by position nulls last, player_id
+    `)
+    const byPlayer = Object.fromEntries(rows.rows.map((row) => [row.player_id, row]))
+    assert(byPlayer[P1].position === 1, 'the first tied player is 1st')
+    assert(byPlayer[P4].position === 1, 'the second tied player shares 1st')
+    assert(byPlayer[P5].position === 3, 'competition ranking skips to 3rd')
+    assert(byPlayer[P6].position === null, 'a negative balance has no position')
+    assert(
+      byPlayer[P6].excluded_reason === 'negative_seasonal_sp',
+      'the exclusion reason is recorded',
+    )
+
+    const entries = await db.query(
+      `select position, tier, proposed_amount from public.season_deduction_entries
+        where batch_id = '${result.batch_id}' order by position`,
+    )
+    assert(entries.rows.length === 3, 'one entry per ranked player')
+    assert(
+      entries.rows.every((row) => row.tier === 1 && row.proposed_amount === 40),
+      'tier 1 is 40 SP',
+    )
+  })
+})
+
+await test('S8/S9: approving a batch caps at the balance, waives the rest, and runs once', async () => {
+  await inTransaction(async () => {
+    await ensureFriendlyAccounts()
+    await db.query(`update public.sp_accounts set current_sp = 25 where player_id = '${P1}'`)
+    await db.query(`update public.sp_accounts set current_sp = 1000 where player_id = '${P4}'`)
+
+    const seasonId = await openSeason()
+    await actAs('postgres')
+    await db.query(`
+      insert into public.season_balances (season_id, player_id, seasonal_sp)
+      values ('${seasonId}', '${P1}', 1200), ('${seasonId}', '${P4}', 1000)
+    `)
+
+    await actAs('authenticated', C)
+    const closed = await db.query(`select public.close_season('${seasonId}') as result`)
+    const batchId = closed.rows[0].result.batch_id
+
+    await expectQueryError(
+      `select public.decide_season_deduction_batch('${batchId}', false, 'no')`,
+      /between 5 and 500/i,
+    )
+
+    const approved = await db.query(
+      `select public.decide_season_deduction_batch('${batchId}', true) as result`,
+    )
+    assert(approved.rows[0].result.status === 'approved', 'the batch is approved')
+    assert(approved.rows[0].result.applied === 2, 'both players are charged')
+
+    await expectQueryError(
+      `select public.decide_season_deduction_batch('${batchId}', true)`,
+      /already approved/i,
+    )
+
+    await actAs('postgres')
+    const entries = await db.query(
+      `select player_id, applied_amount, waived_amount from public.season_deduction_entries
+        where batch_id = '${batchId}' order by player_id`,
+    )
+    const byPlayer = Object.fromEntries(entries.rows.map((row) => [row.player_id, row]))
+    assert(byPlayer[P1].applied_amount === 25, 'the deduction is capped at the balance')
+    assert(byPlayer[P1].waived_amount === 15, 'the remainder is permanently waived')
+    assert(byPlayer[P4].applied_amount === 40, 'a sufficient balance pays the tier')
+    assert(byPlayer[P4].waived_amount === 0, 'nothing is waived when the balance covers it')
+
+    const balances = await db.query(`
+      select player_id, current_sp from public.sp_accounts
+       where player_id in ('${P1}', '${P4}')
+    `)
+    const balanceByPlayer = Object.fromEntries(balances.rows.map((row) => [row.player_id, row]))
+    assert(balanceByPlayer[P1].current_sp === 0, 'the capped player drops to zero, not below')
+    assert(balanceByPlayer[P4].current_sp === 960, 'the full tier is deducted')
+
+    const ledger = await db.query(
+      `select count(*)::int as n from public.sp_transactions where reference_type = 'season'`,
+    )
+    assert(ledger.rows[0].n === 2, 'one ledger row per charged player')
+
+    const seasonal = await db.query(
+      `select player_id, seasonal_sp from public.season_balances where season_id = '${seasonId}'`,
+    )
+    const seasonalByPlayer = Object.fromEntries(seasonal.rows.map((row) => [row.player_id, row]))
+    assert(seasonalByPlayer[P1].seasonal_sp === 1200, 'a deduction never touches Seasonal SP')
+  })
+})
+
+await test('S9/S3: a rejected batch is kept, applies nothing, and blocks no season', async () => {
+  await inTransaction(async () => {
+    await ensureFriendlyAccounts()
+    const seasonId = await openSeason()
+
+    await actAs('postgres')
+    await db.query(`
+      insert into public.season_balances (season_id, player_id, seasonal_sp)
+      values ('${seasonId}', '${P1}', 1200)
+    `)
+
+    await actAs('authenticated', C)
+    const closed = await db.query(`select public.close_season('${seasonId}') as result`)
+    const batchId = closed.rows[0].result.batch_id
+
+    const rejected = await db.query(
+      `select public.decide_season_deduction_batch('${batchId}', false, 'Tiers were miscalculated') as result`,
+    )
+    assert(rejected.rows[0].result.status === 'rejected', 'the batch is rejected')
+
+    await actAs('postgres')
+    const kept = await db.query(
+      `select status, rejection_reason from public.season_deduction_batches where id = '${batchId}'`,
+    )
+    assert(kept.rows[0].status === 'rejected', 'the rejected batch is preserved')
+    assert(kept.rows[0].rejection_reason === 'Tiers were miscalculated', 'the reason is kept')
+
+    const ledger = await db.query(
+      `select count(*)::int as n from public.sp_transactions where reference_type = 'season'`,
+    )
+    assert(ledger.rows[0].n === 0, 'a rejected batch applies nothing')
+
+    const nextId = await openSeason('Season 2027', '2027-01-01', '2027-12-31')
+    const active = await db.query(
+      `select count(*)::int as n from public.seasons where status = 'active' and id = '${nextId}'`,
+    )
+    assert(active.rows[0].n === 1, 'a pending or rejected batch never blocks the next season')
+  })
+})
+
 await test('N10: auto-approval waits for the 24-hour deadline and is idempotent', async () => {
   await inTransaction(async () => {
-    await actAs('postgres')
+    await disableEnabledRules()
     await db.query(`update public.players set profile_id = '${D}' where id = '${P4}'`)
     const rivalId = P4
     const rivalProfile = D
@@ -3767,10 +4533,7 @@ await test('N10: auto-approval waits for the 24-hour deadline and is idempotent'
     assert(audit.rows[0].total === 1, 'the automatic approval is audited')
 
     await actAs('authenticated', A)
-    await expectQueryError(
-      `select public.auto_approve_friendly_matches()`,
-      /not authorized/i,
-    )
+    await expectQueryError(`select public.auto_approve_friendly_matches()`, /not authorized/i)
   })
 })
 
@@ -3785,10 +4548,16 @@ await test('N10: only participants and Super Admins read a friendly match', asyn
     await db.query(`select public.create_friendly_challenge('${rivalId}', null)`)
 
     await actAs('authenticated', A)
-    assert((await db.query(`select id from public.friendly_matches`)).rows.length === 1, 'challenger sees it')
+    assert(
+      (await db.query(`select id from public.friendly_matches`)).rows.length === 1,
+      'challenger sees it',
+    )
 
     await actAs('authenticated', rivalProfile)
-    assert((await db.query(`select id from public.friendly_matches`)).rows.length === 1, 'opponent sees it')
+    assert(
+      (await db.query(`select id from public.friendly_matches`)).rows.length === 1,
+      'opponent sees it',
+    )
 
     await actAs('authenticated', B)
     const outsider = await db.query(`select id from public.friendly_matches`)
@@ -3812,6 +4581,814 @@ await test('N10: anon cannot read friendly matches or call their RPCs', async ()
   await expectError(
     'anon challenge',
     () => asRole('anon', `select public.create_friendly_challenge('${P1}', null)`),
+    /permission denied/i,
+  )
+})
+
+// ---------------------------------------------------------------------------
+// Player IDs, friends, notifications, and tournament registration
+// ---------------------------------------------------------------------------
+
+/** Links an existing player record to an account, as approval would. */
+async function linkPlayerToProfile(playerId, profileId) {
+  await actAs('postgres')
+  await db.query(`update public.players set profile_id = '${profileId}' where id = '${playerId}'`)
+}
+
+async function createFeeTournament(name, fee) {
+  await actAs('authenticated', D)
+  const { rows } = await db.query(
+    `select public.create_tournament('${name}', '2026-11-01', '2026-11-02', null, null, null, ${fee}) as result`,
+  )
+  return rows[0].result
+}
+
+async function publishTournament(tournamentId) {
+  await actAs('authenticated', D)
+  return db.query(`select public.set_tournament_status('${tournamentId}', 'published') as result`)
+}
+
+await test('R1: every player gets a stable, unique, readable player ID', async () => {
+  const { rows } = await db.query(`select id, player_code from public.players order by id`)
+  assert(rows.length >= 7, 'the fixture players all get a code')
+
+  const codes = new Set()
+  for (const row of rows) {
+    assert(/^MBC-[0-9A-F]{8}$/.test(row.player_code), `unexpected code ${row.player_code}`)
+    codes.add(row.player_code)
+  }
+
+  assert(codes.size === rows.length, 'player codes are unique')
+
+  const again = await db.query(`select player_code from public.players where id = '${P1}'`)
+  assert(
+    again.rows[0].player_code === rows.find((row) => row.id === P1).player_code,
+    'the code is stable across reads',
+  )
+})
+
+await test('R2: a friend request needs an active linked player and can be accepted', async () => {
+  await inTransaction(async () => {
+    await linkPlayerToProfile(P4, D)
+    const { rows } = await db.query(`select player_code from public.players where id = '${P4}'`)
+    const code = rows[0].player_code
+
+    await actAs('authenticated', A)
+    const sent = await db.query(`select public.send_player_friend_request('${code}') as result`)
+    assert(sent.rows[0].result.status === 'pending', 'the request starts pending')
+    assert(sent.rows[0].result.changed === true, 'the first request changes state')
+
+    const repeat = await db.query(`select public.send_player_friend_request('${code}') as result`)
+    assert(repeat.rows[0].result.changed === false, 'a repeat request is a no-op')
+    assert(
+      repeat.rows[0].result.friendship_id === sent.rows[0].result.friendship_id,
+      'the same friendship row is returned',
+    )
+
+    await actAs('postgres')
+    const notifications = await db.query(
+      `select type, link_path from public.notifications
+        where profile_id = '${D}' and type = 'friend_request'`,
+    )
+    assert(notifications.rows.length === 1, 'the recipient is notified once')
+
+    await actAs('authenticated', B)
+    assert(
+      (await db.query(`select id from public.player_friendships`)).rows.length === 0,
+      'an unrelated profile sees no friendships',
+    )
+
+    await actAs('authenticated', D)
+    const visible = await db.query(`select id from public.player_friendships`)
+    assert(visible.rows.length === 1, 'the addressee sees the request')
+
+    const accepted = await db.query(
+      `select public.respond_player_friend_request('${sent.rows[0].result.friendship_id}', true) as result`,
+    )
+    assert(accepted.rows[0].result.status === 'accepted', 'the request is accepted')
+
+    await actAs('authenticated', A)
+    const again = await db.query(`select public.send_player_friend_request('${code}') as result`)
+    assert(again.rows[0].result.already_friends === true, 're-sending recognises the friendship')
+
+    await actAs('postgres')
+    const acceptedNotice = await db.query(
+      `select type from public.notifications
+        where profile_id = '${A}' and type = 'friend_request_accepted'`,
+    )
+    assert(acceptedNotice.rows.length === 1, 'the requester learns the request was accepted')
+    assert(
+      (await db.query(`select public.is_friend('${P1}', '${P4}') as friends`)).rows[0].friends ===
+        true,
+      'the pair is a friend pair',
+    )
+  })
+})
+
+await test('R3: a declined request creates no friendship and can be retried', async () => {
+  await inTransaction(async () => {
+    await linkPlayerToProfile(P4, D)
+    const { rows } = await db.query(`select player_code from public.players where id = '${P4}'`)
+
+    await actAs('authenticated', A)
+    const sent = await db.query(
+      `select public.send_player_friend_request('${rows[0].player_code}') as result`,
+    )
+
+    await actAs('authenticated', D)
+    const declined = await db.query(
+      `select public.respond_player_friend_request('${sent.rows[0].result.friendship_id}', false) as result`,
+    )
+    assert(declined.rows[0].result.status === 'declined', 'the request is declined')
+
+    await actAs('postgres')
+    assert(
+      (await db.query(`select public.is_friend('${P1}', '${P4}') as friends`)).rows[0].friends ===
+        false,
+      'a decline does not create a friendship',
+    )
+
+    await actAs('authenticated', A)
+    const retried = await db.query(
+      `select public.send_player_friend_request('${rows[0].player_code}') as result`,
+    )
+    assert(retried.rows[0].result.status === 'pending', 'a declined request can be sent again')
+    assert(retried.rows[0].result.changed === true, 'the retry changes state')
+  })
+})
+
+await test('R4: a member reads and clears only their own notifications', async () => {
+  await inTransaction(async () => {
+    await linkPlayerToProfile(P4, D)
+    const { rows } = await db.query(`select player_code from public.players where id = '${P4}'`)
+
+    await actAs('authenticated', A)
+    const sent = await db.query(
+      `select public.send_player_friend_request('${rows[0].player_code}') as result`,
+    )
+
+    await actAs('postgres')
+    const target = await db.query(
+      `select id from public.notifications
+        where profile_id = '${D}' and type = 'friend_request'`,
+    )
+    const targetId = target.rows[0].id
+
+    await actAs('authenticated', A)
+    const cross = await db.query(`select public.mark_notification_read('${targetId}') as result`)
+    assert(cross.rows[0].result.changed === false, 'another member cannot mark it read')
+
+    await actAs('authenticated', D)
+    const own = await db.query(`select id from public.notifications where read_at is null limit 1`)
+    assert(own.rows.length === 1, 'the recipient sees the unread row')
+    const marked = await db.query(
+      `select public.mark_notification_read('${own.rows[0].id}') as result`,
+    )
+    assert(marked.rows[0].result.changed === true, 'the recipient marks it read')
+
+    await actAs('postgres')
+    await db.query(
+      `insert into public.notifications (profile_id, type, title)
+       values ('${D}', 'friend_request', 'Another notice')`,
+    )
+
+    await actAs('authenticated', D)
+    const cleared = await db.query(`select public.mark_all_notifications_read() as result`)
+    assert(cleared.rows[0].result.marked === 1, 'mark-all clears the remaining unread row')
+    assert(
+      (await db.query(`select id from public.notifications where read_at is null`)).rows.length ===
+        0,
+      'nothing is left unread for the recipient',
+    )
+
+    await actAs('authenticated', A)
+    assert(
+      (await db.query(`select id from public.notifications`)).rows.length === 0,
+      'another member sees none of those notifications',
+    )
+  })
+})
+
+await test('T1: an unpaid entry blocks the draw until staff mark every player paid', async () => {
+  await inTransaction(async () => {
+    const tournament = await createFeeTournament('Paid Cup', 100)
+    const event = await createEvent(tournament.id, 'singles', 'single_elimination', 8)
+    await publishTournament(tournament.id)
+
+    await actAs('authenticated', A)
+    const joined = await db.query(`select public.join_tournament_event('${event.id}') as result`)
+    assert(joined.rows[0].result.payment_status === 'unpaid', 'a paid tournament starts unpaid')
+    const playerEntry = joined.rows[0].result.entry_id
+
+    await actAs('authenticated', D)
+    const p3Entry = (await registerEntry(event.id, [P3])).rows[0].result.entry_id
+    await registerEntry(event.id, [P5])
+
+    await actAs('postgres')
+    const payments = await db.query(
+      `select id, player_id, status from public.tournament_entry_payments
+        where entry_id = '${playerEntry}'`,
+    )
+    assert(
+      payments.rows.length === 1 && payments.rows[0].status === 'unpaid',
+      'self-entry creates one unpaid row',
+    )
+
+    await actAs('authenticated', D)
+    await expectQueryError(
+      `select public.save_tournament_draw('${event.id}', '[{"key":"m1","bracket":"winners","round":1,"position":1,"home_entry_id":"${playerEntry}","away_entry_id":"${p3Entry}"}]'::jsonb, false)`,
+      /at least two fully paid/i,
+    )
+
+    await actAs('postgres')
+    const p3Payment = await db.query(
+      `select id from public.tournament_entry_payments
+        where entry_id = '${p3Entry}' and player_id = '${P3}'`,
+    )
+
+    await actAs('authenticated', A)
+    await expectQueryError(
+      `select public.set_entry_payment('${payments.rows[0].id}', 'paid')`,
+      /not authorized/i,
+    )
+
+    await actAs('authenticated', D)
+    await db.query(`select public.set_entry_payment('${payments.rows[0].id}', 'paid')`)
+    await db.query(`select public.set_entry_payment('${p3Payment.rows[0].id}', 'paid')`)
+
+    const draw = await saveDraw(event.id, [
+      {
+        key: 'm1',
+        bracket: 'winners',
+        round: 1,
+        position: 1,
+        home_entry_id: playerEntry,
+        away_entry_id: p3Entry,
+      },
+    ])
+    assert(draw.entry_count === 2, 'only the two paid entries enter the draw')
+    assert(draw.registered_count === 3, 'the unpaid entry stays registered but excluded')
+
+    await actAs('postgres')
+    const eligible = await db.query(
+      `select public.entry_payment_complete('${playerEntry}') as complete`,
+    )
+    assert(eligible.rows[0].complete === true, 'a fully paid entry is draw-eligible')
+
+    await actAs('authenticated', A)
+    const ownPayments = await db.query(`select id from public.tournament_entry_payments`)
+    assert(ownPayments.rows.length === 1, 'a player sees only their own payment row')
+
+    await actAs('authenticated', B)
+    assert(
+      (await db.query(`select id from public.tournament_entry_payments`)).rows.length === 0,
+      'an unrelated member sees no payment rows',
+    )
+
+    await actAs('authenticated', D)
+    assert(
+      (await db.query(`select id from public.tournament_entry_payments`)).rows.length === 3,
+      'staff see every payment row',
+    )
+
+    await actAs('postgres')
+    const notice = await db.query(
+      `select type from public.notifications
+        where profile_id = '${A}' and type = 'entry_payment_paid'`,
+    )
+    assert(notice.rows.length === 1, 'a confirmed payment notifies the player')
+  })
+})
+
+await test('T2: a guest doubles partner is recorded without creating a player', async () => {
+  await inTransaction(async () => {
+    const tournament = await createFeeTournament('Guest Cup', 50)
+    const event = await createEvent(tournament.id, 'mixed_doubles', 'single_elimination', 8)
+    await publishTournament(tournament.id)
+
+    await actAs('postgres')
+    const before = await db.query(`select count(*)::int as n from public.players`)
+
+    await actAs('authenticated', A)
+    const joined = await db.query(
+      `select public.join_tournament_event('${event.id}', null, 'Guest Partner') as result`,
+    )
+    assert(joined.rows[0].result.guest_name === 'Guest Partner', 'the guest is named on the entry')
+    const entryId = joined.rows[0].result.entry_id
+
+    await actAs('postgres')
+    const after = await db.query(`select count(*)::int as n from public.players`)
+    assert(after.rows[0].n === before.rows[0].n, 'no player record is created for a guest')
+
+    const members = await db.query(
+      `select tm.player_id, tm.guest_name, tm.guest_gender
+         from public.team_members as tm
+         join public.tournament_entries as en on en.team_id = tm.team_id
+        where en.id = '${entryId}'
+        order by tm.guest_name nulls first`,
+    )
+    assert(members.rows.length === 2, 'the doubles team has two members')
+    assert(members.rows[0].player_id === P1, 'the signed-in player is the first member')
+    assert(members.rows[1].guest_name === 'Guest Partner', 'the guest is the second member')
+    assert(members.rows[1].guest_gender === 'female', 'mixed doubles infers the guest gender')
+
+    const payments = await db.query(
+      `select player_id, guest_name, amount, status
+         from public.tournament_entry_payments
+        where entry_id = '${entryId}'
+        order by guest_name nulls first`,
+    )
+    assert(payments.rows.length === 2, 'both participants get a payment row')
+    assert(
+      Number(payments.rows[0].amount) === 50 && payments.rows[0].status === 'unpaid',
+      'the player owes the fee',
+    )
+    assert(payments.rows[1].guest_name === 'Guest Partner', 'the guest also owes the fee')
+  })
+})
+
+await test('T3: a partner invitation creates the entry only after acceptance', async () => {
+  await inTransaction(async () => {
+    await linkPlayerToProfile(P4, D)
+
+    await actAs('postgres')
+    await db.query(
+      `insert into public.player_friendships (
+         requester_player_id, addressee_player_id, status, responded_at
+       ) values ('${P1}', '${P4}', 'accepted', now())`,
+    )
+
+    const tournament = await createFeeTournament('Partners Cup', 75)
+    const event = await createEvent(tournament.id, 'mixed_doubles', 'single_elimination', 8)
+    await publishTournament(tournament.id)
+
+    await actAs('authenticated', A)
+    const invited = await db.query(
+      `select public.join_tournament_event('${event.id}', '${P4}') as result`,
+    )
+    assert(invited.rows[0].result.status === 'pending_partner', 'the invite is pending')
+    const invitationId = invited.rows[0].result.invitation_id
+
+    await actAs('postgres')
+    const entriesBefore = await db.query(
+      `select count(*)::int as n from public.tournament_entries where event_id = '${event.id}'`,
+    )
+    assert(entriesBefore.rows[0].n === 0, 'no entry exists before the partner accepts')
+
+    const invitedNotice = await db.query(
+      `select type from public.notifications
+        where profile_id = '${D}' and type = 'partner_invitation'`,
+    )
+    assert(invitedNotice.rows.length === 1, 'the partner is notified')
+
+    await actAs('authenticated', D)
+    const accepted = await db.query(
+      `select public.respond_tournament_partner_invitation('${invitationId}', true) as result`,
+    )
+    assert(accepted.rows[0].result.status === 'accepted', 'the partner accepts')
+    const entryId = accepted.rows[0].result.entry_id
+    assert(entryId, 'an entry is created on acceptance')
+
+    await actAs('postgres')
+    const payments = await db.query(
+      `select player_id, amount, status from public.tournament_entry_payments
+        where entry_id = '${entryId}'
+        order by player_id`,
+    )
+    assert(payments.rows.length === 2, 'both partners owe the entrance fee')
+    assert(
+      payments.rows.every((row) => row.status === 'unpaid' && Number(row.amount) === 75),
+      'the fee is snapshotted onto both payment rows',
+    )
+
+    const acceptedNotice = await db.query(
+      `select type from public.notifications
+        where profile_id = '${A}' and type = 'partner_invitation_accepted'`,
+    )
+    assert(acceptedNotice.rows.length === 1, 'the inviter is notified')
+
+    await actAs('authenticated', D)
+    const replay = await db.query(
+      `select public.respond_tournament_partner_invitation('${invitationId}', true) as result`,
+    )
+    assert(replay.rows[0].result.changed === false, 'answering twice is a no-op')
+    assert(
+      (
+        await db.query(
+          `select count(*)::int as n from public.tournament_entries where event_id = '${event.id}'`,
+        )
+      ).rows[0].n === 1,
+      'no duplicate entry is created',
+    )
+  })
+})
+
+await test('T4: cancelling or declining an invitation creates no entry', async () => {
+  await inTransaction(async () => {
+    await linkPlayerToProfile(P4, D)
+
+    await actAs('postgres')
+    await db.query(
+      `insert into public.player_friendships (
+         requester_player_id, addressee_player_id, status, responded_at
+       ) values ('${P1}', '${P4}', 'accepted', now())`,
+    )
+
+    const cancelledTournament = await createFeeTournament('Invitation Cup', 0)
+    const cancelledEvent = await createEvent(
+      cancelledTournament.id,
+      'mixed_doubles',
+      'single_elimination',
+      8,
+    )
+    await publishTournament(cancelledTournament.id)
+
+    const declinedTournament = await createFeeTournament('Second Invitation Cup', 0)
+    const declinedEvent = await createEvent(
+      declinedTournament.id,
+      'mixed_doubles',
+      'round_robin',
+      8,
+    )
+    await publishTournament(declinedTournament.id)
+
+    await actAs('authenticated', A)
+    const first = await db.query(
+      `select public.join_tournament_event('${cancelledEvent.id}', '${P4}') as result`,
+    )
+    const cancelled = await db.query(
+      `select public.cancel_tournament_partner_invitation('${first.rows[0].result.invitation_id}') as result`,
+    )
+    assert(cancelled.rows[0].result.status === 'cancelled', 'the inviter can cancel')
+
+    const second = await db.query(
+      `select public.join_tournament_event('${declinedEvent.id}', '${P4}') as result`,
+    )
+
+    await actAs('authenticated', D)
+    const declined = await db.query(
+      `select public.respond_tournament_partner_invitation('${second.rows[0].result.invitation_id}', false) as result`,
+    )
+    assert(declined.rows[0].result.status === 'declined', 'the partner can decline')
+
+    await actAs('postgres')
+    const entries = await db.query(
+      `select count(*)::int as n from public.tournament_entries
+        where event_id in ('${cancelledEvent.id}', '${declinedEvent.id}')`,
+    )
+    assert(entries.rows[0].n === 0, 'neither outcome creates an entry')
+  })
+})
+
+await test('T5: publishing notifies active club members once, drafts notify nobody', async () => {
+  await inTransaction(async () => {
+    const tournament = await createFeeTournament('Notice Cup', 0)
+    await createEvent(tournament.id, 'singles', 'single_elimination', 8)
+
+    await actAs('postgres')
+    const before = await db.query(
+      `select count(*)::int as n from public.notifications
+        where type = 'tournament_published'`,
+    )
+
+    await publishTournament(tournament.id)
+
+    await actAs('postgres')
+    const published = await db.query(
+      `select profile_id, title, link_path from public.notifications
+        where type = 'tournament_published' and tournament_id = '${tournament.id}'
+        order by profile_id`,
+    )
+    const newRows = published.rows.length
+    assert(before.rows[0].n === 0, 'the fixture starts with no publish notices')
+    assert(newRows === 2, `expected two active members to be notified, got ${newRows}`)
+    assert(
+      published.rows.every((row) => row.profile_id !== D),
+      'the actor is not notified',
+    )
+    assert(
+      published.rows.every((row) => row.link_path === `/tournaments/${tournament.id}`),
+      'the notification links to the tournament',
+    )
+    assert(
+      published.rows.every((row) => row.title.includes('Notice Cup')),
+      'the title names the tournament',
+    )
+
+    await actAs('authenticated', D)
+    await db.query(`select public.set_tournament_status('${tournament.id}', 'archived')`)
+
+    await actAs('postgres')
+    const afterArchive = await db.query(
+      `select count(*)::int as n from public.notifications
+        where type = 'tournament_published' and tournament_id = '${tournament.id}'`,
+    )
+    assert(afterArchive.rows[0].n === newRows, 'later status changes send no duplicate notice')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Payment receipts (migration 015)
+// ---------------------------------------------------------------------------
+const RECEIPT_A_PNG = `receipts/training/${A}/00000000-0000-4000-8000-000000000001.png`
+const RECEIPT_A_PDF = `receipts/tournament/${A}/00000000-0000-4000-8000-000000000002.pdf`
+const RECEIPT_A_JPG = `receipts/jersey/${A}/00000000-0000-4000-8000-000000000003.jpg`
+
+await test('W1: a training receipt stays pending until staff approve it', async () => {
+  await inTransaction(async () => {
+    await actAs('authenticated', C)
+    const period = await db.query(
+      `select public.create_training_fee_period('Receipt Test', '2026-11-01', '2026-11-30', 500, null) as result`,
+    )
+    const periodId = period.rows[0].result.id
+
+    await actAs('authenticated', A)
+    const submitted = await db.query(
+      `select public.submit_payment_receipt(
+        'training', '${periodId}', 500, 'gcash', 'GCASH-REF-1', '2026-11-02', '${RECEIPT_A_PNG}'
+      ) as result`,
+    )
+    const receiptId = submitted.rows[0].result.receipt_id
+    assert(submitted.rows[0].result.status === 'pending', 'a new receipt starts pending')
+
+    await actAs('postgres')
+    assert(
+      (await db.query(`select count(*)::int as n from public.training_payments`)).rows[0].n === 0,
+      'a pending receipt records no money',
+    )
+
+    await actAs('authenticated', A)
+    assert(
+      (await db.query(`select id from public.payment_receipts`)).rows.length === 1,
+      'the submitter sees their receipt',
+    )
+
+    await actAs('authenticated', D)
+    assert(
+      (await db.query(`select id from public.payment_receipts`)).rows.length === 0,
+      'a tournament manager cannot read training receipts',
+    )
+
+    await actAs('authenticated', C)
+    const reviewed = await db.query(
+      `select public.review_payment_receipt('${receiptId}', true, 'GCash reference verified') as result`,
+    )
+    assert(reviewed.rows[0].result.status === 'approved', 'staff approve the receipt')
+
+    await actAs('postgres')
+    const payments = await db.query(
+      `select amount, method, status, recorded_by from public.training_payments
+        where fee_period_id = '${periodId}' and player_id = '${P1}'`,
+    )
+    assert(payments.rows.length === 1, 'approval records exactly one payment')
+    assert(Number(payments.rows[0].amount) === 500, 'the approved amount is recorded')
+    assert(payments.rows[0].method === 'gcash', 'the submitted method is kept')
+    assert(payments.rows[0].status === 'recorded', 'the payment counts immediately')
+    assert(payments.rows[0].recorded_by === C, 'the reviewer is the recorded_by')
+
+    const notice = await db.query(
+      `select type from public.notifications
+        where profile_id = '${A}' and type = 'payment_receipt_approved'`,
+    )
+    assert(notice.rows.length === 1, 'the submitter is notified')
+
+    await actAs('authenticated', C)
+    await expectQueryError(
+      `select public.review_payment_receipt('${receiptId}', true, null)`,
+      /already been reviewed/i,
+    )
+  })
+})
+
+await test('W2: a rejection needs a reason and never records money', async () => {
+  await inTransaction(async () => {
+    await actAs('authenticated', C)
+    const period = await db.query(
+      `select public.create_training_fee_period('Reject Test', '2026-11-01', '2026-11-30', 300, null) as result`,
+    )
+    const periodId = period.rows[0].result.id
+
+    await actAs('authenticated', A)
+    const submitted = await db.query(
+      `select public.submit_payment_receipt(
+        'training', '${periodId}', 100, 'gcash', null, '2026-11-02', '${RECEIPT_A_PNG}'
+      ) as result`,
+    )
+    const receiptId = submitted.rows[0].result.receipt_id
+
+    await actAs('authenticated', C)
+    await expectQueryError(
+      `select public.review_payment_receipt('${receiptId}', false, '')`,
+      /reason/i,
+    )
+    const rejected = await db.query(
+      `select public.review_payment_receipt('${receiptId}', false, 'The screenshot is unreadable') as result`,
+    )
+    assert(rejected.rows[0].result.status === 'rejected', 'staff can reject with a reason')
+
+    await actAs('postgres')
+    assert(
+      (
+        await db.query(
+          `select count(*)::int as n from public.training_payments where fee_period_id = '${periodId}'`,
+        )
+      ).rows[0].n === 0,
+      'a rejected receipt records no payment',
+    )
+
+    const notice = await db.query(
+      `select type from public.notifications
+        where profile_id = '${A}' and type = 'payment_receipt_rejected'`,
+    )
+    assert(notice.rows.length === 1, 'the submitter learns why it was rejected')
+  })
+})
+
+await test('W3: an entrance-fee receipt must match and settles the participant', async () => {
+  await inTransaction(async () => {
+    const tournament = await createFeeTournament('Receipt Cup', 200)
+    const event = await createEvent(tournament.id, 'singles', 'single_elimination', 8)
+    await publishTournament(tournament.id)
+
+    await actAs('authenticated', A)
+    const joined = await db.query(`select public.join_tournament_event('${event.id}') as result`)
+    const entryId = joined.rows[0].result.entry_id
+
+    await actAs('postgres')
+    const payment = await db.query(
+      `select id, amount from public.tournament_entry_payments where entry_id = '${entryId}'`,
+    )
+    const paymentId = payment.rows[0].id
+
+    await actAs('authenticated', A)
+    await expectQueryError(
+      `select public.submit_payment_receipt(
+        'tournament', '${paymentId}', 50, 'gcash', null, '2026-11-02', '${RECEIPT_A_PDF}'
+      )`,
+      /match the entrance fee/i,
+    )
+
+    const submitted = await db.query(
+      `select public.submit_payment_receipt(
+        'tournament', '${paymentId}', 200, 'gcash', 'GCASH-T-1', '2026-11-02', '${RECEIPT_A_PDF}'
+      ) as result`,
+    )
+    const receiptId = submitted.rows[0].result.receipt_id
+
+    await actAs('authenticated', A)
+    await expectQueryError(
+      `select public.review_payment_receipt('${receiptId}', true, null)`,
+      /not authorized/i,
+    )
+
+    await actAs('authenticated', D)
+    const reviewed = await db.query(
+      `select public.review_payment_receipt('${receiptId}', true, 'GCash confirmed') as result`,
+    )
+    assert(reviewed.rows[0].result.status === 'approved', 'tournament staff approve the fee')
+
+    await actAs('postgres')
+    const settled = await db.query(
+      `select status from public.tournament_entry_payments where id = '${paymentId}'`,
+    )
+    assert(settled.rows[0].status === 'paid', 'approval marks the participant paid')
+    assert(
+      (await db.query(`select public.entry_payment_complete('${entryId}') as complete`)).rows[0]
+        .complete === true,
+      'the entry becomes draw-eligible',
+    )
+
+    const notice = await db.query(
+      `select type from public.notifications
+        where profile_id = '${A}' and type = 'entry_payment_paid'`,
+    )
+    assert(notice.rows.length >= 1, 'the participant is notified')
+  })
+})
+
+await test('W4: a jersey receipt uses the order snapshot and settles the order', async () => {
+  await inTransaction(async () => {
+    await actAs('authenticated', C)
+    const project = await db.query(
+      `select public.create_jersey_project('Receipt Kit', null, 500, null) as result`,
+    )
+    const projectId = project.rows[0].result.id
+    const design = await db.query(
+      `select public.add_jersey_design('${projectId}', 'Home', null) as result`,
+    )
+    const size = await db.query(`select public.add_jersey_size('${projectId}', 'M') as result`)
+    await db.query(`select public.set_jersey_project_status('${projectId}', 'open')`)
+
+    await actAs('authenticated', A)
+    await db.query(
+      `select public.submit_jersey_order(
+        '${projectId}', '${design.rows[0].result.id}', '${size.rows[0].result.id}', 2
+      )`,
+    )
+
+    await actAs('postgres')
+    const jerseyPayment = await db.query(
+      `select p.id, p.amount, p.status
+         from public.jersey_order_payments as p
+         join public.jersey_orders as o on o.id = p.order_id
+        where o.project_id = '${projectId}'`,
+    )
+    assert(jerseyPayment.rows.length === 1, 'an order creates one payment row')
+    assert(Number(jerseyPayment.rows[0].amount) === 1000, 'the price and quantity are snapshotted')
+    assert(jerseyPayment.rows[0].status === 'unpaid', 'the order starts unpaid')
+    const paymentId = jerseyPayment.rows[0].id
+
+    await actAs('authenticated', A)
+    assert(
+      (await db.query(`select id from public.jersey_order_payments`)).rows.length === 1,
+      'the player sees their own jersey fee',
+    )
+    await expectQueryError(
+      `select public.submit_payment_receipt(
+        'jersey', '${paymentId}', 500, 'gcash', null, '2026-11-02', '${RECEIPT_A_JPG}'
+      )`,
+      /match the jersey total/i,
+    )
+    const submitted = await db.query(
+      `select public.submit_payment_receipt(
+        'jersey', '${paymentId}', 1000, 'gcash', 'GCASH-J-1', '2026-11-02', '${RECEIPT_A_JPG}'
+      ) as result`,
+    )
+
+    await actAs('authenticated', D)
+    assert(
+      (await db.query(`select id from public.jersey_order_payments`)).rows.length === 0,
+      'a tournament manager is not jersey staff',
+    )
+
+    await actAs('authenticated', C)
+    await db.query(
+      `select public.review_payment_receipt('${submitted.rows[0].result.receipt_id}', true, null)`,
+    )
+
+    await actAs('postgres')
+    const paid = await db.query(
+      `select status, marked_by from public.jersey_order_payments where id = '${paymentId}'`,
+    )
+    assert(paid.rows[0].status === 'paid', 'approval settles the jersey payment')
+    assert(paid.rows[0].marked_by === C, 'the reviewer is recorded')
+  })
+})
+
+await test('W5: only jersey staff can mark an order paid, and anon sees nothing', async () => {
+  await inTransaction(async () => {
+    await actAs('authenticated', C)
+    const project = await db.query(
+      `select public.create_jersey_project('Manual Kit', null, 250, null) as result`,
+    )
+    const projectId = project.rows[0].result.id
+    const design = await db.query(
+      `select public.add_jersey_design('${projectId}', 'Away', null) as result`,
+    )
+    const size = await db.query(`select public.add_jersey_size('${projectId}', 'S') as result`)
+    await db.query(`select public.set_jersey_project_status('${projectId}', 'open')`)
+
+    await actAs('authenticated', A)
+    await db.query(
+      `select public.submit_jersey_order(
+        '${projectId}', '${design.rows[0].result.id}', '${size.rows[0].result.id}', 1
+      )`,
+    )
+
+    await actAs('postgres')
+    const payment = await db.query(
+      `select p.id from public.jersey_order_payments as p
+         join public.jersey_orders as o on o.id = p.order_id
+        where o.project_id = '${projectId}'`,
+    )
+    const paymentId = payment.rows[0].id
+
+    await actAs('authenticated', A)
+    await expectQueryError(
+      `select public.set_jersey_order_payment('${paymentId}', 'paid')`,
+      /not authorized/i,
+    )
+
+    await actAs('authenticated', C)
+    const marked = await db.query(
+      `select public.set_jersey_order_payment('${paymentId}', 'paid', 'Cash at training') as result`,
+    )
+    assert(marked.rows[0].result.status === 'paid', 'training staff can settle it manually')
+  })
+
+  await expectError(
+    'anon payment receipts',
+    () => asRole('anon', `select id from public.payment_receipts`),
+    /permission denied/i,
+  )
+  await expectError(
+    'anon jersey payments',
+    () => asRole('anon', `select id from public.jersey_order_payments`),
+    /permission denied/i,
+  )
+  await expectErrorAs(
+    A,
+    `insert into public.payment_receipts (purpose) values ('training')`,
     /permission denied/i,
   )
 })

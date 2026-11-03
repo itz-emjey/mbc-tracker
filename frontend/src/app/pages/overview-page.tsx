@@ -1,161 +1,397 @@
-import { ArrowRight } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import * as React from 'react'
 
-import { modulesFor, APP_MODULES } from '@/app/navigation'
+import { ErrorState } from '@/components/shared/error-state'
+import { LoadingState } from '@/components/shared/loading-state'
 import { PageHeader } from '@/components/shared/page-header'
-import { PlayerIdentity } from '@/components/shared/player-identity'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { arenaMatches, arenaRecord, rivalsNear, tierFor } from '@/domain/arena'
+import { errorMessage, listPendingRegistrations } from '@/features/auth/api'
 import { useSession } from '@/features/auth/session-context'
-import { ACCOUNT_STATUS_LABELS, ROLE_LABELS } from '@/features/auth/types'
+import { hasAnyRole } from '@/features/auth/types'
+import { listAnnouncements } from '@/features/announcements/api'
+import type { AnnouncementRecord } from '@/features/announcements/types'
+import { listFriendlyMatches } from '@/features/friendlies/api'
+import type { FriendlyMatchRecord } from '@/features/friendlies/types'
+import { listJerseyOrders, listJerseyProjects } from '@/features/jerseys/api'
+import type { JerseyOrderRecord, JerseyProjectRecord } from '@/features/jerseys/types'
+import { getPlayerByProfile, getPlayerSp, listPlayers } from '@/features/players/api'
+import type { PlayerRecord } from '@/features/players/types'
+import { getPollResults, listPolls } from '@/features/polls/api'
+import type { PollRecord, PollResults } from '@/features/polls/types'
+import { listSpLeaderboard } from '@/features/shuttlepower/api'
+import { rankLeaderboard } from '@/features/shuttlepower/leaderboard'
+import type { SpLeaderboardEntry } from '@/features/shuttlepower/types'
+import {
+  listFeePeriods,
+  listTrainingAttendance,
+  listTrainingPayments,
+  listTrainingSessions,
+} from '@/features/training/api'
+import type {
+  TrainingAttendanceRecord,
+  TrainingFeePeriodRecord,
+  TrainingPaymentRecord,
+  TrainingSessionRecord,
+} from '@/features/training/types'
+import { listTournaments } from '@/features/tournaments/api'
+import type { TournamentRecord } from '@/features/tournaments/types'
+import { formatDateTime } from '@/lib/format'
 
-const SHELL_CAPABILITIES = [
-  'Real Supabase Auth session with pending-account gating',
-  'Role-aware navigation for multi-role accounts',
-  'Registration approval, player linking, and starting SP',
-  'Loading, unauthenticated, access-denied, and not-found states',
-] as const
+import {
+  ArenaPulse,
+  ClubDutyPanel,
+  ClubFeedPanel,
+  FighterCard,
+  LadderBoard,
+  MatchCentrePanel,
+  OperationsPanel,
+  QuickActions,
+  RivalsPanel,
+  TournamentBoard,
+  YourMovePanel,
+  type FeedItem,
+  type StaffSummaryRow,
+} from './overview/arena-panels'
+import {
+  activePolls,
+  attendanceSummary,
+  buildAttentionItems,
+  feeSummary,
+  latestFeePeriod,
+  nextTrainingSession,
+  openJerseyProjects,
+  upcomingTournaments,
+} from './overview/derive'
 
-/**
- * Overview is intentionally data-free until the player and tournament modules
- * exist. It shows the real session and the real module list — no invented
- * standings, players, or matches.
- */
+interface OverviewData {
+  player: PlayerRecord | null
+  sp: number | null
+  leaderboard: SpLeaderboardEntry[]
+  matches: FriendlyMatchRecord[]
+  players: PlayerRecord[]
+  sessions: TrainingSessionRecord[]
+  attendance: TrainingAttendanceRecord[]
+  feePeriods: TrainingFeePeriodRecord[]
+  payments: TrainingPaymentRecord[]
+  announcements: AnnouncementRecord[]
+  polls: PollRecord[]
+  pollResults: PollResults[]
+  jerseyProjects: JerseyProjectRecord[]
+  jerseyOrders: JerseyOrderRecord[]
+  tournaments: TournamentRecord[]
+  pendingRegistrations: number
+  loadedAt: number
+}
+
+/** Local calendar date, matching how the club reads date-only fields. */
+function localToday(now: number): string {
+  const date = new Date(now)
+
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-')
+}
+
 export function OverviewPage() {
   const { user } = useSession()
+  const [data, setData] = React.useState<OverviewData | null>(null)
+  const [loading, setLoading] = React.useState(true)
+  const [error, setError] = React.useState<string | null>(null)
+  const [reloadKey, setReloadKey] = React.useState(0)
+
+  React.useEffect(() => {
+    let active = true
+
+    async function load() {
+      if (!user) return
+
+      setLoading(true)
+      setError(null)
+
+      try {
+        const player = await getPlayerByProfile(user.id)
+        const isSuperAdmin = hasAnyRole(user.roles, ['super_admin'])
+        const loadedAt = Date.now()
+
+        const [
+          sp,
+          tournaments,
+          sessions,
+          attendance,
+          feePeriods,
+          payments,
+          announcements,
+          polls,
+          jerseyProjects,
+          jerseyOrders,
+          matches,
+          players,
+          leaderboard,
+          pending,
+        ] = await Promise.all([
+          player ? getPlayerSp(player.id) : Promise.resolve(null),
+          listTournaments(),
+          listTrainingSessions(),
+          listTrainingAttendance(),
+          listFeePeriods(),
+          listTrainingPayments(),
+          listAnnouncements(),
+          listPolls(),
+          listJerseyProjects(),
+          listJerseyOrders(),
+          listFriendlyMatches(),
+          listPlayers(),
+          listSpLeaderboard(),
+          isSuperAdmin ? listPendingRegistrations() : Promise.resolve([]),
+        ])
+
+        const currentPolls = activePolls(polls, loadedAt)
+        const pollResults = await Promise.all(currentPolls.map((poll) => getPollResults(poll.id)))
+
+        if (!active) return
+
+        setData({
+          player,
+          sp,
+          leaderboard,
+          matches,
+          players,
+          sessions,
+          attendance,
+          feePeriods,
+          payments,
+          announcements,
+          polls,
+          pollResults,
+          jerseyProjects,
+          jerseyOrders,
+          tournaments,
+          pendingRegistrations: pending.length,
+          loadedAt,
+        })
+      } catch (loadError) {
+        if (active) setError(errorMessage(loadError))
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+
+    void load()
+
+    return () => {
+      active = false
+    }
+  }, [user, reloadKey])
+
+  const reload = React.useCallback(() => setReloadKey((current) => current + 1), [])
 
   if (!user) {
     return null
   }
 
-  const modules = modulesFor(user.roles)
+  if (loading) {
+    return (
+      <>
+        <PageHeader title="Arena" />
+        <LoadingState className="mt-6" label="Loading the arena" rows={6} />
+      </>
+    )
+  }
+
+  if (error || !data) {
+    return (
+      <>
+        <PageHeader title="Arena" />
+        <ErrorState
+          className="mt-6"
+          title="Could not load your arena"
+          description={error ?? 'The arena data is unavailable right now.'}
+          onRetry={reload}
+        />
+      </>
+    )
+  }
+
+  const firstName = user.name.trim().split(/\s+/)[0] ?? user.name
+  const today = localToday(data.loadedAt)
+  const names = new Map(data.players.map((player) => [player.id, player.full_name]))
+  const ranked = rankLeaderboard(data.leaderboard)
+  const ownRank = data.player ? ranked.find((row) => row.playerId === data.player?.id) : undefined
+
+  const session = nextTrainingSession(data.sessions, data.loadedAt)
+  const attendance = attendanceSummary(data.attendance, data.player?.id ?? null)
+  const period = latestFeePeriod(data.feePeriods)
+  const fee = period ? feeSummary(period, data.payments, data.player?.id ?? null) : null
+
+  const currentPolls = activePolls(data.polls, data.loadedAt)
+  const pollResults = new Map(data.pollResults.map((result) => [result.poll_id, result]))
+  const projects = openJerseyProjects(data.jerseyProjects, data.loadedAt)
+  const canActAsPlayer = data.player?.status === 'active'
+
+  const attentionItems = buildAttentionItems({
+    player: data.player,
+    now: data.loadedAt,
+    matches: data.matches,
+    names,
+    polls: currentPolls,
+    pollResults,
+    jerseyProjects: projects,
+    jerseyOrders: data.jerseyOrders,
+    feePeriod: period,
+    payments: data.payments,
+    tournaments: data.tournaments,
+  })
+
+  const upcoming = upcomingTournaments(data.tournaments, today)
+  const record = arenaRecord(data.matches, data.player?.id ?? null)
+  const matchRows = arenaMatches(data.matches, data.player?.id ?? null, data.loadedAt, 4)
+  const progress = data.sp === null ? null : tierFor(data.sp)
+  const rivals = data.player ? rivalsNear(ranked, data.player.id, 4) : []
+
+  const orderedProjectIds = new Set(
+    canActAsPlayer && data.player
+      ? data.jerseyOrders
+          .filter((order) => order.player_id === data.player?.id && order.status === 'submitted')
+          .map((order) => order.project_id)
+      : [],
+  )
+
+  const feed: FeedItem[] = [
+    ...data.announcements
+      .filter((announcement) => announcement.status === 'published')
+      .slice(0, 2)
+      .map((announcement) => ({
+        id: `news:${announcement.id}`,
+        kind: 'news' as const,
+        title: announcement.title,
+        description: announcement.body,
+        href: '/announcements',
+        meta: announcement.published_at ? formatDateTime(announcement.published_at) : null,
+      })),
+    ...currentPolls.slice(0, 1).map((poll) => ({
+      id: `poll:${poll.id}`,
+      kind: 'poll' as const,
+      title: poll.question,
+      description: poll.closes_at
+        ? `Closes ${formatDateTime(poll.closes_at)}. One response per player unless the poll says otherwise.`
+        : 'Open for responses. One response per player unless the poll says otherwise.',
+      href: '/polls',
+      meta: pollResults.get(poll.id)?.my_option_ids.length ? 'Voted' : 'Open',
+    })),
+    ...projects.slice(0, 1).map((project) => ({
+      id: `jersey:${project.id}`,
+      kind: 'jersey' as const,
+      title: project.name,
+      description: orderedProjectIds.has(project.id)
+        ? 'You have an order in for this project.'
+        : (project.description ?? 'Ordering is open for this project.'),
+      href: '/jerseys',
+      meta: project.order_deadline
+        ? `Closes ${formatDateTime(project.order_deadline)}`
+        : 'Ordering open',
+    })),
+  ]
+
+  const staffRows: StaffSummaryRow[] = []
+
+  if (hasAnyRole(user.roles, ['super_admin'])) {
+    staffRows.push({
+      id: 'registrations',
+      label: 'Pending registrations',
+      description: 'Accounts waiting for approval or rejection.',
+      href: '/admin',
+      count: data.pendingRegistrations,
+    })
+    staffRows.push({
+      id: 'disputes',
+      label: 'Disputed results',
+      description: 'Friendly matches waiting for a club decision.',
+      href: '/matches',
+      count: data.matches.filter((match) => match.status === 'disputed').length,
+    })
+  }
+
+  if (hasAnyRole(user.roles, ['tournament_manager'])) {
+    staffRows.push({
+      id: 'draft-tournaments',
+      label: 'Draft tournaments',
+      description: 'Events that are not published yet.',
+      href: '/tournaments',
+      count: data.tournaments.filter((tournament) => tournament.status === 'draft').length,
+    })
+  }
+
+  if (hasAnyRole(user.roles, ['trainer'])) {
+    staffRows.push({
+      id: 'draft-announcements',
+      label: 'Draft announcements',
+      description: 'Club news waiting to be published.',
+      href: '/announcements',
+      count: data.announcements.filter((announcement) => announcement.status === 'draft').length,
+    })
+    staffRows.push({
+      id: 'draft-polls',
+      label: 'Draft polls',
+      description: 'Polls not yet opened to members.',
+      href: '/polls',
+      count: data.polls.filter((poll) => poll.status === 'draft').length,
+    })
+  }
 
   return (
     <>
       <PageHeader
-        title="Overview"
-        description={`Signed in as ${user.name}. Your navigation shows the combined access of every role you hold.`}
+        title="Arena"
+        description={`Welcome back, ${firstName}. Your clash card, the ladder, and everything waiting on you.`}
       />
 
-      <div className="mt-6 grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Your access</CardTitle>
-            <CardDescription>
-              Frontend role checks shape navigation only. The database decides what data is readable
-              or writable.
-            </CardDescription>
-          </CardHeader>
+      <ArenaPulse
+        className="mt-4"
+        players={ranked.length}
+        events={upcoming.length}
+        waiting={matchRows.filter((row) => row.needsYou).length}
+      />
 
-          <CardContent className="flex flex-col gap-4">
-            <PlayerIdentity
-              name={user.name}
-              meta={user.email}
-              size="lg"
-              trailing={
-                <Badge
-                  tone={
-                    user.status === 'approved'
-                      ? 'accent'
-                      : user.status === 'pending'
-                        ? 'warning'
-                        : 'danger'
-                  }
-                >
-                  {ACCOUNT_STATUS_LABELS[user.status]}
-                </Badge>
-              }
-            />
+      <div className="mt-4 grid gap-4 xl:grid-cols-12">
+        <div className="flex flex-col gap-4 xl:col-span-3">
+          <FighterCard
+            player={data.player}
+            sp={data.sp}
+            position={ownRank?.position ?? null}
+            totalPlayers={ranked.length}
+            divisionPosition={ownRank?.divisionPosition ?? null}
+            record={record}
+            progress={progress}
+            roles={user.roles}
+            status={user.status}
+          />
 
-            <div>
-              <p className="text-[10px] uppercase tracking-[0.12em] text-text-faint">Roles</p>
-              <div className="mt-1.5 flex flex-wrap gap-1.5">
-                {user.roles.map((role) => (
-                  <Badge key={role} tone="accent" size="md">
-                    {ROLE_LABELS[role]}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Phase 1 foundation</CardTitle>
-            <CardDescription>
-              Groups A–D deliver the platform shell. Club business modules follow in later groups.
-            </CardDescription>
-          </CardHeader>
-
-          <CardContent>
-            <ul className="flex flex-col gap-2">
-              {SHELL_CAPABILITIES.map((capability) => (
-                <li key={capability} className="flex items-start gap-2 text-sm text-text-muted">
-                  <span
-                    aria-hidden="true"
-                    className="mt-1.5 size-1.5 shrink-0 rounded-full bg-accent"
-                  />
-                  {capability}
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      </div>
-
-      <section aria-labelledby="overview-modules" className="mt-8">
-        <div className="flex items-end justify-between gap-3">
-          <div>
-            <h2 id="overview-modules" className="text-base font-semibold text-text">
-              Modules available to you
-            </h2>
-            <p className="mt-1 text-sm text-text-muted">
-              {modules.length} of {APP_MODULES.length} modules. Items marked with a phase are routed
-              and guarded but not built yet.
-            </p>
-          </div>
+          <QuickActions />
         </div>
 
-        <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-          {modules.map((module) => {
-            const Icon = module.icon
+        <div className="flex flex-col gap-4 xl:col-span-6">
+          <YourMovePanel items={attentionItems} />
+          <MatchCentrePanel rows={matchRows} names={names} />
+          <TournamentBoard tournaments={upcoming} today={today} />
+          <ClubFeedPanel items={feed} />
+        </div>
 
-            return (
-              <li key={module.path} className="min-w-0">
-                <Link
-                  to={module.path}
-                  className="group flex items-center gap-3 rounded-md border border-border bg-surface-1 px-4 py-3 transition-colors duration-fast hover:border-border-strong hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring"
-                >
-                  <span className="flex size-8 shrink-0 items-center justify-center rounded-sm bg-surface-2 text-text-muted">
-                    <Icon className="size-4" aria-hidden="true" />
-                  </span>
-
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium text-text">
-                      {module.label}
-                    </span>
-                    <span className="block truncate text-xs text-text-muted">
-                      {module.description}
-                    </span>
-                  </span>
-
-                  {module.phase ? (
-                    <Badge tone="outline">{module.phase}</Badge>
-                  ) : (
-                    <Badge tone="accent">Live</Badge>
-                  )}
-
-                  <ArrowRight
-                    className="size-4 shrink-0 text-text-faint transition-transform duration-fast group-hover:translate-x-0.5"
-                    aria-hidden="true"
-                  />
-                </Link>
-              </li>
-            )
-          })}
-        </ul>
-      </section>
+        <div className="flex flex-col gap-4 xl:col-span-3">
+          <LadderBoard rows={ranked} ownPlayerId={data.player?.id ?? null} />
+          <RivalsPanel rivals={rivals} />
+          <ClubDutyPanel
+            session={session}
+            attended={attendance.attended}
+            recorded={attendance.recorded}
+            periodLabel={period?.label ?? null}
+            dueOn={period?.due_on ?? null}
+            amount={period?.amount ?? null}
+            fee={fee}
+          />
+          {staffRows.length > 0 ? <OperationsPanel rows={staffRows} /> : null}
+        </div>
+      </div>
     </>
   )
 }

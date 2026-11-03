@@ -1,5 +1,6 @@
 import type { StandingsRow } from '@/domain/standings'
 
+import { cn } from '@/lib/cn'
 import { Badge } from '@/components/ui/badge'
 import {
   Table,
@@ -19,6 +20,13 @@ interface StandingsTableProps {
 export function StandingsTable({ rows, labelForEntry, unresolvedGroups }: StandingsTableProps) {
   return (
     <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-[11px] font-medium uppercase tracking-[0.1em] text-text">Standings</h3>
+        <span className="font-mono text-[10px] tabular-nums text-text-faint">
+          {rows.length} entr{rows.length === 1 ? 'y' : 'ies'}
+        </span>
+      </div>
+
       <Table>
         <TableHeader>
           <TableRow>
@@ -35,8 +43,17 @@ export function StandingsTable({ rows, labelForEntry, unresolvedGroups }: Standi
         </TableHeader>
         <TableBody>
           {rows.map((row) => (
-            <TableRow key={row.entryId}>
-              <TableCell className="tabular-nums text-text-muted">{row.position}</TableCell>
+            <TableRow key={row.entryId} className={cn(row.position === 1 && 'bg-accent-soft')}>
+              <TableCell className="tabular-nums text-text-muted">
+                <span
+                  className={cn(
+                    'font-mono text-xs',
+                    row.position <= 3 ? 'text-accent' : 'text-text-muted',
+                  )}
+                >
+                  {row.position}
+                </span>
+              </TableCell>
               <TableCell className="max-w-64 truncate font-medium text-text">
                 {labelForEntry(row.entryId)}
               </TableCell>

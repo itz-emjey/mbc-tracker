@@ -3,16 +3,17 @@ import * as React from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
+import { ArenaAvatar, PowerMeter, RankBadge } from '@/components/arena/arena-ui'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { EmptyState } from '@/components/shared/empty-state'
 import { ErrorState } from '@/components/shared/error-state'
 import { LoadingState } from '@/components/shared/loading-state'
 import { PageHeader } from '@/components/shared/page-header'
-import { PlayerIdentity } from '@/components/shared/player-identity'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { tierFor } from '@/domain/arena'
 import { errorMessage } from '@/features/auth/api'
 import { useSession } from '@/features/auth/session-context'
 import { hasAnyRole, ROLE_LABELS, type Role } from '@/features/auth/types'
@@ -25,6 +26,7 @@ import {
   unlinkPlayerAccount,
 } from '@/features/players/api'
 import { PlayerFormDialog } from '@/features/players/player-form-dialog'
+import { FriendsCard } from '@/features/players/friends-card'
 import {
   PLAYER_GENDER_LABELS,
   PLAYER_STAFF_ROLES,
@@ -162,6 +164,8 @@ export function PlayerProfilePage({ self = false }: PlayerProfilePageProps) {
     )
   }
 
+  const progress = sp === null ? null : tierFor(sp)
+
   return (
     <>
       {!self ? (
@@ -175,8 +179,13 @@ export function PlayerProfilePage({ self = false }: PlayerProfilePageProps) {
       ) : null}
 
       <PageHeader
+        kicker={self ? 'Your fighter' : 'Fighter profile'}
         title={player.full_name}
-        description={self ? 'Your player record and club account.' : 'Player profile.'}
+        description={
+          self
+            ? 'Your player record, rating rank, and club account.'
+            : 'Club record, rank, and account link for this player.'
+        }
         actions={
           canEdit ? (
             <Button variant="secondary" onClick={() => setEditOpen(true)}>
@@ -187,14 +196,51 @@ export function PlayerProfilePage({ self = false }: PlayerProfilePageProps) {
         }
       />
 
-      <Card className="mt-5">
-        <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
-          <PlayerIdentity
-            name={player.full_name}
-            size="lg"
-            meta={player.gender ? PLAYER_GENDER_LABELS[player.gender] : 'Gender not recorded'}
-          />
-          <StatusBadge status={player.status} />
+      <Card className="mt-5 border-t-2 border-t-accent">
+        <CardContent className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-4">
+            <ArenaAvatar
+              name={player.full_name}
+              size="xl"
+              tone={progress?.tier.tone ?? 'neutral'}
+              ring
+            />
+
+            <div className="min-w-0">
+              <p className="font-mono text-[11px] uppercase tracking-[0.1em] text-text-faint">
+                {player.player_code}
+              </p>
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                {progress ? <RankBadge tier={progress.tier} /> : null}
+                <StatusBadge status={player.status} />
+              </div>
+              <p className="mt-1.5 text-[11px] text-text-muted">
+                {player.gender ? PLAYER_GENDER_LABELS[player.gender] : 'Gender not recorded'} ·
+                joined {formatDate(player.joined_on)}
+              </p>
+            </div>
+          </div>
+
+          {sp !== null && progress ? (
+            <div className="sm:min-w-56">
+              <p className="text-[10px] uppercase tracking-[0.14em] text-text-faint">
+                ShuttlePower
+              </p>
+              <p className="mt-1 font-mono text-3xl font-semibold leading-none tabular-nums text-text">
+                {sp.toLocaleString()}
+              </p>
+              <PowerMeter
+                className="mt-2"
+                progress={progress.progress}
+                label={`${progress.tier.rankTitle} rank progress`}
+              />
+              <p className="mt-1 text-[11px] text-text-muted">
+                {progress.next
+                  ? `${progress.spToNext} SP to ${progress.next.rankTitle}`
+                  : `${progress.tier.rankTitle} — the top rank`}
+              </p>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -208,6 +254,10 @@ export function PlayerProfilePage({ self = false }: PlayerProfilePageProps) {
           </CardHeader>
           <CardContent>
             <dl className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <dt className="text-xs uppercase tracking-[0.06em] text-text-faint">Player ID</dt>
+                <dd className="mt-1 font-mono text-sm text-text">{player.player_code}</dd>
+              </div>
               <div>
                 <dt className="text-xs uppercase tracking-[0.06em] text-text-faint">Joined</dt>
                 <dd className="mt-1 text-sm text-text">{formatDate(player.joined_on)}</dd>
@@ -320,6 +370,12 @@ export function PlayerProfilePage({ self = false }: PlayerProfilePageProps) {
           </Card>
         </div>
       </div>
+
+      {self ? (
+        <div className="mt-4">
+          <FriendsCard player={player} />
+        </div>
+      ) : null}
 
       {canEdit ? (
         <PlayerFormDialog

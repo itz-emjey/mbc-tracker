@@ -9,13 +9,14 @@ import {
   type SpMatchInput,
   type SpRuleConfig,
   type SpRuleVersion,
+  type SpRounding,
   type SpSideInput,
 } from './sp'
 
 /**
- * Synthetic config, independent of the provisional defaults: the club has not
- * approved numbers, so these tests assert direction, caps, determinism, and
- * ledger-shaped invariants — never a proposed value.
+ * Synthetic config, independent of the approved club values, so these tests
+ * assert direction, caps, determinism, and ledger-shaped invariants without
+ * locking in a club number.
  */
 const CONFIG: SpRuleConfig = {
   baseChange: 10,
@@ -202,7 +203,7 @@ describe('calculateSpChange', () => {
 
     expect(PROVISIONAL_SP_RULE.status).toBe('provisional')
     expect(PROVISIONAL_SP_RULE.enabled).toBe(false)
-    expect(PROVISIONAL_RULE_NOTICE).toMatch(/awaiting club approval/i)
+    expect(PROVISIONAL_RULE_NOTICE).toMatch(/no match awards SP/i)
     expect(result.status).toBe('disabled')
 
     if (result.status === 'disabled') {
@@ -275,6 +276,77 @@ describe('calculateSpChange', () => {
       ),
     ).toThrow(/minimum gain/i)
   })
+
+  it('rejects an unknown rounding policy by name, not as a bad split', () => {
+    expect(() =>
+      calculateSpChange(
+        approvedRule({ rounding: 'bankers' as unknown as SpRounding }),
+        match(singles('w', 1000), singles('l', 1000)),
+      ),
+    ).toThrow(/unknown rounding policy/i)
+  })
+
+  it('rejects an unknown doubles split by name', () => {
+    const config = { ...CONFIG, doublesSplit: 'weighted' } as unknown as SpRuleConfig
+
+    expect(() =>
+      calculateSpChange(
+        { version: 'test-rule', status: 'approved', enabled: true, config },
+        match(singles('w', 1000), singles('l', 1000)),
+      ),
+    ).toThrow(/unknown doubles split/i)
+  })
+
+  it('lets a configured minimum of zero govern instead of an implicit floor of one', () => {
+    const result = calculateSpChange(
+      approvedRule({
+        baseChange: 0,
+        strengthSensitivity: 0,
+        minGainPerMatch: 0,
+        minLossPerMatch: 0,
+      }),
+      match(singles('w', 1000), singles('l', 1000)),
+    )
+
+    if (result.status !== 'calculated') throw new Error('expected a calculated result')
+
+    // A zero change is not a ledger row (sp_delta <> 0), so both sides are empty.
+    expect(result.calculation.winnerDeltas).toEqual([])
+    expect(result.calculation.loserDeltas).toEqual([])
+    expect(result.calculation.winnerTeamChange).toBe(0)
+    expect(result.calculation.loserTeamChange).toBe(0)
+  })
+
+  it('rounds half-up before applying the tournament multiplier', () => {
+    const rule = approvedRule({
+      baseChange: 20,
+      strengthSensitivity: 0.02,
+      minGainPerMatch: 5,
+      maxGainPerMatch: 40,
+      minLossPerMatch: 5,
+      maxLossPerMatch: 40,
+    })
+    const friendly = calculateSpChange(rule, {
+      winner: singles('w', 1000),
+      loser: singles('l', 1025),
+      scope: 'friendly',
+    })
+    const tournament = calculateSpChange(rule, {
+      winner: singles('w', 1000),
+      loser: singles('l', 1025),
+      scope: 'tournament',
+    })
+
+    if (friendly.status !== 'calculated' || tournament.status !== 'calculated') {
+      throw new Error('expected calculated results')
+    }
+
+    // Raw 20.5 rounds to 21 first; doubling gives 42. Multiplying first would
+    // give round(41) = 41, so this pins the approved operation order.
+    expect(friendly.calculation.winnerTeamChange).toBe(21)
+    expect(tournament.calculation.winnerTeamChange).toBe(42)
+    expect(tournament.calculation.loserTeamChange).toBe(-42)
+  })
 })
 
 describe('distributeEqually', () => {
@@ -297,5 +369,17 @@ describe('distributeEqually', () => {
   it('drops zero shares and hands a single player the whole change', () => {
     expect(distributeEqually(['a', 'b'], 1)).toEqual([{ playerId: 'a', delta: 1 }])
     expect(distributeEqually(['a'], -12)).toEqual([{ playerId: 'a', delta: -12 }])
+  })
+
+  it('orders ids by code unit, not by locale collation', () => {
+    // 'B' (U+0042) precedes 'a' (U+0061) in code-unit order, while
+    // localeCompare would put 'a' first. The odd point follows the id, so a
+    // collation-dependent sort would hand it to the other partner than the
+    // database's `ORDER BY player_id` does.
+    expect(distributeEqually(['a', 'B'], 3)).toEqual([
+      { playerId: 'B', delta: 2 },
+      { playerId: 'a', delta: 1 },
+    ])
+    expect(distributeEqually(['B', 'a'], 3)).toEqual(distributeEqually(['a', 'B'], 3))
   })
 })

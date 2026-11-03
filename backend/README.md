@@ -33,16 +33,26 @@ backend/
 18. `policies/009_jersey_images.sql`
 19. `migrations/010_friendly_matches.sql`
 20. `policies/010_friendly_matches.sql`
+21. `migrations/011_friendly_sp_award.sql`
+22. `migrations/012_seasons.sql`
+23. `policies/012_seasons.sql`
+24. `migrations/013_players_friends_notifications.sql`
+25. `policies/013_players_social.sql`
+26. `migrations/014_tournament_registration.sql`
+27. `policies/014_tournament_registration.sql`
+28. `migrations/015_payment_receipts.sql`
+29. `policies/015_payment_receipts.sql`
+30. `migrations/016_approved_sp_rule.sql`
 
 The migrations are **not** idempotent: re-running one fails at the first
 `CREATE`, by design. Never add `IF NOT EXISTS` or `DROP` to a migration.
 
 ### Applying to the hosted Supabase project
 
-Open **Supabase Dashboard → SQL Editor** and run the twenty files above, in
+Open **Supabase Dashboard → SQL Editor** and run the thirty files above, in
 order, as the project owner. No dashboard schema edits are required, and no
 service-role key or database password is involved. Confirm afterwards that
-`public` contains thirty tables and every one has RLS enabled, that the six
+`public` contains every expected table and every one has RLS enabled, that the six
 auth-lifecycle functions from step 6 exist, that the three player-directory
 functions from step 8 (`set_profile_roles`, `link_player_account`,
 `unlink_player_account`) exist, that the tournament functions from step 9
@@ -65,11 +75,26 @@ functions (`create_friendly_challenge`, `respond_friendly_challenge`,
 `cancel_friendly_challenge`, `submit_friendly_result`,
 `approve_friendly_result`, `dispute_friendly_result`,
 `auto_approve_friendly_matches`) and, where pg_cron is installed, schedules the
-15-minute auto-approval job.
+15-minute auto-approval job. Migration 011 (`011_friendly_sp_award.sql`) adds the
+internal `award_friendly_sp` helper and supersedes both friendly finalizers to
+call it. It ships no rule: the award reads the one approved **and** enabled
+`sp_rule_versions` row, returns `disabled` and writes nothing when there is none,
+and keys each ledger row `friendly:<match_id>:<player>` so a retry cannot award
+twice. Step 22–23 add the seasonal tables and their Super Admin RPCs. Step 24–25
+add player IDs, friendships, and notifications (SELECT-only for clients, RPC-only
+writes). Step 26–27 add the tournament poster path and per-player entrance fee,
+`tournament_entry_payments`, `tournament_partner_invitations`, guest partners,
+self-entry, and draw eligibility; they also create the public
+`tournament-posters` bucket with a 5 MB PNG/JPEG/WebP limit. Step 28–29 add
+payment receipts. Step 30 (`016_approved_sp_rule.sql`) inserts the club-approved
+`approved-2026-11` rule version and enables it, which is the deliberate step that
+lets a confirmed friendly award SP; the applied `provisional-2026-11` row is left
+untouched.
 
-**Status:** all twelve files are applied to the hosted `mbc-arena` project.
+**Status:** files 1–20 are applied to the hosted `mbc-arena` project.
 Files 1–5 went in on 2026-10-30 and files 6–8 on 2026-10-31; files 9–12
-(Phases 3–4) went in on 2026-11-01. `npm run check:supabase` passes, and
+(Phases 3–4) went in on 2026-11-01, and files 13–20 (Phases 5–7) were confirmed
+applied on 2026-11-01. `npm run check:supabase` passes, and
 PostgREST probes with the publishable key return `42501 permission denied` for
 `anon` on the Phase 1 tables, `tournaments`, `matches`, and `sp_rule_versions`,
 and on `reconcile_sp_balances()`, while a deliberately missing function still
@@ -82,10 +107,14 @@ reads `provisional-2026-11` (provisional, disabled) and gets
 the Gate G replay, and the owner's Super Admin bootstrap are complete. Files
 13–20 (Phase 6 training and payments; Phase 7 jerseys, polls, announcements,
 and design images; Phase 5 friendly matches) are verified locally only; apply
-them to the hosted project before using those screens. Remaining work is product scope (§7 rules and the
-next phase), not hosted setup. The repository
-intentionally stores no credentials that would let an agent apply migrations
-automatically.
+them to the hosted project before using those screens. Migration 011 (the
+friendly SP award), migration 012 (the seasonal schema), migrations 013–015
+(player IDs, friendships, notifications, tournament registration, and payment
+receipts), and migration 016 (the approved SP rule) are verified locally only as
+well. Migration 016 is what turns the friendly award on; the seasonal schema
+stays inert until a Super Admin starts a season. Remaining work is product scope
+(§7 rules and the next phase), not hosted setup. The repository intentionally
+stores no credentials that would let an agent apply migrations automatically.
 
 ## Seeds
 
@@ -141,6 +170,17 @@ GoTrue reads `phone` into a NULL-safe value, so it stays NULL. A
 `unique_violation` from an index the query cannot predict raises a notice
 instead of aborting the repair.
 
+`seeds/002_tournament_demo.sql` adds a ready-to-draw demo on top of the
+fictional accounts: eight unlinked sample players and a published
+**Sample Open 2026** tournament with two single-elimination events - eight paid
+singles entries and four paid mixed-doubles teams (one male and one female per
+team). Every participant is already marked paid, so a Tournament Manager or
+Super Admin can generate either draw immediately from the tournament screen;
+marking one participant unpaid demonstrates the draw-exclusion rule. It has the
+same development-marker guard and is idempotent, so re-running adds nothing.
+The SQL gate generates both demo draws through `save_tournament_draw` to prove
+the dataset is usable.
+
 `seeds/bootstrap_super_admin.sql` grants the first `super_admin` to an existing
 account (decision D8). It requires the address through
 `set mbc.bootstrap_super_admin_email = '…'` in the same SQL Editor execution,
@@ -158,10 +198,10 @@ npm run test:db
 `backend/tests/run.mjs` runs a real PostgreSQL engine compiled to WebAssembly
 (PGlite), stubs `auth.users` and `auth.uid()` with the same shape Supabase
 provides (the token, bool, and integer columns GoTrue reads are declared
-nullable so the seed's repair pass is exercised), applies all seven migrations
-and all seven policy files, and asserts (124 checks):
+nullable so the seed's repair pass is exercised), applies all sixteen migrations
+and all fourteen policy files, and asserts (168 checks):
 
-- all twenty-one tables exist and have RLS enabled;
+- every expected table exists and has RLS enabled;
 - the migrations fail loudly on a second run;
 - `has_role()`, uniqueness, status, email, and SP-ledger constraints;
 - least-privilege column grants;
@@ -177,6 +217,9 @@ and all seven policy files, and asserts (124 checks):
   column that GoTrue scans into a non-nullable field, repairs deliberately
   NULLed ones (strings, bools, and the integer) on a re-run while leaving unique
   `phone` NULL, and adds nothing else on a second run;
+- the tournament demo seed (Group I): it is idempotent, creates the eight sample
+  players and the published demo tournament with fully paid singles and doubles
+  entries, and both draws generate successfully through `save_tournament_draw`;
 - the first Super Admin bootstrap (Group J): it refuses without an explicit
   email, activates a pending profile, grants the role once, audits once, and
   rejects unknown or suspended accounts;
@@ -188,11 +231,15 @@ and all seven policy files, and asserts (124 checks):
   both final slots, a level or split score list is refused, the grand-final
   reset is cancelled or played correctly, and a correction requires a reason
   while refusing to overwrite a played downstream match;
-- ShuttlePower rules (Phase 4): exactly one rule version ships, it is
-  provisional and disabled, an unapproved version cannot be enabled, only one
-  version can be enabled at a time, clients read but never write rule versions,
-  reconciliation confirms a matching ledger and reports drift without
-  repairing it, and only a Super Admin can run it;
+- ShuttlePower rules (Phase 4): two rule versions ship - the original
+  `provisional-2026-11` proposal, still provisional and disabled, and the
+  club-approved `approved-2026-11`, enabled with base 20, sensitivity 0.02,
+  clamp 5–40, floor 0, tournament ×2, half-up rounding, and an even split. An
+  unapproved version cannot be enabled, only one version can be enabled at a
+  time, clients read but never write rule versions, reconciliation confirms a
+  matching ledger and reports drift without repairing it, and only a Super Admin
+  can run it. A confirmed friendly at equal ratings awards +20 / −20 under the
+  approved rule and records its version on both ledger rows;
 - training and payments (Phase 6): every table is read-only to clients, a
   player or tournament manager cannot create sessions or fee periods, session
   creation is audited, times and forward-only status transitions are enforced,
@@ -219,9 +266,31 @@ and all seven policy files, and asserts (124 checks):
   only the challenger cancels before a result, only the winner submits their own
   win, only the loser approves or disputes, a dispute needs a reason, neither
   player can act on a settled match, auto-approval waits for the stored 24-hour
-  deadline and is idempotent, a confirmed or auto-approved result writes no SP
-  row, participants and Super Admins see a match while an unrelated member sees
-  none, and `anon` is denied.
+  deadline and is idempotent, a confirmed or auto-approved result writes no SP row
+  while no approved rule version is enabled, and awards each player exactly once
+  (winner +, loser −, half-up on the size of the change) once one is enabled,
+  with a replay awarding nothing and reconciliation still exact, participants
+  and Super Admins see a match while an unrelated member sees none, `anon` is
+  denied, and the internal award helper is callable by nobody but the finalizers;
+- seasons (S1–S23, migration 012): every seasonal table is read-only to clients
+  and `anon` is denied, only a Super Admin creates, starts, closes, and decides a
+  season, one season is active at a time and overlapping ranges are refused, an
+  awarded friendly accrues Seasonal SP in the active season, closing writes one
+  snapshot per player with competition ranks (ties share a position) and excludes
+  a negative balance with a reason code, the generated batch carries the fixed
+  40/30/20/10 tiers, approval caps each deduction at the balance and waives the
+  remainder exactly once, a deduction never touches Seasonal SP, and a rejected
+  batch is preserved, applies nothing, and blocks no later season;
+- player IDs and social graph (migration 013): every player receives a stable,
+  unique, readable `MBC-XXXXXXXX` code, a request needs an active linked target
+  and can be accepted once, a declined request creates no friendship and can be
+  retried, and a member reads and clears only their own notifications;
+- tournament registration (migration 014): an unpaid entry stays registered but
+  blocks the draw until staff mark every participant paid or waived, a guest
+  doubles partner is stored on `team_members` without a `players` row and still
+  owes a fee row, a club partner invitation creates the team, entry, and payment
+  rows only after acceptance, cancelling or declining creates no entry, and
+  publishing notifies active club members once while a draft notifies nobody.
 
 PGlite is a development dependency only; it is not shipped to the frontend.
 
@@ -235,21 +304,26 @@ supabase gen types typescript --project-id <project-ref> --schema public \
   > ../frontend/src/types/database.ts
 ```
 
-The committed `frontend/src/types/database.ts` covers migrations 001–010: the
+The committed `frontend/src/types/database.ts` covers migrations 001–010 and
+013–014: the
 `players` table and its profile relationship, the four auth-lifecycle RPCs, the
 three Group K RPCs (`set_profile_roles`, `link_player_account`,
 `unlink_player_account`), the tournament tables and RPCs, the
 `sp_rule_versions` table plus `reconcile_sp_balances()`, the four training
 tables plus their six RPCs, the eight club activity tables plus their twelve
 RPCs, `jersey_designs.image_path` plus `set_jersey_design_image(uuid,text)`, and
-the `friendly_matches` table plus its seven RPCs. The Supabase CLI was
-unavailable in the development environment, so those
+the `friendly_matches` table plus its seven RPCs, `players.player_code`, the
+friendship and notification tables plus their six RPCs, and the tournament
+payment, invitation, poster, fee, self-entry, and withdrawal RPCs. The Supabase
+CLI was unavailable in the development environment, so those
 signatures were checked against `migrations/004_players.sql`,
 `migrations/005_tournaments.sql`, `migrations/006_shuttlepower_rules.sql`,
 `migrations/007_training.sql`, `migrations/008_club_activities.sql`,
-`migrations/009_jersey_images.sql`, and `migrations/010_friendly_matches.sql` and
+`migrations/009_jersey_images.sql`, `migrations/010_friendly_matches.sql`,
+`migrations/013_players_friends_notifications.sql`, and
+`migrations/014_tournament_registration.sql` and
 added to the committed file; application builds treat it as authoritative.
-Regenerate it against the hosted project after step 20 and after every later
+Regenerate it against the hosted project after step 27 and after every later
 migration. Never edit regenerated output by hand.
 
 ## Security notes
@@ -267,10 +341,12 @@ migration. Never edit regenerated output by hand.
 - Every tournament table is read-only to clients. Entries, draws, results, and
   corrections cross audited RPCs that enforce the cap, D10 pairings, draw
   coverage, bracket advancement, and correction order in one transaction.
-- `sp_rule_versions` is read-only to clients. The seeded formula is provisional
-  and disabled, a CHECK constraint makes an unapproved version impossible to
-  enable, and a partial unique index allows only one enabled version. No client
-  or RPC can award SP yet: the award workflow waits on the approved formula.
+- `sp_rule_versions` is read-only to clients. The original `provisional-2026-11`
+  row is provisional and disabled; `approved-2026-11` (migration 016) is the
+  single enabled row. A CHECK constraint makes an unapproved version impossible
+  to enable, and a partial unique index allows only one enabled version. Clients
+  cannot award SP: the internal friendly finalizers do, and tournament awarding
+  and corrections (F4) are not built.
 - `reconcile_sp_balances()` is Super Admin only, reports every cached balance
   that differs from its ledger sum, and never writes a correction.
 - Training and payment tables are read-only to clients. Sessions, attendance,

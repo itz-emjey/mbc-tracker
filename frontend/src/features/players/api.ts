@@ -13,7 +13,7 @@ import type { LinkedProfile, PlayerInput, PlayerRecord } from './types'
  * changes cross audited RPCs instead.
  */
 
-const PLAYER_COLUMNS = 'id, profile_id, full_name, gender, status, joined_on'
+const PLAYER_COLUMNS = 'id, player_code, profile_id, full_name, gender, status, joined_on'
 
 export async function listPlayers(): Promise<PlayerRecord[]> {
   const { data, error } = await getSupabaseClient()

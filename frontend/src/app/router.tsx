@@ -18,14 +18,15 @@ import { RegisterPage } from '@/app/pages/register-page'
 import { ShuttlepowerPage } from '@/app/pages/shuttlepower-page'
 import { SignInPage } from '@/app/pages/sign-in-page'
 import { JerseysPage } from '@/app/pages/jerseys-page'
+import { NotificationsPage } from '@/app/pages/notifications-page'
 import { PaymentsPage } from '@/app/pages/payments-page'
 import { PollsPage } from '@/app/pages/polls-page'
 import { TournamentDetailPage } from '@/app/pages/tournament-detail-page'
+import { TournamentDrawsPage } from '@/app/pages/tournament-draws-page'
 import { TournamentsPage } from '@/app/pages/tournaments-page'
 import { TrainingPage } from '@/app/pages/training-page'
 import { UnauthorizedPage } from '@/app/pages/unauthorized-page'
 import { RouteError } from '@/app/states/route-error'
-import { TOURNAMENT_STAFF_ROLES } from '@/features/tournaments/types'
 
 /**
  * Module routes are generated from the same list that builds the navigation.
@@ -84,10 +85,26 @@ export const router = createBrowserRouter([
           { index: true, element: <OverviewPage /> },
           ...moduleRoutes,
           {
+            path: 'tournaments/:id/draws',
+            element: (
+              <RequireRole>
+                <TournamentDrawsPage />
+              </RequireRole>
+            ),
+          },
+          {
             path: 'tournaments/:id',
             element: (
-              <RequireRole roles={TOURNAMENT_STAFF_ROLES}>
+              <RequireRole>
                 <TournamentDetailPage />
+              </RequireRole>
+            ),
+          },
+          {
+            path: 'notifications',
+            element: (
+              <RequireRole>
+                <NotificationsPage />
               </RequireRole>
             ),
           },

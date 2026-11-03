@@ -2,13 +2,13 @@ import { Megaphone, Plus } from 'lucide-react'
 import * as React from 'react'
 import { toast } from 'sonner'
 
+import { ArenaStatStrip } from '@/components/arena/arena-ui'
 import { EmptyState } from '@/components/shared/empty-state'
 import { ErrorState } from '@/components/shared/error-state'
 import { LoadingState } from '@/components/shared/loading-state'
 import { PageHeader } from '@/components/shared/page-header'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -84,7 +84,7 @@ export function AnnouncementsPage() {
   if (loading) {
     return (
       <>
-        <PageHeader title="Announcements" />
+        <PageHeader kicker="Club news" title="Announcements" />
         <LoadingState className="mt-6" label="Loading announcements" rows={4} />
       </>
     )
@@ -93,7 +93,7 @@ export function AnnouncementsPage() {
   if (error) {
     return (
       <>
-        <PageHeader title="Announcements" />
+        <PageHeader kicker="Club news" title="Announcements" />
         <ErrorState
           className="mt-6"
           title="Could not load announcements"
@@ -104,11 +104,17 @@ export function AnnouncementsPage() {
     )
   }
 
+  const published = announcements.filter((row) => row.status === 'published').length
+  const drafts = announcements.filter((row) => row.status === 'draft').length
+  const archived = announcements.filter((row) => row.status === 'archived').length
+  const latest = announcements.find((row) => row.published_at !== null)
+
   return (
     <>
       <PageHeader
+        kicker="Club news"
         title="Announcements"
-        description="Club news. Members see published announcements; staff also see drafts."
+        description="The club noticeboard. Members see published posts; staff also see drafts and the archive."
         actions={
           isStaff ? (
             <Button onClick={() => setCreateOpen(true)}>
@@ -119,71 +125,111 @@ export function AnnouncementsPage() {
         }
       />
 
-      {announcements.length === 0 ? (
-        <Card className="mt-5">
-          <CardContent className="p-5">
-            <EmptyState
-              icon={Megaphone}
-              title="No announcements yet"
-              description={
-                isStaff
-                  ? 'Write an announcement and publish it for the club.'
-                  : 'There is no club news right now.'
-              }
-              action={
-                isStaff ? (
-                  <Button onClick={() => setCreateOpen(true)}>
-                    <Plus aria-hidden="true" />
-                    New announcement
-                  </Button>
-                ) : null
-              }
-            />
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="mt-5 flex flex-col gap-4">
-          {announcements.map((announcement) => (
-            <Card key={announcement.id}>
-              <CardHeader>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <CardTitle>{announcement.title}</CardTitle>
-                  <Badge tone={announcement.status === 'published' ? 'accent' : 'neutral'}>
-                    {ANNOUNCEMENT_STATUS_LABELS[announcement.status]}
-                  </Badge>
-                </div>
-                <CardDescription>
-                  {announcement.published_at
-                    ? `Published ${formatDateTime(announcement.published_at)}`
-                    : 'Not published yet'}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-3">
-                <p className="whitespace-pre-line text-sm text-text-muted">{announcement.body}</p>
+      <ArenaStatStrip
+        className="mt-5"
+        stats={[
+          {
+            label: 'Published',
+            value: String(published),
+            detail: 'Visible to every member',
+          },
+          { label: 'Drafts', value: String(drafts), detail: 'Staff only' },
+          { label: 'Archived', value: String(archived), detail: 'Kept for history' },
+          {
+            label: 'Latest post',
+            value: latest?.published_at ? formatDateTime(latest.published_at) : '—',
+            detail: latest?.title ?? 'Nothing published yet',
+          },
+        ]}
+      />
 
-                {isStaff ? (
-                  <div className="flex flex-wrap gap-2">
-                    {announcement.status === 'draft' ? (
-                      <Button size="sm" onClick={() => void moveStatus(announcement, 'published')}>
-                        Publish
-                      </Button>
-                    ) : null}
-                    {announcement.status !== 'archived' ? (
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => void moveStatus(announcement, 'archived')}
-                      >
-                        Archive
-                      </Button>
+      <div className="mt-4">
+        {announcements.length === 0 ? (
+          <EmptyState
+            icon={Megaphone}
+            title="No announcements yet"
+            description={
+              isStaff
+                ? 'Write an announcement and publish it for the club.'
+                : 'There is no club news right now.'
+            }
+            action={
+              isStaff ? (
+                <Button onClick={() => setCreateOpen(true)}>
+                  <Plus aria-hidden="true" />
+                  New announcement
+                </Button>
+              ) : null
+            }
+          />
+        ) : (
+          <ul className="flex flex-col gap-3">
+            {announcements.map((announcement) => (
+              <li key={announcement.id}>
+                <article className="rounded-md border border-border bg-surface-1">
+                  <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="grid size-7 shrink-0 place-items-center rounded-sm bg-accent-soft text-accent">
+                          <Megaphone className="size-3.5" aria-hidden="true" />
+                        </span>
+                        <h2 className="truncate text-sm font-semibold text-text">
+                          {announcement.title}
+                        </h2>
+                      </div>
+                      <p className="mt-1 pl-9 text-[11px] text-text-faint">
+                        {announcement.published_at
+                          ? `Published ${formatDateTime(announcement.published_at)}`
+                          : 'Not published yet'}
+                      </p>
+                    </div>
+
+                    <Badge
+                      tone={
+                        announcement.status === 'published'
+                          ? 'accent'
+                          : announcement.status === 'archived'
+                            ? 'neutral'
+                            : 'warning'
+                      }
+                    >
+                      {ANNOUNCEMENT_STATUS_LABELS[announcement.status]}
+                    </Badge>
+                  </header>
+
+                  <div className="px-4 py-3">
+                    <p className="whitespace-pre-line text-sm leading-relaxed text-text-muted">
+                      {announcement.body}
+                    </p>
+
+                    {isStaff ? (
+                      <div className="mt-3 flex flex-wrap gap-2 border-t border-border pt-3">
+                        {announcement.status === 'draft' ? (
+                          <Button
+                            size="sm"
+                            onClick={() => void moveStatus(announcement, 'published')}
+                          >
+                            Publish
+                          </Button>
+                        ) : null}
+                        {announcement.status !== 'archived' ? (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => void moveStatus(announcement, 'archived')}
+                          >
+                            Archive
+                          </Button>
+                        ) : null}
+                      </div>
                     ) : null}
                   </div>
-                ) : null}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+                </article>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       {createOpen ? (
         <AnnouncementFormDialog

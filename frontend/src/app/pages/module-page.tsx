@@ -19,6 +19,7 @@ export function ModulePage({ module }: ModulePageProps) {
   return (
     <>
       <PageHeader
+        kicker={module.phase ? `Planned · ${module.phase}` : 'Module'}
         title={module.label}
         description={module.description}
         actions={module.phase ? <Badge tone="outline">{module.phase}</Badge> : null}

@@ -18,7 +18,8 @@ describe('navigation config', () => {
 
   it('gives a Player the member-facing modules only', () => {
     expect(labelsFor(['player'])).toEqual([
-      'Overview',
+      'Arena',
+      'Tournaments',
       'ShuttlePower',
       'Friendly Matches',
       'Players',
@@ -33,7 +34,8 @@ describe('navigation config', () => {
   it('hides staff-only modules from a Player but keeps own-record views', () => {
     const labels = labelsFor(['player'])
 
-    expect(labels).not.toContain('Tournaments')
+    // Tournaments are member-facing: players browse and join published events.
+    expect(labels).toContain('Tournaments')
     expect(labels).not.toContain('Administration')
     // A player must be able to see their own attendance and payment records.
     expect(labels).toContain('Training')
@@ -55,7 +57,7 @@ describe('navigation config', () => {
   })
 
   it('resolves nested paths to their owning module', () => {
-    expect(findModule('/')?.label).toBe('Overview')
+    expect(findModule('/')?.label).toBe('Arena')
     expect(findModule('/admin')?.label).toBe('Administration')
     expect(findModule('/admin/registrations')?.label).toBe('Administration')
     expect(findModule('/tournaments/abc')?.label).toBe('Tournaments')

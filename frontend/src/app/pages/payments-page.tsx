@@ -2,6 +2,7 @@ import { Plus, Receipt, Wallet } from 'lucide-react'
 import * as React from 'react'
 import { toast } from 'sonner'
 
+import { ArenaStatStrip } from '@/components/arena/arena-ui'
 import { EmptyState } from '@/components/shared/empty-state'
 import { ErrorState } from '@/components/shared/error-state'
 import { LoadingState } from '@/components/shared/loading-state'
@@ -156,6 +157,20 @@ export function PaymentsPage() {
     return grouped
   }, [visiblePayments])
 
+  const collectedTotal = sumRecorded(visiblePayments)
+  const latestPeriod = periods[0]
+  const ownPaidLatest =
+    ownPlayer && latestPeriod
+      ? sumRecorded(
+          visiblePayments.filter(
+            (payment) =>
+              payment.player_id === ownPlayer.id && payment.fee_period_id === latestPeriod.id,
+          ),
+        )
+      : 0
+  const ownDue = latestPeriod ? remainingAmount(latestPeriod.amount, ownPaidLatest) : null
+  const voidedCount = visiblePayments.filter((payment) => payment.status === 'voided').length
+
   function playerName(playerId: string): string {
     return playersById.get(playerId)?.full_name ?? 'Unknown player'
   }
@@ -186,6 +201,7 @@ export function PaymentsPage() {
   return (
     <>
       <PageHeader
+        kicker="Club ledger"
         title="Payments"
         description="Manual training fee records. Payments are never edited: a mistake is voided and recorded again."
         actions={
@@ -198,7 +214,33 @@ export function PaymentsPage() {
         }
       />
 
-      <Card className="mt-5">
+      <ArenaStatStrip
+        className="mt-5"
+        stats={[
+          {
+            label: 'Fee periods',
+            value: String(periods.length),
+            detail: latestPeriod?.label ?? 'None created yet',
+          },
+          {
+            label: 'Payments',
+            value: String(visiblePayments.length),
+            detail: isStaff ? 'Across all players' : 'On your record',
+          },
+          {
+            label: 'Collected',
+            value: formatMoney(collectedTotal),
+            detail: isStaff ? 'Recorded, non-voided' : 'Your recorded payments',
+          },
+          {
+            label: isStaff ? 'Voided' : 'Still due',
+            value: isStaff ? String(voidedCount) : ownDue === null ? '—' : formatMoney(ownDue),
+            detail: isStaff ? 'Kept in history' : (latestPeriod?.label ?? 'No open period'),
+          },
+        ]}
+      />
+
+      <Card className="mt-4">
         <CardHeader>
           <CardTitle>Fee periods</CardTitle>
           <CardDescription>

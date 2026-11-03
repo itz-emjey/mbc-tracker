@@ -27,6 +27,7 @@ export const PLAYER_GENDER_LABELS: Record<PlayerGender, string> = {
 
 export interface PlayerRecord {
   id: string
+  player_code: string
   profile_id: string | null
   full_name: string
   gender: PlayerGender | null
@@ -46,4 +47,32 @@ export interface LinkedProfile {
   id: string
   full_name: string
   status: string
+}
+
+export type FriendshipStatus = 'pending' | 'accepted' | 'declined' | 'removed'
+
+export const FRIENDSHIP_STATUS_LABELS: Record<FriendshipStatus, string> = {
+  pending: 'Pending',
+  accepted: 'Friends',
+  declined: 'Declined',
+  removed: 'Removed',
+}
+
+/** One friendship row. RLS shows only the two players involved. */
+export interface FriendshipRecord {
+  id: string
+  requester_player_id: string
+  addressee_player_id: string
+  status: FriendshipStatus
+  requested_at: string
+  responded_at: string | null
+}
+
+/** A friend joined with the directory record the UI displays. */
+export interface FriendEntry {
+  friendshipId: string
+  player: PlayerRecord
+  status: FriendshipStatus
+  /** True when the signed-in player sent the request. */
+  outgoing: boolean
 }

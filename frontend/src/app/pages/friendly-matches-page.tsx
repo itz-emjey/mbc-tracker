@@ -2,6 +2,7 @@ import { Plus, Swords } from 'lucide-react'
 import * as React from 'react'
 import { toast } from 'sonner'
 
+import { ArenaAvatar, ArenaPanel, ArenaStatStrip } from '@/components/arena/arena-ui'
 import { EmptyState } from '@/components/shared/empty-state'
 import { ErrorState } from '@/components/shared/error-state'
 import { LoadingState } from '@/components/shared/loading-state'
@@ -26,6 +27,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { arenaRecord } from '@/domain/arena'
 import { errorMessage } from '@/features/auth/api'
 import { useSession } from '@/features/auth/session-context'
 import { hasAnyRole } from '@/features/auth/types'
@@ -153,6 +155,7 @@ export function FriendlyMatchesPage() {
   const clubMatches = isSuperAdmin
     ? matches.filter((match) => !ownPlayer || !isParticipant(match, ownPlayer.id))
     : []
+  const record = arenaRecord(matches, ownPlayer?.id ?? null)
 
   function renderMatch(match: FriendlyMatchRecord) {
     if (!ownPlayer) return null
@@ -173,8 +176,9 @@ export function FriendlyMatchesPage() {
   return (
     <>
       <PageHeader
+        kicker="Duel board"
         title="Friendly Matches"
-        description="Challenge a clubmate; the winner submits the result and the losing side has 24 hours to confirm or dispute."
+        description="Challenge a clubmate. The winner submits the result and the losing side has 24 hours to confirm or dispute it."
         actions={
           ownPlayer ? (
             <Button onClick={() => setChallengeOpen(true)}>
@@ -185,14 +189,39 @@ export function FriendlyMatchesPage() {
         }
       />
 
-      <Card className="mt-5">
-        <CardContent className="p-4">
-          <p className="text-sm text-text-muted">
-            Results do not change ShuttlePower yet. The win/loss formula is still awaiting club
-            approval, so a confirmed friendly records the match only.
-          </p>
-        </CardContent>
-      </Card>
+      <ArenaStatStrip
+        className="mt-5"
+        stats={[
+          {
+            label: 'Your duels',
+            value: String(ownMatches.length),
+            detail: 'Challenges you are part of',
+          },
+          {
+            label: 'Record',
+            value: `${record.wins}–${record.losses}`,
+            detail: 'Wins and losses, decided only',
+          },
+          {
+            label: 'Win rate',
+            value: record.winRate === null ? '—' : `${Math.round(record.winRate * 100)}%`,
+            detail: 'Across confirmed results',
+          },
+          {
+            label: 'Waiting on you',
+            value: String(needsAction.length),
+            detail: 'Respond or confirm',
+          },
+        ]}
+      />
+
+      <ArenaPanel kicker="Rules" title="Confirmed friendlies award ShuttlePower" className="mt-4">
+        <p className="px-4 py-3 text-sm leading-relaxed text-text-muted">
+          When the losing side confirms a result (or the 24-hour auto-approval passes), both players
+          receive an SP change under the club-approved formula. Doubles friendlies and dispute
+          resolution are not available yet.
+        </p>
+      </ArenaPanel>
 
       {!ownPlayer ? (
         <Card className="mt-4">
@@ -322,19 +351,27 @@ function MatchCard({
 
   return (
     <Card>
-      <CardHeader>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <CardTitle className="text-sm">
-            {challenger} vs {opponent}
-          </CardTitle>
+      <CardContent className="flex flex-col gap-3 p-4">
+        <div className="flex items-center gap-2">
+          <ArenaAvatar name={challenger} size="sm" />
+          <span className="min-w-0 flex-1 truncate text-sm font-medium text-text">
+            {challenger}
+          </span>
+          <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.16em] text-text-faint">
+            vs
+          </span>
+          <span className="min-w-0 flex-1 truncate text-right text-sm font-medium text-text">
+            {opponent}
+          </span>
+          <ArenaAvatar name={opponent} size="sm" />
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-2.5">
+          <p className="text-[11px] text-text-muted">
+            {match.note ?? 'No note.'} · challenged {formatDateTime(match.created_at)}
+          </p>
           <Badge tone={toneFor(match.status)}>{FRIENDLY_STATUS_LABELS[match.status]}</Badge>
         </div>
-        <CardDescription>
-          {match.note ?? 'No note.'} · challenged {formatDateTime(match.created_at)}
-        </CardDescription>
-      </CardHeader>
-
-      <CardContent className="flex flex-col gap-3">
         {winner ? (
           <p className="text-sm text-text">
             Winner: {winner}

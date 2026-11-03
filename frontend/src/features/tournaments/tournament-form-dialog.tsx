@@ -16,8 +16,10 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { errorMessage } from '@/features/auth/api'
 import { isIsoDate } from '@/features/players/validation'
+import { formatMoney } from '@/features/training/money'
 
-import { createTournament } from './api'
+import { createTournament, uploadTournamentPoster } from './api'
+import { TOURNAMENT_POSTER_ACCEPT, validateTournamentPoster } from './posters'
 import type { TournamentRecord } from './types'
 import { tournamentFormSchema, type TournamentFormValues } from './validation'
 
@@ -43,9 +45,25 @@ export function TournamentFormDialog({ open, onOpenChange, onCreated }: Tourname
   const [venue, setVenue] = React.useState('')
   const [description, setDescription] = React.useState('')
   const [deadline, setDeadline] = React.useState('')
+  const [fee, setFee] = React.useState('0')
+  const [posterFile, setPosterFile] = React.useState<File | null>(null)
+  const [posterError, setPosterError] = React.useState<string | null>(null)
   const [errors, setErrors] = React.useState<FieldErrors>({})
   const [formError, setFormError] = React.useState<string | null>(null)
   const [submitting, setSubmitting] = React.useState(false)
+
+  function handlePosterChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0] ?? null
+
+    if (!file) {
+      setPosterFile(null)
+      setPosterError(null)
+      return
+    }
+
+    setPosterError(validateTournamentPoster(file))
+    setPosterFile(file)
+  }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -57,6 +75,7 @@ export function TournamentFormDialog({ open, onOpenChange, onCreated }: Tourname
       venue: venue.trim() === '' ? null : venue,
       description: description.trim() === '' ? null : description,
       registration_deadline: deadline === '' ? null : deadline,
+      entrance_fee: fee.trim() === '' ? '0' : fee,
     })
 
     if (!parsed.success) {
@@ -72,6 +91,8 @@ export function TournamentFormDialog({ open, onOpenChange, onCreated }: Tourname
       setErrors(fieldErrors)
       return
     }
+
+    if (posterError) return
 
     let registrationDeadline: string | null = null
 
@@ -96,7 +117,20 @@ export function TournamentFormDialog({ open, onOpenChange, onCreated }: Tourname
         venue: parsed.data.venue,
         description: parsed.data.description,
         registration_deadline: registrationDeadline,
+        entrance_fee: parsed.data.entrance_fee,
       })
+
+      if (posterFile) {
+        try {
+          await uploadTournamentPoster(saved.id, posterFile)
+        } catch (posterUploadError) {
+          toast.error(
+            `${saved.name} was created, but the poster could not be uploaded: ${errorMessage(
+              posterUploadError,
+            )}`,
+          )
+        }
+      }
 
       toast.success(`${saved.name} created as a draft.`)
       onCreated(saved)
@@ -178,6 +212,44 @@ export function TournamentFormDialog({ open, onOpenChange, onCreated }: Tourname
                   autoComplete="off"
                   placeholder="Club courts"
                   onChange={(event) => setVenue(event.target.value)}
+                />
+              )}
+            </FormField>
+
+            <FormField
+              id="tournament-fee"
+              label="Entrance fee (per player)"
+              error={errors.entrance_fee}
+              description={`Charged to every participant. Use 0 for a free tournament.${
+                fee.trim() === '' ? '' : ` Current: ${formatMoney(Number(fee) || 0)}.`
+              }`}
+            >
+              {(field) => (
+                <Input
+                  {...field}
+                  type="number"
+                  min="0"
+                  max="1000000"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={fee}
+                  onChange={(event) => setFee(event.target.value)}
+                />
+              )}
+            </FormField>
+
+            <FormField
+              id="tournament-poster"
+              label="Poster"
+              error={posterError ?? undefined}
+              description="Optional. PNG, JPEG, or WebP, 5 MB or smaller. You can replace it later while the tournament is not archived."
+            >
+              {(field) => (
+                <Input
+                  {...field}
+                  type="file"
+                  accept={TOURNAMENT_POSTER_ACCEPT}
+                  onChange={handlePosterChange}
                 />
               )}
             </FormField>

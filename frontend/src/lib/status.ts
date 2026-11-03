@@ -34,6 +34,7 @@ const STATUS_TONES = {
   // info (system-decided)
   'auto-approved': 'info',
   in_progress: 'info',
+  waived: 'info',
 } as const satisfies Record<string, StatusTone>
 
 export type Status = keyof typeof STATUS_TONES

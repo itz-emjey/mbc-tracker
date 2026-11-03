@@ -13,6 +13,7 @@ import * as React from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
+import { ArenaStatStrip } from '@/components/arena/arena-ui'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { EmptyState } from '@/components/shared/empty-state'
 import { ErrorState } from '@/components/shared/error-state'
@@ -129,10 +130,12 @@ export function AdminPage() {
   }
 
   const isSelf = (member: MemberSummary) => member.id === user?.id
+  const activeMembers = members.filter((member) => member.status === 'active').length
 
   return (
     <>
       <PageHeader
+        kicker="Operations"
         title="Administration"
         description="Approve registrations, link player records, assign roles, and manage account access."
         actions={
@@ -149,7 +152,25 @@ export function AdminPage() {
         />
       ) : null}
 
-      <Tabs value={tab} onValueChange={setTab} className="mt-5">
+      <ArenaStatStrip
+        className="mt-5"
+        stats={[
+          {
+            label: 'Pending requests',
+            value: String(pending.length),
+            detail: pending.length > 0 ? 'Waiting for review' : 'Queue is clear',
+          },
+          { label: 'Members', value: String(members.length), detail: 'Approved accounts' },
+          { label: 'Active', value: String(activeMembers), detail: 'Can sign in now' },
+          {
+            label: 'Unlinked players',
+            value: String(players.length),
+            detail: 'Records without an account',
+          },
+        ]}
+      />
+
+      <Tabs value={tab} onValueChange={setTab} className="mt-4">
         <TabsList>
           <TabsTrigger value="pending">
             <Inbox className="size-3.5" aria-hidden="true" />

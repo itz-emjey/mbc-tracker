@@ -1,6 +1,7 @@
 import { useLocation } from 'react-router-dom'
 
 import { Brand } from '@/app/components/brand'
+import { NotificationBell } from '@/app/components/notification-bell'
 import { UserMenu } from '@/app/components/user-menu'
 import { findModule } from '@/app/navigation'
 import { cn } from '@/lib/cn'
@@ -25,6 +26,7 @@ export function AppTopbar({ showContext }: AppTopbarProps) {
       </p>
 
       <div className="ml-auto flex items-center gap-2">
+        <NotificationBell />
         <UserMenu />
       </div>
     </header>

@@ -231,6 +231,116 @@ export type Database = {
           },
         ]
       }
+      payment_receipts: {
+        Row: {
+          amount: number
+          created_at: string
+          entry_payment_id: string | null
+          fee_period_id: string | null
+          id: string
+          jersey_payment_id: string | null
+          method: string
+          paid_on: string
+          player_id: string
+          purpose: string
+          receipt_path: string
+          reference_no: string | null
+          review_note: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          submitted_by: string
+          target_label: string
+          updated_at: string
+        }
+        ComputedFields: never
+        Insert: {
+          amount: number
+          created_at?: string
+          entry_payment_id?: string | null
+          fee_period_id?: string | null
+          id?: string
+          jersey_payment_id?: string | null
+          method?: string
+          paid_on?: string
+          player_id: string
+          purpose: string
+          receipt_path: string
+          reference_no?: string | null
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          submitted_by: string
+          target_label: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          entry_payment_id?: string | null
+          fee_period_id?: string | null
+          id?: string
+          jersey_payment_id?: string | null
+          method?: string
+          paid_on?: string
+          player_id?: string
+          purpose?: string
+          receipt_path?: string
+          reference_no?: string | null
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          submitted_by?: string
+          target_label?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'payment_receipts_entry_payment_id_fkey'
+            columns: ['entry_payment_id']
+            isOneToOne: false
+            referencedRelation: 'tournament_entry_payments'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'payment_receipts_fee_period_id_fkey'
+            columns: ['fee_period_id']
+            isOneToOne: false
+            referencedRelation: 'training_fee_periods'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'payment_receipts_jersey_payment_id_fkey'
+            columns: ['jersey_payment_id']
+            isOneToOne: false
+            referencedRelation: 'jersey_order_payments'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'payment_receipts_player_id_fkey'
+            columns: ['player_id']
+            isOneToOne: false
+            referencedRelation: 'players'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'payment_receipts_reviewed_by_fkey'
+            columns: ['reviewed_by']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'payment_receipts_submitted_by_fkey'
+            columns: ['submitted_by']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       players: {
         Row: {
           created_at: string
@@ -238,6 +348,7 @@ export type Database = {
           gender: string | null
           id: string
           joined_on: string
+          player_code: string
           profile_id: string | null
           status: string
           updated_at: string
@@ -269,6 +380,117 @@ export type Database = {
             columns: ['profile_id']
             isOneToOne: true
             referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      player_friendships: {
+        Row: {
+          addressee_player_id: string
+          created_at: string
+          id: string
+          requested_at: string
+          requester_player_id: string
+          responded_at: string | null
+          status: string
+          updated_at: string
+        }
+        ComputedFields: never
+        Insert: {
+          addressee_player_id: string
+          created_at?: string
+          id?: string
+          requested_at?: string
+          requester_player_id: string
+          responded_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          addressee_player_id?: string
+          created_at?: string
+          id?: string
+          requested_at?: string
+          requester_player_id?: string
+          responded_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'player_friendships_addressee_player_id_fkey'
+            columns: ['addressee_player_id']
+            isOneToOne: false
+            referencedRelation: 'players'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'player_friendships_requester_player_id_fkey'
+            columns: ['requester_player_id']
+            isOneToOne: false
+            referencedRelation: 'players'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          actor_profile_id: string | null
+          body: string | null
+          created_at: string
+          id: string
+          link_path: string | null
+          profile_id: string
+          read_at: string | null
+          title: string
+          tournament_id: string | null
+          type: string
+        }
+        ComputedFields: never
+        Insert: {
+          actor_profile_id?: string | null
+          body?: string | null
+          created_at?: string
+          id?: string
+          link_path?: string | null
+          profile_id: string
+          read_at?: string | null
+          title: string
+          tournament_id?: string | null
+          type: string
+        }
+        Update: {
+          actor_profile_id?: string | null
+          body?: string | null
+          created_at?: string
+          id?: string
+          link_path?: string | null
+          profile_id?: string
+          read_at?: string | null
+          title?: string
+          tournament_id?: string | null
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'notifications_actor_profile_id_fkey'
+            columns: ['actor_profile_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'notifications_profile_id_fkey'
+            columns: ['profile_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'notifications_tournament_id_fkey'
+            columns: ['tournament_id']
+            isOneToOne: false
+            referencedRelation: 'tournaments'
             referencedColumns: ['id']
           },
         ]
@@ -955,6 +1177,68 @@ export type Database = {
           },
         ]
       }
+      jersey_order_payments: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          marked_at: string | null
+          marked_by: string | null
+          note: string | null
+          order_id: string
+          player_id: string
+          status: string
+          updated_at: string
+        }
+        ComputedFields: never
+        Insert: {
+          amount?: number
+          created_at?: string
+          id?: string
+          marked_at?: string | null
+          marked_by?: string | null
+          note?: string | null
+          order_id: string
+          player_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          marked_at?: string | null
+          marked_by?: string | null
+          note?: string | null
+          order_id?: string
+          player_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'jersey_order_payments_marked_by_fkey'
+            columns: ['marked_by']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'jersey_order_payments_order_id_fkey'
+            columns: ['order_id']
+            isOneToOne: true
+            referencedRelation: 'jersey_orders'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'jersey_order_payments_player_id_fkey'
+            columns: ['player_id']
+            isOneToOne: false
+            referencedRelation: 'players'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       jersey_projects: {
         Row: {
           created_at: string
@@ -1143,16 +1427,25 @@ export type Database = {
       }
       team_members: {
         Row: {
-          player_id: string
+          guest_gender: string | null
+          guest_name: string | null
+          id: string
+          player_id: string | null
           team_id: string
         }
         ComputedFields: never
         Insert: {
-          player_id: string
+          guest_gender?: string | null
+          guest_name?: string | null
+          id?: string
+          player_id?: string | null
           team_id: string
         }
         Update: {
-          player_id?: string
+          guest_gender?: string | null
+          guest_name?: string | null
+          id?: string
+          player_id?: string | null
           team_id?: string
         }
         Relationships: [
@@ -1198,6 +1491,144 @@ export type Database = {
             columns: ['event_id']
             isOneToOne: false
             referencedRelation: 'tournament_events'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      tournament_entry_payments: {
+        Row: {
+          amount: number
+          created_at: string
+          entry_id: string
+          guest_name: string | null
+          id: string
+          marked_at: string | null
+          marked_by: string | null
+          note: string | null
+          player_id: string | null
+          status: string
+          updated_at: string
+        }
+        ComputedFields: never
+        Insert: {
+          amount?: number
+          created_at?: string
+          entry_id: string
+          guest_name?: string | null
+          id?: string
+          marked_at?: string | null
+          marked_by?: string | null
+          note?: string | null
+          player_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          entry_id?: string
+          guest_name?: string | null
+          id?: string
+          marked_at?: string | null
+          marked_by?: string | null
+          note?: string | null
+          player_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'tournament_entry_payments_entry_id_fkey'
+            columns: ['entry_id']
+            isOneToOne: false
+            referencedRelation: 'tournament_entries'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'tournament_entry_payments_marked_by_fkey'
+            columns: ['marked_by']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'tournament_entry_payments_player_id_fkey'
+            columns: ['player_id']
+            isOneToOne: false
+            referencedRelation: 'players'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      tournament_partner_invitations: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          entry_id: string | null
+          event_id: string
+          id: string
+          inviter_player_id: string
+          partner_player_id: string
+          responded_at: string | null
+          status: string
+        }
+        ComputedFields: never
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          entry_id?: string | null
+          event_id: string
+          id?: string
+          inviter_player_id: string
+          partner_player_id: string
+          responded_at?: string | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          entry_id?: string | null
+          event_id?: string
+          id?: string
+          inviter_player_id?: string
+          partner_player_id?: string
+          responded_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'tournament_partner_invitations_created_by_fkey'
+            columns: ['created_by']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'tournament_partner_invitations_entry_id_fkey'
+            columns: ['entry_id']
+            isOneToOne: false
+            referencedRelation: 'tournament_entries'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'tournament_partner_invitations_event_id_fkey'
+            columns: ['event_id']
+            isOneToOne: false
+            referencedRelation: 'tournament_events'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'tournament_partner_invitations_inviter_player_id_fkey'
+            columns: ['inviter_player_id']
+            isOneToOne: false
+            referencedRelation: 'players'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'tournament_partner_invitations_partner_player_id_fkey'
+            columns: ['partner_player_id']
+            isOneToOne: false
+            referencedRelation: 'players'
             referencedColumns: ['id']
           },
         ]
@@ -1316,8 +1747,10 @@ export type Database = {
           created_by: string | null
           description: string | null
           ends_on: string
+          entrance_fee: number
           id: string
           name: string
+          poster_path: string | null
           registration_deadline: string | null
           starts_on: string
           status: string
@@ -1330,8 +1763,10 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           ends_on: string
+          entrance_fee?: number
           id?: string
           name: string
+          poster_path?: string | null
           registration_deadline?: string | null
           starts_on: string
           status?: string
@@ -1343,8 +1778,10 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           ends_on?: string
+          entrance_fee?: number
           id?: string
           name?: string
+          poster_path?: string | null
           registration_deadline?: string | null
           starts_on?: string
           status?: string
@@ -1422,6 +1859,10 @@ export type Database = {
         Args: { p_profile_id: string; p_tournament_id: string }
         Returns: boolean
       }
+      cancel_tournament_partner_invitation: {
+        Args: { p_invitation_id: string }
+        Returns: Json
+      }
       correct_match_result: {
         Args: { p_games: Json; p_match_id: string; p_reason: string }
         Returns: Json
@@ -1430,6 +1871,7 @@ export type Database = {
         Args: {
           p_description?: string | null
           p_ends_on: string
+          p_entrance_fee?: number
           p_name: string
           p_registration_deadline?: string | null
           p_starts_on: string
@@ -1446,15 +1888,33 @@ export type Database = {
         }
         Returns: Json
       }
+      entry_payment_complete: { Args: { p_entry_id: string }; Returns: boolean }
       grant_starting_sp: {
         Args: { p_player_id: string; p_registration_request_id?: string }
         Returns: Json
       }
       has_role: { Args: { p_profile_id: string; p_role_key: string }; Returns: boolean }
       is_club_member: { Args: { p_profile_id: string }; Returns: boolean }
+      is_friend: { Args: { p_first: string; p_second: string }; Returns: boolean }
       is_tournament_staff: { Args: { p_profile_id: string }; Returns: boolean }
+      join_tournament_event: {
+        Args: {
+          p_event_id: string
+          p_guest_name?: string | null
+          p_partner_player_id?: string | null
+        }
+        Returns: Json
+      }
       link_player_account: {
         Args: { p_player_id: string; p_profile_id: string }
+        Returns: Json
+      }
+      mark_all_notifications_read: {
+        Args: Record<string, never>
+        Returns: Json
+      }
+      mark_notification_read: {
+        Args: { p_notification_id: string }
         Returns: Json
       }
       record_match_result: {
@@ -1470,8 +1930,17 @@ export type Database = {
         Returns: Json
       }
       reject_registration: { Args: { p_reason: string; p_request_id: string }; Returns: Json }
+      remove_player_friend: { Args: { p_player_id: string }; Returns: Json }
       require_super_admin: { Args: Record<PropertyKey, never>; Returns: string }
       require_tournament_staff: { Args: Record<PropertyKey, never>; Returns: string }
+      respond_player_friend_request: {
+        Args: { p_accept: boolean; p_friendship_id: string }
+        Returns: Json
+      }
+      respond_tournament_partner_invitation: {
+        Args: { p_accept: boolean; p_invitation_id: string }
+        Returns: Json
+      }
       save_tournament_draw: {
         Args: { p_event_id: string; p_matches: Json; p_replace?: boolean }
         Returns: Json
@@ -1480,10 +1949,39 @@ export type Database = {
         Args: { p_away_entry_id: string; p_games: Json; p_home_entry_id: string }
         Returns: Json
       }
+      send_player_friend_request: { Args: { p_player_code: string }; Returns: Json }
+      set_entry_payment: {
+        Args: { p_note?: string | null; p_payment_id: string; p_status: string }
+        Returns: Json
+      }
+      set_jersey_order_payment: {
+        Args: { p_note?: string | null; p_payment_id: string; p_status: string }
+        Returns: Json
+      }
       set_profile_roles: { Args: { p_profile_id: string; p_role_keys: string[] }; Returns: Json }
       set_profile_status: { Args: { p_profile_id: string; p_status: string }; Returns: Json }
+      set_tournament_entrance_fee: {
+        Args: { p_fee: number; p_tournament_id: string }
+        Returns: Json
+      }
+      set_tournament_poster: {
+        Args: { p_poster_path: string | null; p_tournament_id: string }
+        Returns: Json
+      }
       set_tournament_status: {
         Args: { p_status: string; p_tournament_id: string }
+        Returns: Json
+      }
+      submit_payment_receipt: {
+        Args: {
+          p_amount: number
+          p_method: string
+          p_paid_on: string
+          p_purpose: string
+          p_receipt_path: string
+          p_reference_no: string | null
+          p_target_id: string
+        }
         Returns: Json
       }
       submit_registration: { Args: { p_full_name?: string }; Returns: Json }
@@ -1493,6 +1991,10 @@ export type Database = {
         Returns: Json
       }
       withdraw_tournament_entry: {
+        Args: { p_entry_id: string }
+        Returns: Json
+      }
+      withdraw_own_tournament_entry: {
         Args: { p_entry_id: string }
         Returns: Json
       }

@@ -15,6 +15,7 @@ interface RoundRobinViewProps {
   onRecord: (match: MatchRecord, mode: ResultMode) => void
 }
 
+/** Round-robin schedule, grouped into rounds of clashes. */
 export function RoundRobinView({
   matches,
   gamesByMatch,
@@ -34,18 +35,27 @@ export function RoundRobinView({
   )
 
   if (groups.length === 0) {
-    return <p className="text-sm text-text-muted">The schedule has no matches yet.</p>
+    return (
+      <p className="rounded-md border border-dashed border-border px-4 py-6 text-center text-sm text-text-muted">
+        The schedule has no matches yet.
+      </p>
+    )
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-5">
       {groups.map((group) => (
         <section key={`rr-${group.round}`} aria-label={`Round ${group.round}`}>
-          <h4 className="mb-2 text-xs font-medium uppercase tracking-[0.06em] text-text-faint">
-            Round {group.round}
-          </h4>
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <h4 className="text-[11px] font-medium uppercase tracking-[0.1em] text-text">
+              Round {group.round}
+            </h4>
+            <span className="font-mono text-[10px] tabular-nums text-text-faint">
+              {group.matches.length} match{group.matches.length === 1 ? '' : 'es'}
+            </span>
+          </div>
 
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {group.matches.map((match) => (
               <MatchCard
                 key={match.id}

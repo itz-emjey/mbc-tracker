@@ -2,7 +2,7 @@
 
 > **Source of truth for requirements:** `AGENT.md`
 > **This document:** the approved working plan — architecture, design system, schema, phases, Phase 1 checklist, and open business rules.
-> **Status:** v42 - architecture, stack, design, and roadmap approved. **Approved 2026-11-01: D11 — no SP change for Rated participants in a placement match; D12 — Placement Match Eligibility Policy.** D12 approves the core eligibility principle, the eight eligible and eleven ineligible match situations, the additional conditions, and the placement credit rules recorded in §7.2.2 and §7.2.5. D11 and D12 are the **only** approved placement decisions: the **10-match placement system as a whole, the initial provisional SP value, the §7.1 SP formula, doubles distribution and rounding, qualification and concurrency design, seasonal rules, and the final schema/RLS remain NOT APPROVED**. This revision is documentation-only. No code, migration, rule configuration, test, or seed changed. **All hosted migrations and policies through 010 are applied; Phases 1–7 are complete and verified on the hosted project; Phase 4 is scaffolded and deliberately inactive.** Phase 1 and Phase 2 are complete. Phase 3 ships `domain/bracket.ts`, `domain/standings.ts`, and `domain/tournament.ts`, migration 005 (tournament tables, RLS, audited entry/draw/result RPCs), and the staff tournament console. Phase 4 adds migration 006 (versioned `sp_rule_versions` with a provisional, disabled default, plus `reconcile_sp_balances()`), the pure config-driven engine in `domain/sp.ts`, and `/shuttlepower` (leaderboard, own ledger history, admin balance check). Verification: 142/142 SQL checks, 170/170 frontend tests, typecheck, lint, format, and build all clean. Hosted (2026-11-01): `anon` is denied on the tournament and rule tables and on the reconciliation RPC; a signed-in demo Super Admin reads `provisional-2026-11` and `{"checked":7,"consistent":true}`; policy 004 is confirmed; demo sign-in, the Phase 3 walkthrough, the Phase 5–7 walkthrough, the Gate G replay, and the owner's Super Admin bootstrap are done. Phase 6 adds migration 007 (sessions, attendance, fee periods, soft-voided payments) with audited training RPCs, the `/training` and `/payments` screens, and player-visible own records. Phase 7 adds migration 008 (jersey projects, designs, sizes, orders, polls with option-level votes, and announcements) with twelve audited club-activity RPCs and the `/jerseys`, `/polls`, and `/announcements` screens. Migration 009 adds design mockups in a public `jersey-designs` Storage bucket, pointed at by an audited staff-only RPC. Phase 5 adds migration 010 (friendly matches with challenge → accept → winner-submits → loser-approves → 24-hour auto-approval) and `/matches`; confirmed friendlies deliberately award no SP because §7 rule 1 is unapproved. What remains is product scope: rules 1–6 and 11–14 gate Phase 4 activation, rules 1 and 6 gate the friendly award, rule 7 gates doubles friendlies, and rule 8 gates dispute resolution.
+> **Status:** v50 - architecture, stack, design, and roadmap approved. **Approved 2026-11-03 by the club owner: D13 - the §7.1 ShuttlePower formula** (base 20, sensitivity 0.02, clamp 5-40, floor 0, no ceiling, tournament x2, half-up rounding before the multiplier, even doubles split). Migration 016 records it as the enabled `approved-2026-11` rule version; the applied `provisional-2026-11` row stays provisional and disabled for audit. Confirmed friendlies now award SP. F4 (corrected and invalidated results), tournament awarding, placement, and seasonal implementation remain open. **Proposed 2026-11-02: §7.1.11, the rule for corrected and invalidated results (sign-off decision F4)** — appended to the formula package because it is the last business rule missing before an award RPC can run. It is a proposal: not approved, not implemented, and it creates no rule version. **Implemented 2026-11-02: migration 011 (`011_friendly_sp_award.sql`) adds the internal friendly SP award and wires it into both friendly finalizers. It was inert until migration 016 enabled the approved rule on 2026-11-03; it changes no screen. Implemented 2026-11-02: migration 012 (`012_seasons.sql`) adds the seasonal schema — seasons, per-player seasonal balances, the close snapshot, deduction batches and entries, and transition checkpoints — with four Super Admin RPCs; it is inert, no season exists, and no screen or scheduled job uses it.** **Approved during the seasonal decision review: S1-S15 — seasonal SP structure, season boundaries, automatic transition, deduction policy, and seasonal ranking — and, in the continued review, S16–S23, which close all eight follow-up rows of §7.4 (zero-match players, administrative status changes, tie-break counting, the seasonal snapshot and archive, the transition/notification/recovery design, placement matches, seasonal playoffs, and last-known-ranking retention) — all in §7.3.** That approval covers the seasonal **business rules** only: the seasonal schema, scheduled job, notification channel, recovery screen, archive table, and every seasonal implementation step remain NOT APPROVED and unbuilt. **Approved 2026-11-01: D11 — no SP change for Rated participants in a placement match; D12 — Placement Match Eligibility Policy.** D12 approves the core eligibility principle, the eight eligible and eleven ineligible match situations, the additional conditions, and the placement credit rules recorded in §7.2.2 and §7.2.5. D11 and D12 are the **only** approved placement decisions: the **10-match placement system as a whole, the initial provisional SP value, qualification and concurrency design, seasonal implementation, and the final schema/RLS remain NOT APPROVED** (the seasonal **rules** - including the snapshot, transition, notification, and recovery design - are approved as S1-S23 in §7.3; the seasonal **schema and implementation** are not). The §7.1 formula and the doubles split/rounding are approved separately by D13 (2026-11-03). This revision is documentation-only. No code, migration, rule configuration, test, or seed changed. **All hosted migrations and policies through 010 are applied; Phases 1-7 are complete and verified on the hosted project; Phase 4's friendly award is active under D13.** Phase 1 and Phase 2 are complete. Phase 3 ships `domain/bracket.ts`, `domain/standings.ts`, and `domain/tournament.ts`, migration 005 (tournament tables, RLS, audited entry/draw/result RPCs), and the staff tournament console. Phase 4 adds migration 006 (versioned `sp_rule_versions` with a provisional, disabled default, plus `reconcile_sp_balances()`), the pure config-driven engine in `domain/sp.ts`, and `/shuttlepower` (leaderboard, own ledger history, admin balance check). Verification: 168/168 SQL checks, 228/228 frontend tests, typecheck, lint, format, and build all clean (typecheck/lint still report the pre-existing unused jersey-payment declarations). Hosted (2026-11-01): `anon` is denied on the tournament and rule tables and on the reconciliation RPC; a signed-in demo Super Admin reads `provisional-2026-11` and `{"checked":7,"consistent":true}`; policy 004 is confirmed; demo sign-in, the Phase 3 walkthrough, the Phase 5–7 walkthrough, the Gate G replay, and the owner's Super Admin bootstrap are done. Phase 6 adds migration 007 (sessions, attendance, fee periods, soft-voided payments) with audited training RPCs, the `/training` and `/payments` screens, and player-visible own records. Phase 7 adds migration 008 (jersey projects, designs, sizes, orders, polls with option-level votes, and announcements) with twelve audited club-activity RPCs and the `/jerseys`, `/polls`, and `/announcements` screens. Migration 009 adds design mockups in a public `jersey-designs` Storage bucket, pointed at by an audited staff-only RPC. Phase 5 adds migration 010 (friendly matches with challenge → accept → winner-submits → loser-approves → 24-hour auto-approval) and `/matches`; confirmed friendlies now award SP under D13. What remains is product scope: rules 1-6 and 11-14 are approved by D13, rule 7 gates doubles friendlies, rule 8 gates dispute resolution, and F4 gates corrections/reversals. Rules 3–5, 10, and 15 are now approved (S8 for tiers, amounts, and rollover; S2 for boundaries), and S16–S23 close the remaining seasonal questions. All of that settles the seasonal business rules but authorises no seasonal code.
 
 ### Approved decisions
 
@@ -20,6 +20,9 @@
 | D10 | **Mixed Doubles:** one male + one female per team (club's traditional format). Enforced in tournament domain logic and database validation. | ✅ |
 | D11 | **Rated opponents during placement:** no SP gain, no SP loss, and no SP ledger transaction for any Rated participant in a placement match; their balance stays unchanged. The Unrated participant's hidden provisional SP still updates and the match still counts toward placement. Applies to singles and to every Rated doubles participant. This approves only the Rated-side asymmetry — not the placement system, the 10-match requirement, the hidden-balance design, or the SP formula (§7.2.4). | ✅ 2026-11-01 |
 | D12 | **Placement match eligibility policy:** a placement match counts only when an actual badminton match has been played and its result finalized through the applicable workflow. Approves the eight eligible and eleven ineligible situations in §7.2.2, the additional conditions (retirement only with an official final result; DQ excluded by default; walkover/no-show/withdrawal-before-play excluded; no duplicate credit on correction; historical matches only when reliably verified), and the placement credit rules in §7.2.5 (one credit per eligible Unrated participant, none for Rated participants per D11, progress from unique finalized credits, void-not-delete for invalidated matches). This approves eligibility and credit rules only — not the 10-match system, the initial provisional value, the SP formula, doubles distribution, qualification design, seasons, or the schema/RLS implementation. | ✅ 2026-11-01 |
+| D13 | **ShuttlePower match formula:** base 20, sensitivity 0.02, clamp 5–40, floor 0, no ceiling, tournament ×2, half-up rounding before the multiplier, even doubles split with the odd point to the lower player id. Recorded as the enabled `approved-2026-11` rule version in migration 016; the applied `provisional-2026-11` row is unchanged. Approves F1–F3 of `docs/sp-formula-signoff.md`; F4 and the near-zero doubles floor interaction remain open. | ✅ 2026-11-03 |
+| S1–S15 | **Seasonal SP decisions (structure, boundaries, transition, deduction policy, ranking).** Approved during the seasonal decision review; the approval date is to be recorded. Recorded in §7.3. This approval covers the seasonal business rules only — not the §7.1 SP formula, the placement system, the seasonal schema, the scheduler, notifications, recovery, or any implementation. | ✅ date TBD |
+| S16–S23 | **Seasonal follow-up decisions** approved during the continued seasonal review (approval date to be recorded): zero-match players with no previous ranking; administrative and membership status changes at the cutoff; the seasonal tie-break source and counting; the immutable seasonal snapshot and archive; the transition, notification, and recovery design; placement matches contributing no Seasonal SP; no playoff for a seasonal tie; and last-known-ranking retention. Recorded in §7.3; these close §7.4. Rules only — nothing is built, and Phase 8 implementation is still not authorised. | ✅ date TBD |
 
 ---
 
@@ -218,7 +221,7 @@ UUID primary keys, `created_at`/`updated_at` on all mutable tables, constraints 
 - Standings (D9) are always recalculated from recorded matches in `domain/standings.ts` and mirrored in one SQL function. Tie-break order lives in that single function, never in the UI.
 
 ### ShuttlePower
-- `sp_accounts` (current + seasonal totals, derived/cached), `sp_transactions` (**immutable ledger, append-only**), `sp_rule_versions`, `seasons`, `season_player_results`, `season_deductions`.
+- `sp_accounts` (current + seasonal totals, derived/cached), `sp_transactions` (**immutable ledger, append-only**), `sp_rule_versions`, `seasons`, `season_player_results`, `season_deductions`. The seasonal tables are **planned only**: S1–S15 (§7.3) approve the rules, not this schema.
 
 ### Training
 - `training_sessions`, `training_attendance` (unique per session+player), `training_fee_periods`, `training_payments` (soft-void, never delete).
@@ -628,7 +631,7 @@ Directory with search/filter, player profile (SP, history, achievements), add pl
 - Reconciliation job: ledger sum must equal cached totals.
 - **Exit test:** exactly-once awards, 2x tournament multiplier, strength-based direction, archive immutability.
 
-**Phase 4 ShuttlePower scaffold as built (v29):** this gate ships everything the open rules allow, and nothing they forbid. `migrations/006_shuttlepower_rules.sql` adds `sp_rule_versions`: the calculation config is a JSON document (base change, strength sensitivity, per-match gain/loss caps, floor, tournament multiplier, rounding, doubles split) added one version at a time. The seeded `provisional-2026-11` row carries the proposed defaults for club review, is marked `provisional`, and is **disabled**; a CHECK constraint makes an unapproved row impossible to enable, and a partial unique index allows at most one enabled version. Clients can read rule versions and nothing else — there is no client write grant and no RPC that changes a rule. `reconcile_sp_balances()` is the Phase 4 reconciliation job in its safest form: Super Admin only, it reports every cached balance that differs from its ledger sum and never writes a repair. `domain/sp.ts` is the pure engine: it refuses to calculate unless the rule is approved *and* enabled (provisional always returns `disabled`), applies the already-approved tournament multiplier (2) on both wins and losses, derives doubles strength from the team average, caps and rounds per the config, and splits a team change into whole per-player deltas that sum exactly (equal shares, remainder to the lowest player id). `floor` is `null` while §7 rule 2 is open, and a test proves the engine does not invent one. `/shuttlepower` shows the current-SP leaderboard with shared positions for ties, the reader's own append-only ledger history, the provisional-rule notice, and — for a Super Admin — the balance check. Eighteen engine tests assert direction, caps, determinism, split sums, the disabled states, and the floor; three ranking tests cover order and ties; seven SQL checks cover the seeded rule, the enable guard, the single-enabled rule, client read-only access, reconciliation consistency, drift reporting (without repair), and authority. Deliberately not built: any SP-awarding RPC or match enqueue (blocked by §7 rule 1), seasonal SP and the season table (blocked by rules 3–5; Phase 8), and any automatic enabling of a rule. Awards therefore cannot move a balance, which is the required standing policy. Hosted migrations 005–006 remain.
+**Phase 4 ShuttlePower scaffold as built (v29):** this gate ships everything the open rules allow, and nothing they forbid. `migrations/006_shuttlepower_rules.sql` adds `sp_rule_versions`: the calculation config is a JSON document (base change, strength sensitivity, per-match gain/loss caps, floor, tournament multiplier, rounding, doubles split) added one version at a time. The seeded `provisional-2026-11` row carries the proposed defaults for club review, is marked `provisional`, and is **disabled**; a CHECK constraint makes an unapproved row impossible to enable, and a partial unique index allows at most one enabled version. Clients can read rule versions and nothing else — there is no client write grant and no RPC that changes a rule. `reconcile_sp_balances()` is the Phase 4 reconciliation job in its safest form: Super Admin only, it reports every cached balance that differs from its ledger sum and never writes a repair. `domain/sp.ts` is the pure engine: it refuses to calculate unless the rule is approved *and* enabled (provisional always returns `disabled`), applies the already-approved tournament multiplier (2) on both wins and losses, derives doubles strength from the team average, caps and rounds per the config, and splits a team change into whole per-player deltas that sum exactly (equal shares, remainder to the lowest player id). `floor` is `null` while §7 rule 2 is open, and a test proves the engine does not invent one. `/shuttlepower` shows the current-SP leaderboard with shared positions for ties, the reader's own append-only ledger history, the provisional-rule notice, and — for a Super Admin — the balance check. Eighteen engine tests assert direction, caps, determinism, split sums, the disabled states, and the floor; three ranking tests cover order and ties; seven SQL checks cover the seeded rule, the enable guard, the single-enabled rule, client read-only access, reconciliation consistency, drift reporting (without repair), and authority. Deliberately not built here: the tournament award and match enqueue (blocked by §7 rule 1), and any automatic enabling of a rule. **Updated 2026-11-03:** migration 016 enables the approved `approved-2026-11` rule, so a confirmed friendly now awards SP. Migration 012's seasonal schema remains inert until a Super Admin creates and starts a season. Hosted migrations 005–006 remain.
 
 ### Phase 5 — Friendly matches
 Challenge invite → accept → winner submits → loser approves/disputes → **24h server-side auto-approval** via `pg_cron` → SP awarded once with idempotency key. Notifications (in-app first). Dispute escalates to an admin-resolution status, not an invented appeals policy.
@@ -648,32 +651,34 @@ Projects + designs + sizes, orders with duplicate prevention and export, polls w
 ### Phase 8 — Seasons & archives
 Season config (timezone-aware), snapshot rankings, archive achievements, rank-based deduction per approved formula, all written to the ledger as new transactions.
 
+**Rules approved, implementation not started.** The seasonal business rules now exist as **S1-S15 in §7.3**: separate Current and Seasonal SP; a January 1 – December 31 season in `Asia/Manila`; an idempotent automatic transition with retry, notification, and safe recovery; fixed 40/30/20/10 SP deduction tiers by ranking position, applied to Current SP only through a Super Admin-approved batch; a defined ranking and tie-break order; and a labelled provisional leaderboard. **Schema built 2026-11-02 (migration 012); behaviour still inert.** `seasons`, `season_balances`, `season_player_results`, `season_deduction_batches`, `season_deduction_entries`, and `season_transition_steps` exist, with `create_season`, `start_season`, `close_season`, and `decide_season_deduction_batch`, policy 012, and six SQL checks. Still unbuilt: the S18 tie-break statistics (snapshot columns reserved, left null because no match statistics exist yet), the S20 January 1 scheduled job and its recovery view, the provisional leaderboard screen, and any season-aware placement. Phase 8 now depends only on its own implementation: the §7.1 formula is approved and enabled (D13), so Seasonal SP can track real friendly awards, but tournament awarding and every seasonal path are still unbuilt.
+
 ### Phase 9 — Quality & deployment
 Full RLS matrix test, mobile + accessibility pass, Playwright on the five critical journeys (register→approve, register for tournament, submit/approve match, record payment, vote), production env, backups/export, UAT with club officers.
 
 ---
 
-## 7. Business rules register (open decisions; rows 17–19 approved as D11/D12)
+## 7. Business rules register (open decisions; rows 17–19 approved as D11/D12; rows 3–5, 10, 15, and 23 approved as S1–S15)
 
 Architecture is settled (D1–D10). **These are club rules, not engineering choices.** Do not decide them silently, and do not tune code to a guessed answer.
 
 | # | Topic | Current understanding | Still needs | Blocks |
 | --- | --- | --- | --- | --- |
-| 1 | SP win/loss formula | Strength-based; beating stronger awards more, losing to stronger costs less. **Proposed curve documented in §7.1:** `clamp(20 + 0.02 × (opponent SP − player SP), 5, 40)`, 2× for tournaments. Not approved | Club approval of the base, coefficient, clamp, and cap order | Phase 4 |
-| 2 | SP lower bound and ceiling | **Proposal: minimum 0, no hard maximum initially**; shipped config keeps `floor: null` and has no ceiling key | Approve the floor and the no-ceiling recommendation; a floor truncates losses | Phase 4 |
-| 3 | Seasonal deduction | Higher-ranked players lose more | Rank tiers and exact deduction amounts | Phase 8 |
-| 4 | Rank basis for deduction | Not specified | Final leaderboard position vs. rank tier | Phase 8 |
-| 5 | Seasonal SP relationship | Seasonal leaderboard exists | How deduction interacts with current vs. seasonal SP | Phases 4, 8 |
-| 6 | Doubles SP split | **Proposal: split the team adjustment equally; odd point to the lower player id**; team basis stays the average SP | Approve the distribution and odd-point rule | Phase 4 |
+| 1 | SP win/loss formula | **APPROVED 2026-11-03 — D13:** strength-based; `clamp(20 + 0.02 × (opponent SP − player SP), 5, 40)`, 2× for tournaments. Recorded as the enabled `approved-2026-11` rule version (migration 016) | Nothing for the rule; the friendly award exists (migration 011), tournament awarding is still unbuilt | Implementation only |
+| 2 | SP lower bound and ceiling | **APPROVED 2026-11-03 — D13:** minimum 0, no hard maximum initially; the enabled config sets `floor: 0` and has no `ceiling` key | Nothing for the rule; a later ceiling needs a new config key and engine support | Implementation only |
+| 3 | Seasonal deduction | Higher-ranked players lose more | **APPROVED — S8 (§7.3):** fixed SP amounts by fixed ranking tier (40 / 30 / 20 / 10 SP). Originally: rank tiers and exact deduction amounts | Phase 8 implementation only |
+| 4 | Rank basis for deduction | Fixed ranking **positions**, not a percentage of the population | **APPROVED — S8 and S12 (§7.3):** the tier comes from the player's seasonal ranking position (§S12), or from their last known ranking where S10/S11 apply | Phase 8 implementation only |
+| 5 | Seasonal SP relationship | **APPROVED — S1 and S8 (§7.3):** Current SP and Seasonal SP are separate balances; Seasonal SP tracks net match SP gains and losses in the season; a deduction reduces **Current SP only** | Nothing for the rule; §7.3 records the full separation | Phase 8 implementation only |
+| 6 | Doubles SP split | **APPROVED 2026-11-03 — D13:** split the team adjustment equally; odd point to the lower player id; team basis stays the average SP. The 0-floor/doubles interaction remains open (§7.1.6) | Nothing for the split; the near-zero floor interaction is still open | Phase 4 |
 | 7 | Friendly doubles approval | Losing side approves | One losing partner or both | Phase 5 |
 | 8 | Dispute resolution | Loser may dispute; an admin path exists | Who decides, and by what process | Phase 5 |
 | 9 | Walkover / forfeit / DQ | Supported in tournaments. **Placement eligibility approved by D12:** walkover, no-show, forfeit before play, withdrawal before play, and DQ do not count; retirement after play counts only with an official final result | Whether and how **SP** changes for these outcomes (separate from placement eligibility) | Phases 3, 4 |
-| 10 | Season boundaries | Every three months | Exact dates and the club timezone | Phase 8 |
-| 11 | Maximum SP | **Proposal: no hard maximum initially** (no `ceiling` key exists yet) | Whether a ceiling is ever added, and at what value | Phase 4 |
-| 12 | Rounding policy | **Proposal: half-up on the positive magnitude, rounded before the multiplier**; team averages are not rounded | Approve the tie rule and the exact integer arithmetic | Phase 4 |
-| 13 | Per-match cap vs multiplier | **Proposal: 40 is the normal cap (pre-multiplier); 80 is the tournament-adjusted maximum** | Approve the cap scope | Phase 4 |
-| 14 | Singles vs doubles parameters | **Proposal: one parameter set for both** | Approve, or approve separate doubles parameters | Phase 4 |
-| 15 | Seasonal deduction tiers and rollover | Not specified; no seasonal implementation is authorized | Tier amounts, timing, rollover behaviour, and archive retention | Phase 8 |
+| 10 | Season boundaries | **APPROVED — S2 (§7.3): 12 months, fixed calendar year (January 1 – December 31), boundaries in `Asia/Manila`.** This supersedes the earlier "every three months" understanding; that text is retained in the document history only | Nothing for the rule; no quarterly season may be built | Phase 8 implementation only |
+| 11 | Maximum SP | **APPROVED 2026-11-03 — D13:** no hard maximum initially (no `ceiling` key exists) | Nothing for the rule; revisit with a new version if the leaderboard runs away | Implementation only |
+| 12 | Rounding policy | **APPROVED 2026-11-03 — D13:** half-up on the positive magnitude, rounded before the multiplier; team averages are not rounded | Nothing for the rule; `domain/sp.ts` and the friendly award use the approved order | Implementation only |
+| 13 | Per-match cap vs multiplier | **APPROVED 2026-11-03 — D13:** 40 is the normal cap (pre-multiplier); 80 is the tournament-adjusted maximum | Nothing for the rule | Implementation only |
+| 14 | Singles vs doubles parameters | **APPROVED 2026-11-03 — D13:** one parameter set for both | Nothing for the rule | Implementation only |
+| 15 | Seasonal deduction tiers and rollover | **APPROVED — S8 and S9 (§7.3):** fixed tiers (40/30/20/10 SP by fixed position), deducted from the latest Current SP when a Super Admin approves the batch, capped at the available balance with the remainder permanently waived (no debt, no rollover); batch approval and rejection rules are in S9 | Nothing for the rule; the archive is designed in S19 (§7.3) | Phase 8 implementation only |
 | 16 | 10-match placement requirement | **Proposal (§7.2):** a new player starts `UNRATED` and becomes `RATED` after 10 eligible finalized matches | Approve 10 as the requirement, or set a different count and effective rule version | Phases 4, 5 |
 | 17 | Eligible match categories for placement | **APPROVED 2026-11-01 — D12.** A confirmed or auto-approved friendly, a friendly resolved in favour of a valid played result, and a completed official tournament match all count | Nothing for the categories; implementation stays gated by rules 16 and 20–25 | None — decision made |
 | 18 | Exceptional outcomes and placement eligibility | **APPROVED 2026-11-01 — D12.** A match counts only if actually played and finalized. Retirement after play counts **only with an official final result**; DQ does not count by default; pending, unresolved disputes, cancelled, byes, walkovers, no-shows, forfeits before play, withdrawals before play, declined friendlies, and unplayed fixtures do not count. Historical matches count only when eligibility can be reliably verified | Nothing for the eligibility rule; applying retirement still needs a result/termination marker, and historical verification needs a method (rows 24 and 25) | None for the rule — implementation via rows 24–25 |
@@ -681,11 +686,13 @@ Architecture is settled (D1–D10). **These are club rules, not engineering choi
 | 20 | Initial provisional SP | **Proposal:** the existing 1,000 starting SP becomes the hidden provisional balance, unchanged | Confirm 1,000 remains the provisional start after approval, or change it with a new approved rule version | Phases 1, 4 |
 | 21 | Qualification transaction and concurrency | **Proposal:** one idempotent, row-locked `UNRATED → RATED` transition inside the 10th match-finalization transaction; later corrections do not un-qualify | Approve the transaction shape and the post-qualification correction/back-dating behaviour | Phase 4 |
 | 22 | Placement visibility | **Proposal:** hidden from public profiles, ranking tables, and player-facing SP; only progress (`6/10`) is shown to the player; §7.2.6 explains why today's grants cannot express this | Approve who may read provisional values (e.g. Super Admin audit) and whether placement ledger rows become visible history after qualification | Phases 2, 4 |
-| 23 | Placement and seasons | **Open.** No seasonal implementation exists; §7.2.8 lists the questions | Whether an Unrated player appears in seasonal snapshots, and whether a seasonal deduction may touch provisional SP | Phase 8 |
+| 23 | Placement and seasons | **APPROVED — S10 and S11 (§7.3):** a player who is Unrated at the cutoff is excluded from the seasonal ranking and receives no seasonal deduction, keeping any previous ranking; placement matches are not retroactively added to Seasonal SP; a player who becomes Unrated mid-season keeps their Seasonal SP for audit and resumes ranking eligibility if Rated again | Nothing for the rule; the snapshot is designed in S19 (§7.3) | Phase 8 implementation only |
 | 24 | Historical placement compatibility | **D12 principle:** historical matches count only when their eligibility can be reliably verified. **Proposal:** never edit migrations 001–010 or the applied `provisional-2026-11` row; add rating status, placement credits, qualification, and exposure rules in a **new** approved migration and rule version. No automatic backfill; existing players backfill `RATED` unless a verified historical placement match exists | Approve the verification standard, the migration/version boundary, the backfill, and whether any historical match is actually credited | Phases 4, 8 |
 | 25 | Placement finalization-state sufficiency | **Eligibility approved by D12; implementation open.** The existing friendly states (`confirmed`, `auto_approved`, `cancelled`, `disputed`) and `matches.status` (`pending`, `completed`, `cancelled`) express the ordinary path, but no state expresses retirement, walkover, no-show, forfeit, a played-then-unfinished match, or a resolved dispute | Approve whether existing states are sufficient to apply D12, or require a new result/termination marker and a dispute resolution state | Phases 3–5 |
 
-**Rows 17–19 are no longer open.** Row 17 (eligible categories) and row 18 (exceptional outcomes) were approved on 2026-11-01 as **D12**; row 19 was approved as **D11**. They are retained in place so numbering and earlier cross-references do not shift. Rows 16 and 20–25 remain open. D11 and D12 approve only their stated scopes: the placement system as a whole, the 10-match requirement, the initial provisional value, the §7.1 formula, doubles distribution, qualification design, seasons, and the schema/RLS implementation are still **not approved**.
+**Rows 17–19 are no longer open.** Row 17 (eligible categories) and row 18 (exceptional outcomes) were approved on 2026-11-01 as **D12**; row 19 was approved as **D11**. They are retained in place so numbering and earlier cross-references do not shift. Rows 16 and 20–25 remain open. D11 and D12 approve only their stated scopes: the placement system as a whole, the 10-match requirement, the initial provisional value, qualification design, seasonal implementation, and the schema/RLS implementation are still **not approved**. **Rows 1, 2, 6, 11, 12, 13, and 14 are approved by D13 (2026-11-03); the SP formula is no longer an open rule.**
+
+**Rows 3–5, 10, 15, and 23 are also no longer open.** They were answered by **S1–S15** during the seasonal decision review and are retained in place so numbering and earlier cross-references do not shift. Seasonal **implementation** — schema, scheduled job, screens, archive table — remains unapproved, and nothing is built. The design questions that were open in §7.4 are answered by S16–S23.
 
 ### Resolved since v2
 
@@ -696,6 +703,8 @@ Architecture is settled (D1–D10). **These are club rules, not engineering choi
 | D10 | Mixed Doubles pairing | Exactly **one male and one female** per team. Enforced in `domain/tournament.ts` and in a database constraint on entry creation. |
 | D11 | Rated opponents during placement | **No SP change for any Rated participant in a placement match** (singles or doubles): no gain, no loss, no ledger transaction, balance unchanged. The Unrated participant's provisional SP still updates and the match still counts toward placement. This intentional temporary asymmetry is recorded in §7.2.4; the placement system and the SP formula remain unapproved. |
 | D12 | Placement match eligibility | A placement match counts only when an actual match was played and its result finalized. Approves the eight eligible and eleven ineligible situations, the additional conditions, and the credit rules in §7.2.2 and §7.2.5. Retirement counts only with an official final result; DQ, walkover, no-show, forfeit before play, and withdrawal before play do not count; corrections never duplicate a credit; invalidated credits are voided with an audit trail; historical matches count only when reliably verified. This approves eligibility only, not the 10-match system, the initial provisional value, the SP formula, doubles distribution, qualification design, seasons, or the final schema/RLS. |
+| D13 | ShuttlePower match formula | **Approved 2026-11-03 by the club owner.** Base 20, sensitivity 0.02, clamp 5–40, floor 0, no ceiling, tournament ×2, half-up rounding before the multiplier, even doubles split with the odd point to the lower player id. Recorded as the enabled `approved-2026-11` rule version in migration 016; the applied `provisional-2026-11` row is unchanged. Approves F1–F3 of `docs/sp-formula-signoff.md`; F4 (corrected/invalidated results) and the near-zero doubles floor interaction remain open. |
+| S1–S15 | Seasonal SP decisions | **Separate Current SP and Seasonal SP**; Seasonal SP resets each season, may go negative, and drives the seasonal ranking; **12-month calendar seasons** in `Asia/Manila` with an idempotent automatic January 1 transition; **fixed 40/30/20/10 SP deduction tiers** by fixed ranking position, applied to Current SP only, capped at the available balance with the remainder waived, through a Super Admin-approved batch; a defined ranking order and tie-break chain. Rules approved; **migration 012 (2026-11-02) now stores seasons, seasonal balances, the close snapshot, deduction batches, and transition checkpoints, and closes the season through an audited RPC.** Still unbuilt: the scheduler, the notification and recovery view, the leaderboard screen, the tie-break statistics, and formula activation. Summary in §7.3; the follow-up questions in §7.4 are closed by S16–S23. |
 
 **Standing policy until each is answered:**
 
@@ -705,17 +714,17 @@ Architecture is settled (D1–D10). **These are club rules, not engineering choi
 4. The affected workflow ships disabled in production, not silently live.
 5. When a decision is made, it is recorded here with a date and the rule version it produced.
 
-### 7.1 Provisional SP calculation rule (proposed 2026-11-01)
+### 7.1 Approved SP calculation rule (approved 2026-11-03)
 
-> **STATUS: PROVISIONAL BUSINESS RULE — NOT APPROVED.** This section documents recommendations for club review, revised 2026-11-01. It is not a production rule: no engine, migration, test, screen, or ledger behaviour was changed, `sp_rule_versions` still contains one *provisional, disabled* version, and no match can move SP. The reflection in `frontend/src/domain/sp.ts` (`strengthSensitivity: 0.04`) and the disabled `provisional-2026-11` row stay as they are until approval.
+> **STATUS: APPROVED BUSINESS RULE — IMPLEMENTED FOR FRIENDLIES.** The club owner approved the formula on 2026-11-03 (D13). Migration 016 records it as the enabled `approved-2026-11` rule version; the applied `provisional-2026-11` row remains provisional and disabled for audit. `domain/sp.ts` and `award_friendly_sp()` use the approved order (clamp → round → multiply), and a confirmed friendly now awards SP. Tournament awarding, placement, seasons, and corrections/reversals (F4) remain unbuilt; F4 is still open.
 
 **Already implemented club rule (not a proposal, not under review):** every approved player starts with exactly **1,000 SP**, granted once by the internal `grant_starting_sp` with the unique idempotency key `player:<player_id>:initial` and recorded as an `initial` ledger row referenced to the registration. Repeated approval cannot grant it twice: migration 003 enforces that with the unique idempotency key. This section does not propose changing it.
 
-#### 7.1.1 Proposed parameters and reasoning
+#### 7.1.1 Approved parameters and reasoning
 
-All values are configuration, never constants, and every value below is a **recommendation awaiting approval**. The **Proposed** column is this revision; the **Shipped** column is what the disabled `provisional-2026-11` row currently holds.
+All values are configuration, never constants. The **Approved** column is D13 (2026-11-03); the **Provisional row** column is the older `provisional-2026-11` proposal kept for audit.
 
-| Config key | Proposed | Shipped (disabled) | Recommendation |
+| Config key | Approved (2026-11-03) | Provisional row (disabled) | Why |
 | --- | ---: | ---: | --- |
 | `baseChange` | 20 | 20 | 2% of a starting rating at an even matchup |
 | `strengthSensitivity` | **0.02** | 0.04 | One point per 50 SP of rating gap |
@@ -725,23 +734,23 @@ All values are configuration, never constants, and every value below is a **reco
 | `maxLossPerMatch` | 40 | 40 | Normal loss cap |
 | `floor` | **0** (minimum SP) | `null` | No negative balances |
 | `ceiling` (new key) | **none initially**, no key yet | none | No arbitrary ceiling |
-| `tournamentMultiplier` | 2 | 2 | Already an approved club rule |
-| `rounding` | **half-up** (define `round` as half-up) | `round` (already half-up for positives) | One explicit tie convention |
-| `doublesSplit` | `even` — split the team adjustment | `even` (splits the computed team change) | Doubles impact equals singles |
+| `tournamentMultiplier` | 2 | 2 | Official matches carry twice the friendly impact |
+| `rounding` | **half-up** (`round` means half-up) | `round` | One explicit tie convention |
+| `doublesSplit` | `even` — split the team adjustment | `even` | Doubles impact equals singles |
 
-**Why these recommendations:**
+**Why these values:**
 
 - **Base 20.** At an even matchup each player moves exactly 20 points, which is 2% of the 1,000 starting rating: visible on the leaderboard, but not decisive in one match. It also makes the zero-sum pair exactly ±20, the easiest invariant to test.
 - **Strength sensitivity 0.02.** Each 50 SP of rating gap changes the adjustment by one point, so a 500-point gap gives +30/−10 and the clamp is reached only at a 1,000-point gap. The shipped 0.04 reaches the clamp at 500, which treats ordinary club-level differences as extreme; halving it keeps more real matches inside the informative middle of the curve.
 - **Minimum 5.** A win or loss always moves something. A 0-point delta cannot be written to the ledger (`sp_delta <> 0`), and a player rated far above an opponent would otherwise gain nothing for winning.
 - **Maximum 40.** One match moves at most 4% of a starting rating. It bounds upset farming; without a cap, the same curve would move 60 points at a 2,000-point gap.
 - **Tournament 2×.** This is the club's confirmed rule that official matches carry twice a friendly's impact; it is already used by the shipped engine and is not proposed here.
-- **Minimum SP 0.** Keeps the balance readable and prevents a negative rating that no leaderboard or strength comparison can interpret. The cost is explicit: a loss that would pass zero is truncated, so a floor breaks exact SP conservation (7.1.4). This is a recommendation, not an approved floor.
+- **Minimum SP 0.** Keeps the balance readable and prevents a negative rating that no leaderboard or strength comparison can interpret. The cost is explicit: a loss that would pass zero is truncated, so a floor breaks exact SP conservation (7.1.4). This is the approved floor.
 - **No hard maximum initially.** The club has no evidence for a ceiling, and an arbitrary one would penalise the strongest players on arrival. Revisit with a versioned change if the leaderboard becomes runaway. There is no `ceiling` key today, so a later ceiling needs a new config key and engine support; JSONB config alone is not enough.
 - **Half-up rounding.** One deterministic convention for wins and losses, applied to the positive magnitude before the sign. Half-up is also what SQL `round()` and JavaScript `Math.round()` do for positive values, so a server calculation and any test agree; banker's rounding would turn 20.5 into 20.
 - **Split the team adjustment.** Keeping a doubles match's combined impact equal to a singles match is explained in 7.1.6.
 
-#### 7.1.2 Formula and recommended operation order
+#### 7.1.2 Formula and approved operation order
 
 Let `S_p` be the player's SP and `S_o` the opponent's SP, both immediately before the match. `clamp(v, lo, hi) = min(max(v, lo), hi)`.
 
@@ -754,7 +763,7 @@ result: win → +G, loss → −L
 
 `G` and `L` are magnitudes; the ledger delta is positive for a win and negative for a loss.
 
-**Recommended operation order** (proposed — not what the shipped engine does):
+**Approved operation order (D13, 2026-11-03):**
 
 1. Calculate the normal gain or loss from the two ratings.
 2. Apply the normal minimum and maximum clamp (5 and 40).
@@ -764,15 +773,15 @@ result: win → +G, loss → −L
 Consequences of that order:
 
 - The **normal match cap is 40 SP**, and the **tournament-adjusted maximum is 80 SP**. The normal minimum is 5, so the tournament-adjusted minimum is 10.
-- Every tournament change is exactly twice the rounded friendly change.
-- 40 is a **pre-multiplier cap**, not an all-match cap. Whether the club wants an all-match cap instead is §7 rule 13.
-- The shipped engine clamps, multiplies, then rounds. At 2× these two orders produce identical numbers; they diverge only for a non-integer multiplier, so this is a definition change rather than a numerical change today (7.1.4).
+- Under this order every tournament change is exactly twice the rounded friendly change, and therefore always an even number.
+- 40 is a **pre-multiplier cap**, not an all-match cap; D13 approved that scope (§7 rule 13).
+- Before D13 the engine clamped, multiplied, then rounded, so the two orders did **not** produce identical numbers. The two orders disagree wherever doubling crosses a rounding boundary that rounding first would have avoided: a 13-point gap (raw 20.26) gave **41** under the old engine against **40** under the approved order, and a 25-point gap (raw 20.5) gave **41** against **42**. Across gaps 0 to +2,000, **500 of 2,001 gaps differ by one point** (875 of 4,001 across the full ±2,000 range). The engine was updated on 2026-11-03 to clamp, round, then multiply. Friendly numbers are identical because the multiplier is 1; only official tournament matches move. The approved order therefore changes tournament results by up to 1 point versus the old engine (7.1.4 #6).
 
 **Doubles.** Team SP is the arithmetic mean of the two partners' SP — the approved team-strength basis, unchanged. Compare the two means with the same formula, then distribute the team adjustment as described in 7.1.6.
 
 #### 7.1.3 Worked examples
 
-The eight proposed examples recompute exactly as shown. The tournament column applies 2× after rounding.
+The eight approved examples recompute exactly as shown. The tournament column applies 2× after rounding.
 
 | Player SP | Opponent SP | Result | Raw value | Clamped | Normal change | Tournament |
 | ---: | ---: | --- | ---: | ---: | ---: | ---: |
@@ -791,38 +800,38 @@ Additional boundary cases the proposal implies but does not list:
 | ---: | ---: | --- | ---: | ---: | --- |
 | 1,000 | 200 | Win | 4 | **+5** | Exercises the lower clamp on a win |
 | 1,000 | 2,500 | Win | 50 | **+40** | Exercises the upper clamp; the table stops at exactly 40 |
-| 1,000 | 1,025 | Win | 20.5 | **+21** | Fractional result; recommended half-up |
+| 1,000 | 1,025 | Win | 20.5 | **+21** | Fractional result; approved half-up |
 | 1,000 | 975 | Loss | 20.5 | **−21** | Same, on the loss side; the sign follows the rounded magnitude |
 
-Doubles worked example: team A is 1,000 and 1,200 (average 1,100); team B is 1,300 and 1,500 (average 1,400). A wins. `G = 20 + 0.02 × (1,400 − 1,100) = 26`, and B's loss magnitude is the same 26. **Recommended distribution:** split each team's 26 into +13/+13 and −13/−13 (7.1.6), so the team totals remain +26 and −26 and total SP is unchanged.
+Doubles worked example: team A is 1,000 and 1,200 (average 1,100); team B is 1,300 and 1,500 (average 1,400). A wins. `G = 20 + 0.02 × (1,400 − 1,100) = 26`, and B's loss magnitude is the same 26. **Approved distribution:** split each team's 26 into +13/+13 and −13/−13 (7.1.6), so the team totals remain +26 and −26 and total SP is unchanged.
 
 #### 7.1.4 Consistency checks
 
-1. **All eight proposed examples are arithmetically correct.** Row 7 lands exactly on the 40 maximum; row 8 (raw 0) is the only case that relies on the lower clamp.
-2. **The formula is exactly zero-sum while no floor applies.** The winner's gain and the loser's loss are the same expression evaluated on `S_loser − S_winner`, so the pair is always `+d` and `−d`. This is not ELO — there is no expected-score probability — but it does mean the curve conserves SP rather than redistributing it. The recommended minimum SP of 0 deliberately gives up exact conservation only when a loss is truncated at zero.
-3. **Zero-sum depends on symmetric caps and no floor.** Different gain and loss caps, or a non-zero floor, break it. The recommendation keeps the gain and loss caps symmetric (5–40 both) and adds a 0 floor, so the trade-off is explicit rather than accidental.
-4. **Saturation is reachable and not symmetric in rating gaps.** The adjustment leaves the linear range above `S_o − S_p = +1,000` (gain 40) and below `−750` (gain 5). A 2,000-point gap therefore moves the same 40 points as a 1,000-point gap. With the current disabled 0.04 coefficient, saturation starts at a 500-point gap (gain) and −375 (loss), so this proposal roughly doubles the usable strength range before clamping.
+1. **All eight approved examples are arithmetically correct.** Row 7 lands exactly on the 40 maximum; row 8 (raw 0) is the only case that relies on the lower clamp.
+2. **The formula is exactly zero-sum while no floor applies.** The winner's gain and the loser's loss are the same expression evaluated on `S_loser − S_winner`, so the pair is always `+d` and `−d`. This is not ELO — there is no expected-score probability — but it does mean the curve conserves SP rather than redistributing it. The approved minimum SP of 0 deliberately gives up exact conservation only when a loss is truncated at zero.
+3. **Zero-sum depends on symmetric caps and no floor.** Different gain and loss caps, or a non-zero floor, break it. The approved rule keeps the gain and loss caps symmetric (5–40 both) and adds a 0 floor, so the trade-off is explicit rather than accidental.
+4. **Saturation is reachable and not symmetric in rating gaps.** The adjustment leaves the linear range above `S_o − S_p = +1,000` (gain 40) and below `−750` (gain 5). A 2,000-point gap therefore moves the same 40 points as a 1,000-point gap. The disabled `provisional-2026-11` row's 0.04 coefficient would have saturated at a 500-point gap (gain) and −375 (loss); the approved 0.02 coefficient doubles the usable strength range before clamping.
 5. **The loss curve is the same curve read from the loser's side.** Losing to a stronger opponent costs less (10 in row 6), losing to a weaker one costs more (30 in row 2). That direction matches `AGENT.md` §4.4 and the existing scaffold.
-6. **The recommended order of operations differs from the shipped engine.** `domain/sp.ts` currently clamps, multiplies, then rounds; the recommendation clamps, rounds, then multiplies. With the integer 2× multiplier the numbers are identical today, and both already make 40 a pre-multiplier value (so both reach 80 in a tournament). The difference is the definition, which only becomes observable for a future non-integer multiplier. §7 rule 13 records the separate question of whether 40 should instead be an all-match cap.
-7. **The recommendation changes one shipped parameter and adds a floor.** Approving it means a **new** rule version with `strengthSensitivity: 0.02` and `floor: 0`; migration 006 and its disabled `provisional-2026-11` row are already applied to the hosted project and must not be edited. The engine already reads the coefficient and floor from config, so those two values need no code change.
-8. **Doubles already splits in the scaffold.** The shipped engine uses `distributeEqually`, which matches the recommended split; the open questions are the odd-point rule and the interaction with the 0 floor, not the distribution direction.
-9. **Half-up is unambiguous on magnitudes, and the shipped engine already behaves that way.** Rounding the positive value first and applying the sign afterwards gives 20.5 → 21 and −20.5 → −21; banker's rounding would give 20 in both cases. `roundMagnitude` already uses `Math.round` on the positive magnitude, so this recommendation makes the convention explicit in the rule version rather than changing behaviour. The sign must never be part of the rounding input.
+6. **The approved order of operations changed tournament numbers.** (Corrected 2026-11-02 after the technical review; the earlier text claimed the two orders agreed at 2×.) The old engine clamped, multiplied, then rounded; D13 approved clamp, round, then multiply, and `domain/sp.ts` was updated on 2026-11-03. Both still treat 40 as a pre-multiplier cap and reach 80 in a tournament, but the arithmetic is not equivalent: `round(2x)` and `2·round(x)` disagree whenever the fractional part of `x` is small enough that `2x` crosses a boundary, which is about half of all rating gaps inside the 5–40 clamp (875 of the 1,751 gaps from −750 to +1,000; 875 of 4,001 across ±2,000). Worked cases: a 13-point gap (raw 20.26) gave 41 under the old engine against 40 under the approved order; a 25-point gap (raw 20.5) gave 41 against 42. Friendly results are unaffected because the multiplier is 1. The club was told this was "up to 1 point different on tournament matches" before approval, and the order is recorded in the `approved-2026-11` rule version. §7 rule 13 records the separate question of whether 40 should instead be an all-match cap; D13 approved the pre-multiplier scope.
+7. **The approved rule changes one shipped parameter and adds a floor.** D13 created a **new** rule version with `strengthSensitivity: 0.02` and `floor: 0`; migration 006 and its disabled `provisional-2026-11` row are already applied to the hosted project and were not edited. The engine already read the coefficient and floor from config, so those two values needed no code change.
+8. **Doubles already splits in the scaffold.** The shipped engine uses `distributeEqually`, which matches the approved split; the remaining open question is the interaction with the 0 floor, not the distribution direction.
+9. **Half-up is unambiguous on magnitudes, and the shipped engine already behaves that way.** Rounding the positive value first and applying the sign afterwards gives 20.5 → 21 and −20.5 → −21; banker's rounding would give 20 in both cases. `roundMagnitude` already uses `Math.round` on the positive magnitude, so D13 records the convention in the rule version rather than changing behaviour. The sign must never be part of the rounding input.
 10. **Odd splits preserve the exact team total.** A +25 team adjustment becomes +13/+12 and a −25 adjustment becomes −13/−12; each pair sums exactly to the adjustment, so no SP is created or destroyed by the split itself.
 11. **Normal and tournament caps are distinct.** Normal cap 40 → tournament-adjusted maximum 80; normal minimum 5 → tournament-adjusted minimum 10. A tournament result therefore moves 10–80 points, never 5–40.
-12. **The 0 floor can prevent a ledger row.** A player at exactly 0 SP receiving a loss moves 0, and the ledger rejects a zero delta (`sp_delta <> 0`). The engine's `applyFloor` already drops a zero share, so the awarding RPC must treat a missing delta as "no row" rather than an error; that edge case is another reason the floor behaviour needs approval.
+12. **The 0 floor can prevent a ledger row.** A player at exactly 0 SP receiving a loss moves 0, and the ledger rejects a zero delta (`sp_delta <> 0`). The engine's `applyFloor` already drops a zero share, so the awarding RPC must treat a missing delta as "no row" rather than an error. The floor itself is approved; this remains an implementation requirement for the awarding RPC.
 
 #### 7.1.5 Edge cases
 
 1. **Starting SP.** 1,000 per player, once. Aggregate SP grows only when a new player is funded, and the ledger must be reconciled before any award is computed.
 2. **Equal ratings.** ±20; the simplest sanity check for any implementation.
 3. **Extreme gaps.** Beyond +1,000 / −750 the curve is flat, so an upset against a far stronger player still pays only 40 and a loss to a far weaker player costs only 5.
-4. **Fractional results.** `0.02 × 25 = 0.5` produces a half point (e.g., 20.5). The recommendation fixes this as half-up (21), applied to the positive magnitude before the sign; half-even would give 20. A half point can decide a leaderboard tie, so the convention must be recorded in the rule version.
+4. **Fractional results.** `0.02 × 25 = 0.5` produces a half point (e.g., 20.5). The approved rule fixes this as half-up (21), applied to the positive magnitude before the sign; half-even would give 20. A half point can decide a leaderboard tie, so the convention is recorded in the rule version.
 5. **Doubles averages.** Averages can be fractional (1,000 and 1,001 → 1,000.5). Using the exact mean, or rounding each team average first, can change the resulting delta by 1 point at a clamp or rounding boundary.
-6. **Doubles amount.** The recommended split halves the team adjustment per partner, so a doubles match moves the same combined total as an equivalent singles match (7.1.6). The rejected alternative — the full adjustment to each partner — would double the team total.
-7. **Floor / negative SP.** The recommendation sets minimum SP to 0, so a balance cannot go negative. The cost is explicit: a loss that would pass zero is truncated (a player at 4 SP losing 20 moves only −4), a player at exactly 0 would move 0 and therefore cannot receive a ledger row, and the opponent's gain can then exceed the loser's loss. Conservation is given up only in that case, and accepting that trade-off is part of the approval.
-8. **No maximum initially.** The recommendation leaves the ceiling open. An undefeated player can climb without bound, which eventually makes the leaderboard less competitive and pushes a runaway leader's losses to the 40 cap; adding a ceiling later needs a new config key and engine support.
+6. **Doubles amount.** The approved split halves the team adjustment per partner, so a doubles match moves the same combined total as an equivalent singles match (7.1.6). The rejected alternative — the full adjustment to each partner — would double the team total.
+7. **Floor / negative SP.** The approved rule sets minimum SP to 0, so a balance cannot go negative. The cost is explicit: a loss that would pass zero is truncated (a player at 4 SP losing 20 moves only −4), a player at exactly 0 would move 0 and therefore cannot receive a ledger row, and the opponent's gain can then exceed the loser's loss. Conservation is given up only in that case, and D13 accepted that trade-off.
+8. **No maximum initially.** The approved rule leaves the ceiling open. An undefeated player can climb without bound, which eventually makes the leaderboard less competitive and pushes a runaway leader's losses to the 40 cap; adding a ceiling later needs a new config key and engine support.
 9. **Lopsided matches move very little when the favourite wins.** A 2,500-rated player beating a 1,000-rated player gains 5 and the loser drops 5; the reverse upset moves 40 each. The incentive is deliberate, and the pair still moves the same magnitude, so there is no within-match accounting asymmetry.
-10. **Walkovers, forfeits, withdrawals, disqualifications.** No rule is proposed; therefore no SP may move for them. Tournament matches that are cancelled or never played award nothing.
+10. **Walkovers, forfeits, withdrawals, disqualifications.** No rule is approved; therefore no SP may move for them. Tournament matches that are cancelled or never played award nothing. This is the open F4 scope.
 11. **Disputes and voids.** No SP until a result is official. A disputed friendly has no confirmation, so it cannot award; a correction must be a new ledger row, never an edit.
 12. **Duplicate processing.** Submission, approval, auto-approval, a retried job, or two concurrent approvals must not award twice. The ledger already enforces this with a unique `idempotency_key`; the award key should be `match:<match_id>:<player_id>` and the awarding RPC must be idempotent under retry.
 13. **Stale balance cache.** Awards must read the ledger-reconciled balance (or lock the account row) so two matches finishing at once cannot both spend the same cached value.
@@ -830,18 +839,18 @@ Doubles worked example: team A is 1,000 and 1,200 (average 1,100); team B is 1,3
 15. **Manual adjustment.** Trainers and managers must never set SP directly; there is no such grant today, and corrections are new `correction`/`reversal` rows.
 16. **Seasonal deduction.** Must stay a separate `season_deduction` transaction referenced to a season, never folded into match calculations (§7 rules 3–5, 10).
 17. **Friendly doubles.** Undefined until §7 rule 7 is answered; only singles friendlies ship.
-18. **Splitting at the floor.** If one partner is clamped at 0 while the other is not, the team total no longer equals the team adjustment. The rule must say whether the other partner's share is reduced (preserving the team total) or left as calculated.
+18. **Splitting at the floor.** If one partner is clamped at 0 while the other is not, the team total no longer equals the team adjustment. Whether the other partner's share is reduced (preserving the team total) or left as calculated is still open; D13 approved the split, not this interaction.
 19. **Exact arithmetic.** `0.02 = 1/50`, so the normal value is `(1,000 + rating gap) / 50`; the clamp and half-up result can be computed with integer arithmetic server-side. Relying on binary floating point can turn a true `.5` boundary into `.4999…` and flip a rounding decision.
 
-#### 7.1.6 Doubles distribution (recommended, unresolved)
+#### 7.1.6 Doubles distribution (approved split; floor interaction open)
 
-**Recommended rule:** compute one team adjustment from the two team averages, then **split it equally between the partners**. Each partner's rating moves half the team adjustment, and the combined team change equals the computed adjustment.
+**Approved rule (D13):** compute one team adjustment from the two team averages, then **split it equally between the partners**. Each partner's rating moves half the team adjustment, and the combined team change equals the computed adjustment.
 
 Worked example: team adjustment +26 SP → Partner A +13, Partner B +13, team total +26. A loss of 26 → −13 and −13, team total −26.
 
 **Why split instead of giving each partner the full adjustment:** the full-adjustment reading would move +52 for that same match, making a doubles match worth twice a singles match in combined SP. That rewards format rather than result, lets pairs climb faster than singles players of equal strength, and breaks the intuitive rule that one match has one impact. Splitting keeps a doubles match's combined effect equal to an equivalent singles match, which is also what the shipped `distributeEqually` already does.
 
-**Odd team adjustments.** A +25 team adjustment cannot be divided into two whole points (12.5 each). Recommended deterministic rule:
+**Odd team adjustments.** A +25 team adjustment cannot be divided into two whole points (12.5 each). The approved deterministic rule:
 
 1. Work with the magnitude only: `base = floor(25 / 2) = 12`, `remainder = 1`.
 2. Give the extra point to the partner whose **player id sorts first under a byte-order comparison** (the database's `ORDER BY player_id`), applied to both teams. This does not depend on names, join order, or which partner was entered first.
@@ -851,13 +860,13 @@ Results: +25 → **+13 / +12**; −25 → **−13 / −12**. Each pair sums exac
 
 **Team rating basis:** still the arithmetic average of the two partners' SP. Do **not** round that average before the formula — compute the team adjustment from the exact mean, round the team adjustment once (half-up), then split. Rounding the averages first adds a second rounding step and can shift the result by a point.
 
-**Interaction with the 0 floor.** Clamp each partner after the split. If one partner's share is truncated at zero, the team total falls below the team adjustment; whether the other partner's share is reduced to compensate (preserving the team total) or left alone needs approval (7.1.5 #18).
+**Interaction with the 0 floor.** Clamp each partner after the split. If one partner's share is truncated at zero, the team total falls below the team adjustment; whether the other partner's share is reduced to compensate (preserving the team total) or left alone remains open (7.1.5 #18).
 
-**Server-side only.** The split and remainder assignment must be computed by the awarding RPC, never by the browser, so two clients cannot disagree and the ledger is the only record. Order partners with a stable database ordering (e.g. `ORDER BY player_id` under a deterministic collation), not a locale-sensitive client sort, so the same match always gives the same partner the extra point. The current JS helper uses `localeCompare`, which can vary with the runtime locale; if this rule is approved, the helper must match the server's byte order.
+**Server-side only.** The split and remainder assignment must be computed by the awarding RPC, never by the browser, so two clients cannot disagree and the ledger is the only record. Order partners with a stable database ordering (e.g. `ORDER BY player_id` under a deterministic collation), not a locale-sensitive client sort, so the same match always gives the same partner the extra point. The JS helper previously used `localeCompare`, which varies with the runtime's ICU data; it now uses a plain code-unit comparison and a test pins the mixed-case case, so the client and the server agree on which partner receives the odd point. This fixes the comparison only — it does not decide the filtered case described in §7.2.4 (the odd point when one partner is Rated and therefore receives nothing), which is still open.
 
 #### 7.1.7 Ledger contract (already available)
 
-The proposal's required fields already exist on the append-only `sp_transactions` table. No schema change is needed to record an award later.
+The approved rule's required fields already exist on the append-only `sp_transactions` table. No schema change is needed to record an award later.
 
 | Requirement | Column / mechanism | Status |
 | --- | --- | --- |
@@ -869,56 +878,131 @@ The proposal's required fields already exist on the append-only `sp_transactions
 | Idempotency key | `idempotency_key`, unique | Exists |
 | Who recorded it | `created_by` | Exists |
 | Immutability | update/delete/truncate blocked by triggers | Exists |
-| Duplicate prevention | unique key + idempotent RPC (not yet written) | **Not built** |
+| Duplicate prevention | unique key + idempotent RPC (friendly award built; tournament award not yet written) | **Friendly built; tournament not built** |
 | Historical replay | `rule_version` on each row + append-only table | Exists; a new version must never rewrite old rows |
-| Zero-delta player at the floor | no row when the clamped delta is 0 (`sp_delta <> 0`) | Rule needed (7.1.5) |
+| Zero-delta player at the floor | no row when the clamped delta is 0 (`sp_delta <> 0`) | Approved; the awarding RPC must treat a missing delta as "no row" (7.1.5) |
 
-#### 7.1.8 Unresolved decisions (all require club approval)
+#### 7.1.8 Decision register (formula approved; corrections and edge cases open)
 
-Each row remains open. Recommendations are recorded above but are **not** decisions.
+Rows 1–6 and 10 are approved by D13 (2026-11-03). Row 7 (F4 walkover/forfeit SP), row 12 (F4 corrections), and the residual items in row 11 remain open; recommendations are recorded above but are **not** decisions.
 
 | # | Decision | Detail | Blocks |
 | --- | --- | --- | --- |
-| 1 | Final formula parameter approval | Base 20, coefficient 0.02, 5–40 normal clamp, 2× tournament multiplier, half-up rounding | Phase 4 |
-| 2 | Minimum and maximum SP | Recommended minimum 0 and no hard maximum initially; both need approval, and the floor's truncation behaviour must be accepted | Phase 4 |
-| 3 | Tournament cap behavior | Recommended: 40 is the normal (pre-multiplier) cap and 80 the tournament-adjusted maximum; the alternative is a 40 all-match cap | Phase 4 |
-| 4 | Singles vs doubles parameters | Recommended: one shared parameter set; the alternative is separate doubles base/coefficient/caps | Phase 4 |
-| 5 | Doubles adjustment distribution | Recommended: split the team adjustment; rejected alternative: full adjustment to each partner | Phase 4 |
-| 6 | Doubles odd-number rounding policy | Recommended: remainder to the lexicographically lower player id, sign applied after the split; also covers unrounded team averages and the 0-floor interaction | Phase 4 |
-| 7 | Walkover / forfeit / withdrawal / DQ | No **SP** rule proposed; no SP may move for them until approved. Placement eligibility for these outcomes is separately proposed in §7.2.2 (walkover, no-show, forfeit before play, withdrawal before play, and DQ do not count; retirement after play is proposed but blocked) and is also unapproved | Phases 3, 4 |
-| 8 | Seasonal deduction target balance | Current SP, Seasonal SP, or both (§7 rule 5) | Phases 4, 8 |
-| 9 | Seasonal deduction tiers and rollover | Tier amounts, deduction timing, rollover behaviour, and archive retention | Phase 8 |
-| 10 | Rounding tie-breaking policy | Recommended half-up on the magnitude before the sign, rounded before the multiplier; integer arithmetic must replace float boundaries | Phase 4 |
-| 11 | Additional edge cases from review | Floor truncation (zero delta, team total), duplicate/concurrent awards, rule-version drift, disputed/void results, stale balance cache, friendly doubles eligibility | Phases 4, 5 |
+| 1 | Final formula parameter approval | **APPROVED 2026-11-03 — D13:** base 20, coefficient 0.02, 5–40 normal clamp, 2× tournament multiplier, half-up rounding | Implementation only |
+| 2 | Minimum and maximum SP | **APPROVED 2026-11-03 — D13:** minimum 0, no hard maximum initially; the floor's truncation behaviour is accepted | Implementation only |
+| 3 | Tournament cap behavior | **APPROVED 2026-11-03 — D13:** 40 is the normal (pre-multiplier) cap and 80 the tournament-adjusted maximum | Implementation only |
+| 4 | Singles vs doubles parameters | **APPROVED 2026-11-03 — D13:** one shared parameter set | Implementation only |
+| 5 | Doubles adjustment distribution | **APPROVED 2026-11-03 — D13:** split the team adjustment; the rejected alternative was the full adjustment to each partner | Implementation only |
+| 6 | Doubles odd-number rounding policy | **APPROVED 2026-11-03 — D13:** remainder to the lower player id, sign applied after the split; team averages are not rounded. The 0-floor interaction remains open (7.1.5 #18) | Phase 4 — floor interaction only |
+| 7 | Walkover / forfeit / withdrawal / DQ | No **SP** rule approved; no SP may move for them until F4 is approved. Placement eligibility for these outcomes is approved in §7.2.2 (walkover, no-show, forfeit before play, withdrawal before play, and DQ do not count; retirement after play is approved but blocked) | Phases 3, 4 |
+| 8 | Seasonal deduction target balance | **APPROVED — S8 (§7.3):** Current SP only. A seasonal deduction never reduces Seasonal SP | Phases 4, 8 — implementation only |
+| 9 | Seasonal deduction tiers and rollover | **APPROVED — S8 and S9 (§7.3):** fixed 40/30/20/10 SP by fixed position, applied to the latest Current SP at batch approval, capped at the available balance, remainder permanently waived (no rollover, no debt). Archive retention is settled by S19 (§7.3): permanent | Phase 8 — implementation only |
+| 10 | Rounding tie-breaking policy | **APPROVED 2026-11-03 — D13:** half-up on the magnitude before the sign, rounded before the multiplier; integer arithmetic must replace float boundaries | Implementation only |
+| 11 | Additional edge cases from review | Floor truncation (zero delta, team total), duplicate/concurrent awards, rule-version drift, disputed/void results, stale balance cache, friendly doubles eligibility. The floor, split, and rounding are approved; the team-total-at-floor case, duplicate processing for tournaments, F4 voids, and friendly doubles remain open | Phases 4, 5 |
+| 12 | Corrected and invalidated results | **Proposal in §7.1.11:** compensating rows only, keyed to the original row, re-awarded under the original rule version, written in the same transaction as the correction; the SP side of a void resolves to Option R | Approve the rule (F4); it must be in force before the tournament awarding RPC ships | Phase 4 |
 
 #### 7.1.9 Approval procedure
 
 A printable, owner-facing summary of every open number is kept at `docs/shuttlepower-decision-brief.md`. It is a
 convenience copy with a sign-off table, not the authoritative record; this section and the §7 register are.
 
-Until every number above is approved, the workflow stays disabled. Approving the formula is a deliberate, recorded act:
+A focused package for the formula alone — §7 rules 1, 2, and 6, with the exact rule-version configuration and the
+list of what is still missing before an award can run — is `docs/sp-formula-signoff.md`. It is the shortest path to
+approving SP awards, because it excludes placement, unplayed matches, and disputes.
 
-1. Record the decision here with the date, the approver, and the exact parameters, including the floor, rounding convention, and doubles remainder rule.
-2. Insert a **new** `sp_rule_versions` row marked `approved` but **disabled**, carrying those parameters. The applied `provisional-2026-11` row is never edited, so existing calculations stay auditable against their original version.
-3. Implement the approved operation order (clamp → round → multiply), the half-up definition, and the doubles split/remainder rule in `domain/sp.ts` and the awarding RPC. These are code changes; the coefficient and floor already exist in config, but ordering and remainder rules do not.
-4. Enable the approved version in a separate reviewed step (one enabled version at a time is already enforced).
-5. Implement the awarding RPC for the owning match source with the idempotency key, ledger fields, and tests for exactly-once processing.
-6. Only then may a match move SP. Until step 4 completes, the engine refuses to calculate.
+Until every number above is approved, the workflow stays disabled. D13 completed steps 1–5 for **friendly** matches on 2026-11-03; tournament awarding, placement, and corrections/reversals remain. Approving the formula is a deliberate, recorded act:
 
-#### 7.1.10 Seasonal rules remain unresolved (no implementation authorized)
+1. Record the decision here with the date, the approver, and the exact parameters, including the floor, rounding convention, and doubles remainder rule. **Done — D13, 2026-11-03, club owner.**
+2. Insert a **new** `sp_rule_versions` row marked `approved` but **disabled**, carrying those parameters. The applied `provisional-2026-11` row is never edited, so existing calculations stay auditable against their original version. **Done — migration 016 inserts `approved-2026-11`; it was enabled in the same reviewed migration.**
+3. Implement the approved operation order (clamp → round → multiply), the half-up definition, and the doubles split/remainder rule in `domain/sp.ts` and the awarding RPC. These are code changes; the coefficient and floor already exist in config, but ordering and remainder rules do not. **Done for the engine and the friendly award.**
+4. Enable the approved version in a separate reviewed step (one enabled version at a time is already enforced). **Done — `approved-2026-11` is the single enabled row.**
+5. Implement the awarding RPC for the owning match source with the idempotency key, ledger fields, and tests for exactly-once processing. **Done for friendlies (`award_friendly_sp`, migration 011); tournament awarding is not built.**
+6. Only then may a match move SP. **Confirmed friendlies now move SP; tournament matches still do not.**
 
-Seasonal scoring is **not** part of this proposal, and nothing here authorizes building it. The following constraints must survive any later approval:
+#### 7.1.10 Seasonal rules (approved as S1–S15; implementation still not authorized)
 
-- **Current SP and Seasonal SP stay conceptually separate.** `AGENT.md` describes Current SP as the persistent competitive rating used to compare strength, and Seasonal SP as the points earned inside a season for the seasonal leaderboard. That separation is a recommended design, not a confirmed club rule.
+> **UPDATED during the seasonal decision review; implementation status corrected 2026-11-03.** The seasonal business
+> rules that this subsection listed as unresolved are now approved as **S1–S15 in §7.3**. The original text below is
+> retained for history; where it conflicts with §7.3, §7.3 governs. Specifically: the Current SP / Seasonal SP
+> separation is now a **confirmed club rule** (S1), a deduction applies to **Current SP only** (S8), and the
+> boundaries, tiers, and deduction amounts are settled (S2, S8). Migration 012 now implements the seasonal schema,
+> lifecycle RPCs, snapshot, deduction batch, and transition checkpoints, but it is inert — no season exists and no
+> deduction runs. The S20 scheduled job, notification, recovery view, S18 tie-break statistics, leaderboard screen,
+> and automatic season creation remain unbuilt.
+
+Seasonal scoring is **not** part of the SP formula rule, and nothing here authorizes building it. The following constraints must survive any later approval:
+
+- **Current SP and Seasonal SP stay conceptually separate.** `AGENT.md` describes Current SP as the persistent competitive rating used to compare strength, and Seasonal SP as the points earned inside a season for the seasonal leaderboard. That separation is a recommended design, not a confirmed club rule. **Superseded: S1 (§7.3) confirms the separation as an approved club rule, including that Seasonal SP resets each season while Current SP carries over.**
 - **Season history and snapshots are preserved.** A season archive is an immutable snapshot of final position, SP, and achievements; completed seasons and their ledger rows are never rewritten by a reset, a deduction, or a later rule version.
-- **Rank-based deduction remains unresolved.** The club has confirmed that current SP is not reset to zero and that higher-ranked players lose more, but the tiers, the exact amounts, and the rank basis are open.
-- **The balance a deduction applies to must be explicitly approved.** Current SP, Seasonal SP, or both is unresolved; a deduction must be a new `season_deduction` ledger row referenced to a season, never an edit.
+- **Rank-based deduction remains unresolved.** The club has confirmed that current SP is not reset to zero and that higher-ranked players lose more, but the tiers, the exact amounts, and the rank basis are open. **Resolved by S8 and S12 (§7.3): fixed tiers of 40 / 30 / 20 / 10 SP by fixed ranking position, with the ranking order and tie-break chain in S12. S2 also confirms that Current SP carries over while Seasonal SP resets.**
+- **The balance a deduction applies to must be explicitly approved.** Current SP, Seasonal SP, or both is unresolved; a deduction must be a new `season_deduction` ledger row referenced to a season, never an edit. **Resolved by S8 (§7.3): Current SP only. S9 requires every deduction to be linked to its originating season and applied exactly once, and the ledger-row requirement below stands.**
 - **Tier amounts, deduction timing, rollover behaviour, and archive retention require separate decisions** before Phase 8.
-- **No seasonal code may ship now.** Phase 8 stays blocked by §7 rules 3–5, 10, and 15, and no seasonal table, RPC, cron job, or test is authorised by this document.
+- **Seasonal scope is now split between what exists and what does not.** **Updated 2026-11-02:** migration 012 implements the tables, the season lifecycle and close RPC, the snapshot, the deduction batch, and the transition checkpoints; policy 012 and six SQL checks cover them. It is inert — no season is created, no rule version is enabled, and no SP moves. **Still unauthorised because still unbuilt:** the S20 scheduled job, notification, and recovery view, the S18 tie-break statistics, the leaderboard screen, and any automatic season creation. Nothing here activates Phase 4.
+
+#### 7.1.11 Corrected and invalidated results (proposed 2026-11-02 — F4 still open)
+
+> **STATUS: PROPOSAL — NOT APPROVED.** This is the one business rule still missing before a **tournament awarding or
+> correction** RPC can ship; the friendly award does not implement reversals. It changes no code, creates no rule
+> version, and writes no ledger row. It is presented for approval as **F4** in `docs/sp-formula-signoff.md`.
+
+**Core rule.** A finalized result awards SP **once**. If the result later changes, SP is corrected by **compensating
+rows only**: the ledger is append-only, so no row is edited or deleted, and the compensation is written in the **same
+transaction** as the correction itself.
+
+| Change to a finalized result | Award rows | Compensation |
+| --- | --- | --- |
+| Winner unchanged, scores or games changed | None | None — the change moves no SP |
+| Winner flipped | One award for the new winner | Every existing award on that match reversed first |
+| Match invalidated, cancelled, or voided | None | Every award on that match reversed |
+| Result submitted or approved twice (retry, replay, auto-approval) | No second row | None — the unique key makes the replay a no-op |
+| Correction to a match awarded under a superseded rule version | One award under the **original** version | The original row reversed |
+
+**Reversal row shape.** `transaction_type = 'reversal'` (already permitted by `002`), `reference_type = 'match'`,
+`reference_id = <match>`, `sp_delta = −(original delta)`, `metadata.reverses_transaction_id = <original row>`, the
+**original** row's `rule_version`, and its own idempotency key. It is an ordinary ledger row: it must satisfy
+`sp_before + sp_delta = sp_after` and `sp_delta <> 0`.
+
+**Idempotency keys.**
+
+- Award: `match:<source>:<match_id>:<player>:award` (naming the source, as §7.2.7 #8 recommends).
+- Reversal: `match:<source>:<match_id>:<player>:reversal:<original_transaction_id>`.
+
+The reversal key derives from the **row it negates**, not from the match. A second correction of the same match
+therefore cannot reverse the same award twice, and a winner flip that is later corrected back still nets to zero for
+every player.
+
+**Which rule version re-applies.** A correction re-awards under the rule version recorded on the **original** award,
+never the currently enabled one. Consequences: a formula change never restyles completed matches, correcting an old
+result cannot silently apply this season's numbers, and every ledger row stays replayable against the version that
+produced it.
+
+**Balance and ordering.** The correction locks the affected account rows, reads the stored balance, and writes the
+reversal and the new award in one transaction. A partial failure rolls back both, so a player can never hold a stale
+award, and no compensation is computed from a client-supplied balance.
+
+**Placement (D11) is unchanged.** An Unrated player's reversal moves only their hidden provisional balance and is
+hidden the same way every other provisional row is; a Rated participant has no row to reverse, because D11 never
+writes one. For the **SP** side this settles the contradiction recorded in §7.2.5 rule 4: a voided match's SP is
+removed by a reversal row (**Option R**). The **placement-credit count** in that rule — whether the credit is voided
+or kept — remains a separate open question and is not decided here.
+
+**Closed seasons (S7, S19).** A correction to a match finalized in a closed season adjusts **Current SP**, leaves the
+closed season's Seasonal SP and ranking untouched, and never rewrites the published snapshot.
+
+**Not permitted.** No editing or deleting a ledger row, no manual SP, no "repair" row invented by reconciliation, and
+no reversal without a recorded reason, actor, and timestamp.
+
+**Tests required before the awarding RPC ships.**
+
+1. Correct a completed match without flipping the winner — each player's delta sum is unchanged.
+2. Flip the winner — each player's sum equals the **new** result only, with one reversal and one award.
+3. Invalidate a finalized match — both sides net to zero and the balance returns to its pre-match value.
+4. Replay the correction or the auto-approval job — no second row for any player.
+5. Correct a match from a closed season — Current SP moves, Seasonal SP and the snapshot do not.
 
 ### 7.2 Unrated players and the 10-match placement system (eligibility approved by D12; system still unapproved)
 
-> **STATUS: PARTIALLY APPROVED — the placement system as a whole remains NOT APPROVED.** Two decisions are approved: **D11**, the Rated-side rule in §7.2.4 (no SP change for Rated participants), and **D12**, the Placement Match Eligibility Policy, both approved 2026-11-01. D12 approves the core eligibility principle, the eight eligible and eleven ineligible match situations, the additional conditions, and the placement credit rules recorded in §7.2.2 and §7.2.5. D12 does **not** approve the 10-match requirement, the initial provisional SP value, the §7.1 SP formula, doubles distribution and rounding, qualification and concurrency design, seasonal rules, or the final schema/RLS implementation. The rest of this section remains unapproved. This section documents the club's selected direction, **Option A — Hidden Provisional SP**, for the remaining approvals. It is documentation only: no source file, SQL migration, SP engine, rule configuration, test, screen, seed, or database row was changed by this revision, and nothing was staged or committed. The current implementation still behaves as before — registration approval grants 1,000 SP once, the balance is stored in `sp_accounts.current_sp`, and every club member can read it under `policies/003_shuttlepower.sql`. Until the club approves the remaining decisions in this section **and** the formula in §7.1, no placement status, hidden balance, placement count, or qualification can exist in the running system.
+> **STATUS: PARTIALLY APPROVED — the placement system as a whole remains NOT APPROVED.** Two decisions are approved: **D11**, the Rated-side rule in §7.2.4 (no SP change for Rated participants), and **D12**, the Placement Match Eligibility Policy, both approved 2026-11-01. D12 approves the core eligibility principle, the eight eligible and eleven ineligible match situations, the additional conditions, and the placement credit rules recorded in §7.2.2 and §7.2.5. D12 does **not** approve the 10-match requirement, the initial provisional SP value, qualification and concurrency design, seasonal rules, or the final schema/RLS implementation. The §7.1 formula and even doubles split are approved separately by D13 (2026-11-03). The rest of this section remains unapproved. This section documents the club's selected direction, **Option A — Hidden Provisional SP**, for the remaining approvals. It is documentation only: no source file, SQL migration, SP engine, rule configuration, test, screen, seed, or database row was changed by this revision, and nothing was staged or committed. The current implementation still behaves as before — registration approval grants 1,000 SP once, the balance is stored in `sp_accounts.current_sp`, and every club member can read it under `policies/003_shuttlepower.sql`. Until the club approves the remaining decisions in this section, no placement status, hidden balance, placement count, or qualification can exist in the running system.
 
 #### 7.2.0 The selected approach
 
@@ -932,9 +1016,9 @@ Option A keeps the competitive number continuous from a player's very first matc
 
 **Selection status versus approval status.** On 2026-11-01 the club selected Option A as the direction to document. That selection is why this section exists, but it is **not** a business-rule approval, not a decision to change the database, and not authorization to build anything. The rules below become binding only through a recorded approval of the kind described in §7.1.9, including a new rule version and a separate reviewed activation.
 
-**Two sub-decisions are approved.** On 2026-11-01 the club approved **D11**: a Rated participant receives no SP change in a placement match (§7.2.4). It also approved **D12**: the Placement Match Eligibility Policy in §7.2.2 and the placement credit rules in §7.2.5. Those are the only approved parts of §7.2. The placement system as a whole, the 10-match requirement, the starting provisional value, visibility, qualification, doubles distribution, seasons, the schema/RLS design, and the §7.1 formula remain **not approved**.
+**Two sub-decisions are approved.** On 2026-11-01 the club approved **D11**: a Rated participant receives no SP change in a placement match (§7.2.4). It also approved **D12**: the Placement Match Eligibility Policy in §7.2.2 and the placement credit rules in §7.2.5. Those are the only approved parts of §7.2. The placement system as a whole, the 10-match requirement, the starting provisional value, visibility, qualification, the D11 Unrated-share question, seasons, and the schema/RLS design remain **not approved**; the §7.1 formula and even split are approved by D13.
 
-Only Option A is in scope here. Its interaction with the still-unapproved §7.1 formula is addressed in §7.2.3 and §7.2.9.
+Only Option A is in scope here. Its interaction with the approved §7.1 formula is addressed in §7.2.3 and §7.2.9.
 
 #### 7.2.1 Player status
 
@@ -1096,11 +1180,11 @@ Applied-schema constraints that shape the proposal:
 - The ledger is append-only: nothing already written may be rewritten, re-keyed, or deleted at qualification.
 - D11 means a placement match writes rows only for its Unrated participants. There is no Rated-side row to balance the pair, and no compensating entry is created; the missing row is the approved representation of "no SP change".
 
-**The §7.1 formula remains provisional and NOT APPROVED.** Nothing in §7.2 approves its base, coefficient, clamp, floor, rounding, cap order, or doubles split. If those parameters change later, placement matches must record the rule version that actually computed each row, and old rows are never recalculated. One practical consequence: **neither source awards SP today** (friendly finalization deliberately writes no ledger row, and tournament SP enqueueing is blocked by §7 rule 1), so Option A cannot be exercised at all until the formula is approved and an awarding RPC exists.
+**The §7.1 formula is approved (D13, 2026-11-03) but placement is not implemented.** D13 settles its base, coefficient, clamp, floor, rounding, cap order, and doubles split. If those parameters change later, placement matches must record the rule version that actually computed each row, and old rows are never recalculated. One practical consequence: **only friendly matches award SP today**, because the friendly award exists (migration 011) and the approved rule is enabled (migration 016). Tournament SP enqueueing and every placement path are still unbuilt, so Option A cannot be exercised until placement is approved and implemented.
 
 #### 7.2.4 Interaction with already-rated opponents — approved Rated-side rule (D11)
 
-> **APPROVED 2026-11-01 — D11, Rated-side Option A: a Rated participant receives no SP change in a placement match.** (This "Option A" is the Rated-side rating option; it is not the same label as the "Option A — Hidden Provisional SP" placement approach in §7.2.0.) This approval is limited to the asymmetry. It does not approve the placement system, the 10-match requirement, the hidden-balance design, the starting provisional value, the qualification mechanics, or the §7.1 formula.
+> **APPROVED 2026-11-01 — D11, Rated-side Option A: a Rated participant receives no SP change in a placement match.** (This "Option A" is the Rated-side rating option; it is not the same label as the "Option A — Hidden Provisional SP" placement approach in §7.2.0.) This approval is limited to the asymmetry. It does not approve the placement system, the 10-match requirement, the hidden-balance design, the starting provisional value, or the qualification mechanics. The §7.1 formula is approved separately by D13.
 
 Scenario: an `UNRATED` player competes against a `RATED` player.
 
@@ -1168,7 +1252,7 @@ The Rated opponent knows `S_rated` (public), would observe `d` (their own visibl
 
 Singles compositions follow the same logic: `UNRATED` vs `RATED` is the asymmetric case above; `UNRATED` vs `UNRATED` is two-sided (both provisional balances move and both receive a credit); `RATED` vs `RATED` is an ordinary match.
 
-Worked doubles example, consistent with §7.1.6: Team A is U1 (hidden provisional 1,000) and R1 (1,200), average 1,100. Team B is R2 (1,300) and R3 (1,500), average 1,400. A wins, so the proposed team adjustment is `+26`, split `+13 / +13`. **Under D11**, U1 receives `+13` provisional (hidden), R1 receives nothing, and R2 and R3 receive nothing. Whether the Unrated participant should instead receive the whole `+26`, and what happens to the share that would have gone to the Rated partner, is **not decided here**; it belongs to the unresolved doubles distribution and rounding rules (rules 6, 12, and 13). With two Unrated partners, both receive their split and that team's combined change equals the ordinary team adjustment, while the opposing Rated team still receives nothing.
+Worked doubles example, consistent with §7.1.6: Team A is U1 (hidden provisional 1,000) and R1 (1,200), average 1,100. Team B is R2 (1,300) and R3 (1,500), average 1,400. A wins, so the approved team adjustment is `+26`, split `+13 / +13`. **Under D11**, U1 receives `+13` provisional (hidden), R1 receives nothing, and R2 and R3 receive nothing. Whether the Unrated participant should instead receive the whole `+26`, and what happens to the share that would have gone to the Rated partner, is **not decided here**; it belongs to the unresolved doubles distribution and rounding rules (rules 6, 12, and 13). With two Unrated partners, both receive their split and that team's combined change equals the ordinary team adjustment, while the opposing Rated team still receives nothing.
 
 **What remains open in this subsection** (D11 does not answer these):
 
@@ -1186,6 +1270,8 @@ Worked doubles example, consistent with §7.1.6: Team A is U1 (hidden provisiona
 2. **Pending matches do not count.** Friendly `pending`, `accepted`, and `awaiting_approval`; tournament `pending`. Nothing is finalized yet.
 3. **Disputed matches do not count until resolved.** A friendly in `disputed` has no final result. A resolved dispute **may count once** if the final result represents a valid played match (E3, §7.2.2). This revision adds no resolution workflow: `dispute_friendly_result` currently has no resolution path while §7 rule 8 is open, so E3 is proposed but unreachable until the club approves one.
 4. **Cancelled or invalidated matches must not retain credit.** If a finalized match is later cancelled or invalidated, its credit must stop counting. The credit is **voided** (timestamp, reason, and actor recorded) rather than deleted, so the audit trail shows that the match once qualified and later did not.
+
+   **Contradiction with step 6 below (found by the 2026-11-02 technical review, not yet resolved).** Voiding the credit removes it from the placement *count* but leaves its SP in the ledger, and step 6 publishes the ledger sum — so a match later ruled invalid would still have moved the player's permanent rating. The ledger is append-only, so the only way to remove the SP is a compensating row. Two options, both unapproved: **Option R (reverse)** — invalidation writes a `reversal` row that negates the original delta, so the published value excludes the match, the reversal is keyed to the original row for idempotency, and a reversal arriving after qualification must be handled by the qualification transaction; or **Option K (keep)** — the SP stands and only the count is voided, which must then be stated in the brief. Nothing writes a `reversal` today. **The SP half is now proposed in §7.1.11** (Option R: a reversal row removes the SP); the credit-count half — whether the placement credit is voided or kept — stays open and is not decided there.
 5. **Corrections preserve audit and must not duplicate.** `correct_match_result` rewrites the games on the same match row and records an audit entry. Because the credit is keyed on `(source, match_id, player_id)`, a correction or resubmission cannot create a second credit. A correction that leaves the match completed keeps the existing credit. A correction that invalidates the result voids it under rule 4.
 6. **Replays and retries are idempotent.** A retried finalization, a replayed request, or a repeated approval returns the existing credit ("already counted") instead of inserting another, following the `already_processed` pattern used by `approve_registration`.
 7. **Processing is atomic or safely idempotent.** The business requirement — a retried or replayed finalization must not duplicate a credit — is **approved by D12**. The mechanism is an implementation decision: preferably the credit is written in the same transaction as the match finalization and its provisional SP row, with a unique key plus a reconciliation path if the write is separated. The exact transaction shape and schema remain open (rows 5, 11, and 25).
@@ -1201,7 +1287,7 @@ Proposed steps, all inside the transaction that finalizes the 10th eligible matc
 3. Confirm the status is still `UNRATED` and the verified count is at least 10.
 4. **Prevent duplicate qualification** with one unique qualification record per player; a replay or retry returns "already qualified" and changes nothing, following the existing `already_processed` pattern in `approve_registration`.
 5. **Preserve the complete provisional ledger** — no deletion, rewriting, re-keying, or summarising.
-6. **Publish the accumulated SP without resetting it** — the visible official SP equals the ledger sum that already existed; no reset to 1,000, no bonus, no recalculation.
+6. **Publish the accumulated SP without resetting it** — the visible official SP equals the ledger sum that already existed; no reset to 1,000, no bonus, no recalculation. This is the statement that conflicts with rule 4: unless Option R is chosen, a match voided for placement still contributes SP to the published value.
 7. **Record the qualification timestamp and applicable rule version** on the qualification record.
 8. **Make the player eligible for official SP rankings** from that point on; the leaderboard includes them with the published value.
 9. **Do not create a separate bonus** for completing placement.
@@ -1226,7 +1312,7 @@ This is the accurate starting point; it is not an assumed schema.
 | Qualification record | Nothing | No timestamp, rule version, or unique exactly-once guard |
 | Ledger | `sp_transactions` supports before/delta/after, reason via type + metadata, match reference, timestamp, unique idempotency key, rule version, actor, immutability | No placement-phase marking; `reference_type = 'match'` does not distinguish friendly from tournament source |
 | Starting SP | `grant_starting_sp` writes 1,000 with `rule_version = 'starting-sp-v1'`, `reference_type = 'registration'`, key `player:<player_id>:initial` (migration 003) | None for the amount; it must not be edited, and its row is **not** a match credit |
-| Rule configuration | `sp_rule_versions` JSON config; one `provisional-2026-11` row, disabled; a CHECK forbids enabling an unapproved version | No placement keys; a new approved version (or separate placement config) is required |
+| Rule configuration | `sp_rule_versions` JSON config; the `provisional-2026-11` row is disabled and `approved-2026-11` is enabled (D13); a CHECK forbids enabling an unapproved version | No placement keys; a new approved version (or separate placement config) is required |
 | Placement identification | No match or per-player marker. `sp_transactions.reference_type = 'match'` cannot say "placement", and a Rated participant has no ledger row at all | No field or record identifies that a finalized match was a placement match for a participant |
 | Match result vocabulary | `matches.status` allows only `pending`, `completed`, `cancelled`; friendly statuses allow `pending`, `accepted`, `declined`, `cancelled`, `awaiting_approval`, `confirmed`, `auto_approved`, `disputed` | No retirement, walkover, no-show, forfeit, DQ, or "played but unfinished" marker; `completed` cannot prove how the match ended |
 | Entry status | `tournament_entries.status` allows `registered`, `withdrawn`, `disqualified` | An entry state, not a match result; it cannot show whether withdrawal happened before or after play |
@@ -1277,6 +1363,13 @@ None of the above is an implementation plan authorized by this revision.
 
 #### 7.2.8 Interaction with seasons
 
+> **Answered during the seasonal decision review (approval date to be recorded).** S10 and S11 (§7.3) settle the
+> placement/seasons interaction: a player who is Unrated at the cutoff is excluded from the seasonal ranking and
+> receives no seasonal deduction, keeping any previous seasonal ranking; placement matches are never retroactively
+> added to Seasonal SP; a player who becomes Unrated mid-season keeps their Seasonal SP for audit and resumes
+> eligibility if Rated again. The questions below are retained for history; the seasonal snapshot design is approved as
+> S19 (§7.3).
+
 No seasonal feature exists, and §7.1.10 already forbids building one now. Option A raises questions that must be answered with §7 rules 3–5, 10, 15, and 23:
 
 - Does an `UNRATED` player appear in a seasonal snapshot or leaderboard at all? If yes, what value is shown?
@@ -1299,7 +1392,7 @@ Proposed constraint (not a decision): qualification must never rewrite a complet
 | `AGENT.md` §4.2: a bye awards no SP | Byes and cancelled resets are not played matches and do not count | Already governed; no new decision |
 | `AGENT.md` §4.4: 24-hour loser approval / auto-approval | Stays the finalization point; `awaiting_approval` and `disputed` do not count | Consistent |
 | `AGENT.md` §6 registration step 5: "receives 1,000 starting SP exactly once" | Still exactly once; "receives" now means a hidden provisional balance | Requires this approval to be read that way |
-| §7.1 formula | Still provisional and unapproved; no parameter changes here | Consistent |
+| §7.1 formula | **Approved 2026-11-03 — D13** (base 20, coefficient 0.02, clamp 5–40, floor 0, tournament ×2, half-up, even split); no parameter changes here | Consistent |
 | §7 rule 19: Rated opponents during placement | **Approved — D11: no SP change for any Rated participant** (singles and doubles), with the trade-off documented in §7.2.4 | Resolved 2026-11-01 |
 | §7.2.2 / §7.2.5 eligibility and credit rules | **Approved 2026-11-01 — D12**: played-and-finalized core principle, 8 eligible and 11 ineligible situations, additional conditions, and the one-credit/void-not-delete rules | Resolved as policy; implementation and schema remain unapproved |
 | §7.1.4 zero-sum property | Intentionally suspended for a placement match that includes a Rated participant; ordinary matches stay two-sided | Approved exception (D11), not a formula change |
@@ -1310,7 +1403,7 @@ Proposed constraint (not a decision): qualification must never rewrite a complet
 | §7 rule 9 / rule 18: walkovers, forfeits, DQs, withdrawals | Walkover, no-show, forfeit before play, withdrawal before play, and DQ are ineligible by default; retirement after play counts only with an official final result | **Approved eligibility (D12)**; **SP** treatment remains open |
 | Existing result vocabulary (`matches.status`) | No retirement, walkover, no-show, forfeit, DQ, or "played but unfinished" marker; `completed` cannot prove how the match ended | Implementation constraint on E8 and row 25; the policy itself is approved |
 | Existing entry status (`tournament_entries.status`) | `withdrawn` / `disqualified` are entry states, not match results; withdrawal before play is ineligible | Approved outcome; still cannot show when play stopped |
-| §9 status: "No screen awards SP yet" | Still true; Option A does not activate awards | Consistent |
+| §9 status: "No screen awards SP yet" | **Superseded by D13:** confirmed friendlies now award SP; Option A does not change that | Updated |
 | §7 standing policy 3: no test locks in an unapproved value | The 10-match count, hidden visibility, and qualification behaviour are all unapproved | Binding on future tests |
 
 Known tensions and how the approved decisions affect them:
@@ -1339,16 +1432,351 @@ Known tensions and how the approved decisions affect them:
 | 2 | Whether the initial provisional value remains 1,000 (§7 #20) | The existing starting award becomes the provisional balance | Confirm the amount, and whether it is ever re-based by a new rule version |
 | 3 | Exact qualification transaction and concurrency behavior (§7 #21) | One locked, idempotent transaction at the 10th finalized match; no un-qualification | Approve the transaction shape, retry semantics, and the post-qualification correction/back-dating behaviour |
 | 4 | Public and player-facing visibility rules (§7 #22) | Number hidden; progress count shown; staff-only audit reads; placement rows become ordinary history after qualification | Approve exactly who may read provisional values and whether prior placement rows appear in the player's visible history |
-| 5 | Interaction with seasons and seasonal deductions (§7 #23) | No seasonal implementation; qualification must not rewrite snapshots | Decide Unrated presence in snapshots, seasonal accumulation start, and whether deductions can touch provisional SP |
+| 5 | Interaction with seasons and seasonal deductions (§7 #23) | No seasonal implementation; qualification must not rewrite snapshots | **RESOLVED during the seasonal decision review — S10/S11 (§7.3):** Unrated players are excluded from the seasonal ranking and receive no seasonal deduction; placement matches are not retroactively added to Seasonal SP; qualification does not rewrite a snapshot. The snapshot and archive design is approved as S19 (§7.3) |
 | 6 | Historical migration, verification, and ledger compatibility (§7 #24) | **D12 principle:** historical matches count only when eligibility can be reliably verified. No automatic backfill; existing players backfill `RATED` unless a verified historical placement match exists; no edit to migrations 001–010 or the applied rule row | Approve the verification standard, the migration boundary, the backfill, and whether any historical match is actually credited |
-| 7 | Doubles distribution and rounding (§7 #6, §7 #12, §7 #13) | Existing even-split proposal; under D11 the share that would have gone to a Rated partner is not applied. D12 already fixes the credit: one per Unrated participant regardless of composition | Approve the SP split and rounding, and whether an Unrated partner receives only their own share (as illustrated in §7.2.4) or the whole team adjustment |
-| 8 | Final approval of the SP formula (§7 #1, §7 #2, §7.1) | Base 20, coefficient 0.02, clamp 5–40, half-up, 2×, floor 0 proposal; `provisional-2026-11` remains disabled | Approve or revise every parameter; nothing can award SP before this |
+| 7 | Doubles distribution and rounding (§7 #6, §7 #12, §7 #13) | **D13 approved the even split, the lower-id odd point, and half-up rounding before the multiplier.** Under D11 the share that would have gone to a Rated partner is not applied. D12 already fixes the credit: one per Unrated participant regardless of composition | Decide only whether an Unrated partner receives their own share (as illustrated in §7.2.4) or the whole team adjustment under the D11 asymmetry |
+| 8 | Final approval of the SP formula (§7 #1, §7 #2, §7.1) | **RESOLVED 2026-11-03 — D13:** base 20, coefficient 0.02, clamp 5–40, half-up before ×2, floor 0, no ceiling, even split; `approved-2026-11` is enabled | Nothing — the formula is approved; only implementation remains |
 | 9 | Final schema and RLS implementation design (§7 #22, §7 #24, §7.2.7) | Three designs analysed (exposure gating, split balances, separate provisional store); none chosen | Approve the exposure model, the policy successor to 003, placement credits/qualification records, and the migration boundary |
 | 10 | Sufficiency of existing finalization states and the result marker (§7 #25) | **D12 policy approved:** the ordinary confirmed/auto-approved friendly and completed tournament match are identifiable, but no state expresses retirement, walkover, no-show, forfeit, or a resolved dispute | Approve the result/termination marker needed to apply D12 to retirement and to exclude exceptional outcomes; decide whether a separate resolved-dispute state is required |
 | 11 | Dispute resolution workflow (§7 #8) | **D12 approves the outcome:** a resolved dispute can count once if the final result is a valid played match. No workflow is invented here | Approve who resolves a dispute, by what process, and which final state records the resolution |
 | 12 | SP treatment for walkover / forfeit / withdrawal / DQ (§7 #9) | **D12 settles placement eligibility:** these do not count, and retirement counts only with an official final result. SP movement is a separate question | Decide whether and how **SP** changes for these outcomes; this does not reopen D12's eligibility list |
 
-Nothing in §7.2 is authorized for implementation. D11 and D12 approve only their stated scopes; the placement system, the 10-match requirement, the initial provisional value, the §7.1 formula, doubles distribution, qualification design, seasons, and the schema/RLS implementation remain unapproved. The order is: approve the remaining unresolved decisions, approve the §7.1 formula and its parameters, then propose the migration and rule version that implement them. Until then, `provisional-2026-11` stays disabled, no match moves SP, and the running system keeps today's 1,000-SP, fully visible behaviour.
+Nothing in §7.2 is authorized for implementation. D11 and D12 approve only their stated scopes; the placement system, the 10-match requirement, the initial provisional value, qualification design, seasons, and the schema/RLS implementation remain unapproved. The §7.1 formula is approved by D13 and enabled for friendlies, but placement does not use it yet. The order is: approve the remaining placement decisions, then propose the migration and rule version that implement them. Until then, `provisional-2026-11` stays disabled, `approved-2026-11` awards only confirmed friendlies, and no placement or tournament match moves SP.
+
+---
+
+### 7.3 Approved seasonal SP decisions (S1–S15)
+
+> **STATUS: APPROVED BUSINESS RULES — NOT IMPLEMENTED.** S1–S23 are approved club rules (S1–S15 in the first
+> seasonal review, S16–S23 in the continued review that closed §7.4). **Approval date: approved
+> during seasonal decision review; approval date to be recorded.** This section records rules, not features: no
+> season table, seasonal balance column, RPC, cron schedule, notification, snapshot, screen, migration, or test
+> exists, and none is authorised here. Approving the seasonal rules does **not** approve the §7.1 SP formula, the
+> placement system (§7.2), the seasonal schema, or ShuttlePower as a whole.
+
+The identifiers are new and deliberately distinct from `D1–D12`: those record the architecture and placement
+decisions and keep their meaning. Each S decision answers one or more rows of the §7 register or of §7.4, which are
+retained in place with their original text. Where an approved seasonal rule contradicts an earlier statement in this
+document, the conflict is listed in the conflicts table below and the earlier statement is annotated, never
+deleted.
+
+#### S1 — Seasonal SP structure
+
+- Current SP and Seasonal SP are **separate balances**.
+- **Current SP** carries over between seasons and remains the permanent competitive rating.
+- **Seasonal SP** resets to zero at the start of every new season.
+- Seasonal SP tracks the **net actual SP gains and losses** from eligible finalized matches during the season.
+- **Seasonal deductions affect Current SP only.** A deduction never reduces Seasonal SP.
+- Seasonal SP **may become negative**.
+- A player with negative Seasonal SP is **excluded from seasonal rankings**; a player at exactly zero remains
+  eligible.
+- Seasonal SP is not a replacement for Current SP.
+
+#### S2 — Season duration and boundaries
+
+- A season lasts **12 months** and follows the fixed calendar year: **January 1 – December 31**.
+- Boundaries use **`Asia/Manila` (UTC+8)**: a season starts January 1 at 12:00 AM and ends December 31 at
+  11:59:59 PM Philippine time.
+- Timestamps may be stored in UTC, but **every season-boundary calculation must use `Asia/Manila`**.
+
+> **Conflict with register row 10:** the earlier understanding was "every three months". S2 supersedes it. The row is
+> retained with a dated approval note; no quarterly season may be implemented.
+
+#### S3 — Automatic season transition
+
+Every January 1 the system transitions seasons without manual intervention:
+
+1. Close the previous season.
+2. Finalize seasonal standings from the approved cutoff rules (S5, S12).
+3. Generate the previous season's deduction batch.
+4. Activate the new season.
+5. Reset Seasonal SP to zero.
+6. Preserve Current SP.
+7. Allow the new season to begin even while earlier deduction batches are pending.
+
+**Pending deductions must never block the next season.**
+
+#### S4 — Failed transition handling (requirements, not behaviour)
+
+- Failed transition steps retry automatically.
+- Transition operations are **idempotent**; retries must not duplicate a deduction batch, a deduction transaction, or
+  a season reset.
+- A Super Admin is notified after repeated failures.
+- A Super Admin can inspect and safely resume an incomplete transition.
+- Completed steps are preserved when a transition resumes.
+
+#### S5 — Seasonal ranking cutoff
+
+- The cutoff is **December 31 at 11:59:59 PM `Asia/Manila`**.
+- Only eligible matches finalized by that deadline count toward the final ranking.
+- Pending matches, unresolved disputes, and unfinished matches are excluded from that season's final ranking.
+- The new season is not delayed for pending results.
+
+#### S6 — Matches finalized after the season closes
+
+A match finalized after the deadline receives normal Current SP processing when otherwise eligible, contributes
+**no** SP change to the closed season's Seasonal SP, contributes **no** SP change to the new season's Seasonal SP,
+and keeps its match and SP records for audit.
+
+#### S7 — Corrections to matches finalized in a closed season
+
+- Current SP is adjusted using the **original formula version**.
+- Original transactions are reversed and re-applied with a complete audit trail.
+- The closed season's Seasonal SP is **not** modified.
+- Closed-season rankings are **not** recalculated.
+- The correction is **not** transferred to the new season's Seasonal SP.
+
+#### S8 — Seasonal deduction policy
+
+- Deductions use **fixed SP amounts by ranking tier**, not percentages.
+- Tiers use **fixed ranking positions**, not percentages of the player population.
+
+| Tier | Position | Deduction |
+| --- | --- | ---: |
+| Tier 1 | 1st–3rd | 40 SP |
+| Tier 2 | 4th–10th | 30 SP |
+| Tier 3 | 11th–20th | 20 SP |
+| Tier 4 | 21st onward | 10 SP |
+
+- Every eligible Rated player is subject to the deduction for their tier.
+- The deduction applies to **Current SP only**.
+- It is applied to the **latest Current SP balance at the moment a Super Admin approves the batch**.
+- The deduction is **capped at the available Current SP**: if the balance is insufficient, only the available amount is
+  deducted and **the remainder is permanently waived** — no debt and no carry-forward.
+- Every deduction is **linked to its originating season**.
+- The deduction **lowers SP numbers**. It does not move a player through named divisions, and no
+  Bronze/Silver/Gold label system exists or is created by this rule.
+- At these amounts the deduction lowers every eligible balance and generally **compresses the field toward the
+  pack**; it does **not** guarantee that any player changes position.
+
+#### S9 — Deduction batch approval
+
+- A batch must be **reviewed and approved by a Super Admin** before it is applied.
+- The Super Admin may **approve or reject a batch only**; individual deduction amounts cannot be edited.
+- An incorrect amount is fixed by correcting the source data and recalculating, which produces a **new batch**.
+- Rejected batches are **preserved for audit**.
+- Batches have **no deadline**: pending batches are preserved indefinitely and may be approved or rejected at any
+  time.
+- An approved deduction is applied **exactly once**.
+- A new season may begin while earlier batches are pending, and a pending batch keeps its originating season while
+  applying to the latest Current SP at approval time.
+
+#### S10 — Seasonal ranking eligibility
+
+- Only **Rated** players participate in seasonal rankings.
+- A player who is Unrated at the cutoff is excluded from that season's ranking, receives **no** seasonal deduction for
+  it, and keeps any previous seasonal ranking for future use.
+- A player needs **at least one eligible finalized match** in the season to qualify for the current seasonal ranking.
+- A player with **zero eligible matches** is ranked by their **previous seasonal ranking**, which stays valid
+  indefinitely until a new ranking is earned.
+- A newly Rated player accrues Seasonal SP only from eligible matches finalized **after** becoming Rated; placement
+  matches are **not** retroactively included.
+- If a player becomes Unrated during a season, their existing Seasonal SP is **preserved for audit**, they are excluded
+  from the ranking while Unrated, and ranking eligibility **resumes** if they become Rated again.
+
+#### S11 — Negative and zero Seasonal SP
+
+- A player with negative Seasonal SP is excluded from the current seasonal ranking.
+- If they have a previous seasonal ranking, **that ranking determines their deduction tier**.
+- A Rated player with negative Seasonal SP and **no** previous ranking receives **no** deduction until they earn a
+  ranking.
+- A player at **exactly zero** Seasonal SP remains eligible for ranking.
+- A player at exactly zero with no previous ranking stays eligible but receives **no** deduction until they finish a
+  season with positive Seasonal SP.
+- A player who is Unrated at the cutoff receives **no** deduction, whatever their previous ranking.
+
+#### S12 — Seasonal ranking order and ties
+
+Ranked by **Seasonal SP, highest to lowest**, then:
+
+1. Seasonal SP.
+2. Match wins.
+3. Head-to-head mini-table among the tied players.
+4. Game difference.
+5. Point difference.
+6. Shared rank if the tie remains unresolved.
+
+- For three or more tied players the mini-table contains **only matches among the tied players**.
+- If the mini-table cannot resolve the tie, game difference, point difference, and shared rank follow in order.
+- **Competition ranking** is used: `1, 2, 3, 3, 5`.
+- Tied players take their **shared competition rank** for tier purposes, even when the tie crosses a tier boundary.
+- The chain is aligned with **D9** where the two overlap; the conflicts table explains that D9 governs tournament
+  standings while S12 governs the seasonal ranking.
+
+#### S13 — Match types that contribute
+
+- Both eligible finalized **friendly** matches and **official tournament** matches contribute their actual SP changes
+  to Seasonal SP.
+- Friendlies keep the **1×** multiplier; official tournament matches keep the **2×** multiplier, and the adjusted
+  amount is what reaches Seasonal SP.
+- Placement matches follow the separately approved placement rules (§7.2).
+- Ineligible outcomes contribute nothing.
+
+#### S14 — Doubles
+
+- Seasonal rankings are **individual** rankings, never permanent doubles-team rankings.
+- Each doubles participant contributes **their own** individual SP adjustment to their own Seasonal SP.
+- Singles and doubles results feed the **same** individual ranking.
+- The existing doubles calculation, even split, and per-player distribution rules apply unchanged.
+
+#### S15 — Seasonal leaderboard visibility
+
+- A **live public seasonal leaderboard** is published throughout the year and updated as eligible matches are
+  finalized.
+- It is labelled **Provisional** until the December 31 cutoff.
+- The final ranking is determined by the approved cutoff and ranking rules (S5, S12).
+
+#### S16 — A Rated player with zero matches and no previous ranking
+
+A Rated player who finishes a season with **zero eligible finalized matches and no previous seasonal ranking** is:
+
+- **not ranked** for that season;
+- given **no seasonal deduction**;
+- shown **outside** the seasonal ranking as unranked ("no eligible matches this season"), never at 0 SP inside the
+  table.
+
+Inactivity never changes another player's position or deduction tier. This also fixes the reading of S11: "remains
+eligible for ranking" means that **zero Seasonal SP is not itself a disqualifier**; it does not give a player without
+matches a position.
+
+#### S17 — Administrative and membership status changes
+
+- Ranking presence and the seasonal deduction are decided by the player's status **at the cutoff**: `23:59:59` on
+  December 31, `Asia/Manila`.
+- Only a player who is **Rated and active** at that moment is ranked and deducted.
+- A player who is **suspended, deactivated, or whose account is unlinked** at the cutoff is excluded from that
+  season's ranking, receives **no deduction**, and keeps:
+  - the Seasonal SP already earned, preserved for audit and never rewritten;
+  - their Current SP, unchanged by the status change itself;
+  - their last known seasonal ranking (S23), which resumes their tier on return.
+- **Earned SP is never clawed back** by a suspension or by any other status change.
+- A tournament disqualification affects only the matches it invalidates; it never re-scores a completed season.
+- A manual rating-status correction takes effect when it is recorded and **never rewrites a completed season**.
+- A player reinstated after January 1 simply missed that season's deduction; there is no retroactive charge.
+
+#### S18 — Tie-break source and counting
+
+- Wins, head-to-head, game difference, and point difference are computed from **one set**: eligible finalized
+  **official tournament** matches, scored exactly as **D9** scores them.
+- Friendlies contribute to **Seasonal SP only** (S13) and are not tie-break evidence.
+- Each doubles participant is credited **individually** with their side's win and with the full game and point values
+  of that match (S14).
+- A match **ineligible for Seasonal SP** — walkover, no-show, forfeit before play, withdrawal before play,
+  disqualification, unplayed fixture — contributes **nothing** to the tie-break. One definition of "eligible
+  finalized match" serves the whole seasonal system.
+- Only matches finalized by the cutoff (S5) count.
+- Two tied players use their **direct meetings** within that eligible tournament set; three or more use the **mutual
+  mini-table** first, as D9 does.
+- If the eligible set is empty for the tied players, the chain falls straight to **shared rank** (S12). No statistic is
+  ever fabricated.
+
+**Trade-off recorded deliberately:** friendlies decide Seasonal SP; tournaments decide tie-breaks.
+
+#### S19 — Seasonal snapshot and archive
+
+- Closing a season writes one **immutable snapshot per player**, in the same transaction as the close (S3): final
+  position, Seasonal SP, Current SP at the cutoff, matches played, wins, and the **rule version** used.
+- Published historical leaderboards read the snapshot. They are never recomputed from live data.
+- A player excluded under S16/S17 is recorded in the snapshot with a **reason code**, so the archive shows why they
+  are absent.
+- Achievements in v1 are **placement facts only** — finished 1st, top 3, top 10. No badge, medal, or award system is
+  approved.
+- Snapshots are retained **permanently** and are never rewritten; S7's "a closed season is not recalculated" is the
+  governing rule.
+
+#### S20 — Transition, notification, and recovery design (approved rules, not built)
+
+- A scheduled job runs at **00:05 `Asia/Manila` on January 1**, using the project's existing scheduling pattern (the
+  friendly auto-approval job), calling **one** privileged RPC that performs S3's seven steps as an idempotent
+  transaction.
+- Every step records a **checkpoint** keyed by `(season, step)`. A retry is a no-op for a step that already
+  completed.
+- An incomplete transition retries on the same cadence as the existing scheduled job, with a bounded attempt count.
+- Repeated failure raises an **in-app notification for Super Admins** plus an `audit_logs` entry. **No email or push
+  channel is approved** — that needs a provider decision.
+- A Super Admin-only recovery view lists the incomplete transition, its failed step, and the preserved checkpoints,
+  and allows a safe re-run.
+- A job-written row records a **service identity** in its metadata instead of a fabricated actor, because a scheduled
+  job has no signed-in user.
+
+#### S21 — Placement matches and Seasonal SP
+
+**No participant in a placement match accrues Seasonal SP**, and no zero-delta row is written for anyone:
+
+- the **Unrated** participant is not yet Rated, and S10 accrues Seasonal SP only from matches finalized after
+  qualification;
+- every **Rated** participant receives no SP change at all under D11, so there is no amount to accrue.
+
+This matches D11's "no ledger row" rule and the `sp_delta <> 0` constraint.
+
+#### S22 — No playoff for a seasonal tie
+
+- A tie that survives point difference is **shared**, never settled by a match. D9's playoff remains
+  **tournament-only**.
+- Per S12, tied players take the tier of their **shared competition rank**, including across a tier boundary: a tie
+  at 20th and 21st makes both players 20th, and both take the tier-3 deduction.
+- A more lenient treatment for a boundary tie — charging both the lower tier — is **not adopted**; it would need its
+  own approval.
+
+#### S23 — Retention of a last known ranking
+
+- A player's last known ranking is the **most recent snapshot in which they actually earned a ranking** (S19).
+- It persists **indefinitely**, survives any number of seasons with no eligible matches, is never decayed, and is
+  never recalculated.
+- It is **not cleared** by a suspension, a deactivation, or becoming Unrated (S17, S10); it resumes the player's
+  deduction tier when they return.
+- Ranking decay would be a new decision, not an implementation choice.
+
+#### Seasonal SP and Current SP — the approved separation
+
+| | Current SP | Seasonal SP |
+| --- | --- | --- |
+| Purpose | Persistent competitive rating | Season-specific net balance for the seasonal ranking |
+| Carries over | Yes, indefinitely | No — resets to zero each season |
+| Fed by | Every eligible SP change | Every eligible SP change inside the season |
+| Changed by a seasonal deduction | **Yes** (capped at the available balance) | **No** |
+| Changed by a season reset | **No** | **Yes** (to zero) |
+| Can be negative | Governed by the approved §7.1 floor (0) | **Yes** |
+| Affects | Strength comparison and placement | Seasonal ranking, tier, and deduction |
+
+**No inactivity-based SP deduction has been approved.** Seasonal ranking and seasonal deductions must never be
+confused with an inactivity penalty; none exists, and none may be implemented without a separate decision.
+
+#### Conflicts found and how they were handled
+
+| # | Existing text | Conflict | Handling |
+| --- | --- | --- | --- |
+| 1 | §7 register row 10: "Season boundaries — every three months" | S2 fixes a 12-month calendar year | S2 governs. Row 10 is kept with a dated approval note; no quarterly season may be built. |
+| 2 | §7.1.10: the Current/Seasonal split "is a recommended design, not a confirmed club rule" | S1 confirms it | §7.1.10 annotated and the original sentence retained. |
+| 3 | §7.1.10: "the balance a deduction applies to is unresolved" | S8 approves **Current SP only** | §7.1.10 annotated; §7.1.8 row 8 marked approved. |
+| 4 | §7.1.10: "the tiers, the exact amounts, and the rank basis are open" | S8 and S12 settle all three | §7.1.10 annotated; register rows 3, 4, and 15 marked approved. |
+| 5 | §7.1.10: "Phase 8 stays blocked by §7 rules 3–5, 10, and 15" | Those rules are now approved | The block becomes an **implementation** gate. §7.1.10 and §6 Phase 8 updated; no seasonal code authorised. |
+| 6 | D9 round-robin tie-break ends in a **playoff match**; S12 ends in a **shared rank** | Apparent conflict in the final tie-breaker | Not a conflict of scope: D9 governs **tournament standings**; S12 governs the **individual seasonal ranking**. A seasonal tie that survives point difference is shared; a tournament tie still reaches a playoff. **D9 text is unchanged.** |
+| 7 | §7.2.8, register row 23, and §7.2.10 row 5 ask whether an Unrated player appears in seasonal output and whether a deduction can touch provisional SP | S10/S11 answer both | Those places are annotated as resolved; the snapshot/archive design is now approved as S19. |
+| 8 | §7.1.5 #16: a seasonal deduction must stay a separate `season_deduction` transaction referenced to a season, never folded into match calculations | None — S8/S9 require exactly this | Recorded as confirmed, not changed. |
+| 9 | `AGENT.md` §4 and §7.1.10: "higher-ranked players lose more" | None — consistent with S8's descending tiers (40 → 10) | No change. S8 uses fixed amounts, so the statement holds **between** tiers, not inside one. |
+
+### 7.4 Seasonal questions closed during the review (S16–S23)
+
+S1–S15 settled the seasonal business rules. The eight items below were open after that review; each is now answered by
+S16–S23, with its original rationale retained. Nothing at the business-rule level remains open for the seasonal
+system.
+
+| # | Question | Why it was open | Resolution (approved) |
+| --- | --- | --- | --- |
+| 1 | A player with **no previous ranking and zero eligible matches** | S10 sends a zero-match player to their previous ranking and S11 covers the negative and zero cases, but the combination with no previous ranking at all is not stated | **S16:** not ranked, no deduction, shown outside the ranking as unranked; inactivity never moves another player's position or tier; S11's "eligible" means zero SP is not a disqualifier |
+| 2 | Exceptional or administrative rating-status changes | Suspension, deactivation, disqualification, account unlink, a manual rating-status correction, and a later reversal are not covered by S10/S11 | **S17:** status at the cutoff decides; excluded players receive no deduction and keep earned Seasonal SP, Current SP, and their last known ranking; earned SP is never clawed back; a status correction never rewrites a completed season |
+| 3 | Tie-break mechanics | S12 fixes the order but not how "match wins", "game difference", and "point difference" are counted for an individual across mixed formats (one game vs best-of-three) and in doubles | **S18:** all four statistics come from eligible finalized official tournament matches using the D9 definitions; doubles credited per player; ineligible matches contribute nothing; an empty set falls to shared rank; friendlies decide Seasonal SP, tournaments decide tie-breaks |
+| 4 | Seasonal archive and achievements | `AGENT.md` Phase 8 names an achievement archive and a historical leaderboard; no seasonal decision defines its contents, snapshot timing, or retention | **S19:** one immutable per-player snapshot written in the season-close transaction (position, Seasonal SP, Current SP at cutoff, matches, wins, rule version); history reads the snapshot; excluded players carry a reason code; achievements are placement facts only; permanent retention |
+| 5 | Transition, notification, and recovery design | S3/S4 require an automatic January 1 transition with retries, Super Admin notification, inspection, and safe resume; the scheduler, job identity, notification channel, and recovery screen are undecided | **S20:** a scheduled job at 00:05 `Asia/Manila` on January 1 (existing scheduling pattern) calls one idempotent privileged RPC with per-step `(season, step)` checkpoints; bounded retries; in-app Super Admin notification plus audit entry (no email or push); a Super Admin recovery view with safe re-run; job rows carry a service identity |
+| 6 | Seasonal SP for a Rated participant in a placement match | D11 gives them no SP change, so S13 implies no Seasonal SP movement, but this is not stated explicitly | **S21:** no participant in a placement match accrues Seasonal SP and no zero-delta row is written — the Unrated player is not yet Rated (S10) and the Rated side has no SP change (D11) |
+| 7 | Whether a season-ending tie should ever be played off | S12 ends in a shared rank while D9 permits a playoff for tournament standings; the scope split is recorded, but the club has not said whether a **tier-deciding** seasonal tie may ever be resolved by a match | **S22:** no playoff. A surviving tie is shared, and the shared competition rank sets the tier even across a boundary (a tie at 20th/21st gives both the tier-3 deduction). D9's playoff stays tournament-only; a lenient boundary treatment is not adopted |
+| 8 | Retention of a "last known ranking" | S10/S11 say it stays valid indefinitely; archive retention and whether it survives several seasons with no eligible matches are undefined | **S23:** the most recent snapshot in which a ranking was actually earned; persists indefinitely without decay or recalculation; not cleared by suspension or by becoming Unrated; resumes the tier on return; any decay would be a new decision |
+
+All eight rows are answered. What remains is **implementation**, and it is not authorised: a reviewed migration, the
+server-side ranking and deduction RPCs, the transition job and its recovery view, the snapshot table, the seasonal
+leaderboard UI, and a new rule version. All of that still waits on the §7.1 SP formula, because Seasonal SP tracks
+actual match SP changes, and on the placement work in §7.2 where placement matches are involved.
 
 ---
 
@@ -1376,12 +1804,12 @@ Payment gateway integration, ELO ratings, public API, native mobile app, light t
 | L — Directory and profile UI | ✅ Complete — directory, profiles, add/edit, role editor, and link/unlink tools; 71/71 frontend |
 | M — Seed, types, docs, verification | ✅ Complete — unlinked demo player, types validated against migration 004, docs current; 90/90 SQL, 71/71 frontend, build clean |
 | N — Tournament engine (Phase 3) | ✅ Complete — pure engines, migration 005 + policy 005, and the staff UI; 109/109 SQL, 110/110 frontend at that gate, checks clean; hosted migration 005 and policy 005 applied and the Phase 3 walkthrough passed on 2026-11-01 |
-| O — ShuttlePower scaffold (Phase 4) | ✅ Complete in code — migration 006 (rule versions + reconciliation), pure config-driven engine, `/shuttlepower`; 116/116 SQL, 131/131 frontend, checks clean; hosted migration 006 and policy 006 applied, rule reads and reconciliation verified. Awards stay disabled until the formula is approved |
+| O — ShuttlePower scaffold (Phase 4) | ✅ Complete in code — migration 006 (rule versions + reconciliation), pure config-driven engine, `/shuttlepower`; 116/116 SQL, 131/131 frontend, checks clean; hosted migration 006 and policy 006 applied, rule reads and reconciliation verified. **D13 (2026-11-03) enabled the approved `approved-2026-11` rule (migration 016), so confirmed friendlies now award SP; tournament awards remain unbuilt** |
 | P — Training and payments (Phase 6) | ✅ Complete and hosted-verified — migration 007 (sessions, attendance, fee periods, soft-voided payments), audited RPCs, `/training` and `/payments`, own-record visibility; 124/124 SQL, 146/146 frontend at that gate, checks clean. Hosted migration 007 and policy 007 applied; the 2026-11-01 walkthrough created a session, marked three attendance rows, opened a 300-peso fee period, accepted a partial 150 payment (remaining 150), refused an overpayment, and confirmed a player can read only their own payment |
 | Q — Club activities (Phase 7) | ✅ Complete and hosted-verified — migration 008 (jersey projects, designs, sizes, and orders; polls with option-level votes; announcements) with twelve audited RPCs, `/jerseys`, `/polls`, `/announcements`; migration 009 (design mockups in a public storage bucket, staff-only `set_jersey_design_image`); 134/134 SQL, 156/156 frontend at that gate, checks clean. Hosted migrations 008–009 and policies 008–009 applied; the 2026-11-01 walkthrough opened a project, submitted and then updated one order without a duplicate, opened and closed a poll (one vote row after a re-vote, tallies hidden until close), and kept a draft announcement hidden until publication |
-| R — Friendly matches (Phase 5) | ✅ Complete and hosted-verified — migration 010 (`friendly_matches`, six player RPCs, 24-hour auto-approval job), policy 010, `/matches`; confirmed results award no SP by design; 142/142 SQL, 170/170 frontend, checks clean. Hosted migration 010 and policy 010 applied; the 2026-11-01 walkthrough ran challenge → accept → winner submits → loser approves to `confirmed`, blocked the challenger accepting, the loser submitting, and the winner approving, hid the match from a non-participant, wrote no SP row, and left the second match `awaiting_approval` because the auto-approval job returned 0 before the deadline |
+| R — Friendly matches (Phase 5) | ✅ Complete and hosted-verified — migration 010 (`friendly_matches`, six player RPCs, 24-hour auto-approval job), policy 010, `/matches`; **confirmed results now award SP under D13** (migration 016 enabled the approved rule); 142/142 SQL, 170/170 frontend at that gate, checks clean. Hosted migration 010 and policy 010 applied; the 2026-11-01 walkthrough ran challenge → accept → winner submits → loser approves to `confirmed`, blocked the challenger accepting, the loser submitting, and the winner approving, hid the match from a non-participant, wrote no SP row (the rule was disabled then), and left the second match `awaiting_approval` because the auto-approval job returned 0 before the deadline |
 
-**What exists now:** the production frontend with real Supabase authentication, the player directory, the tournament console, the ShuttlePower scaffold, training and payments, jerseys, polls, announcements, and friendly matches, backed by ten migrations and ten policy files applied to the hosted project. `backend/` holds the identity/SP tables plus `sp_rule_versions`, the tournament tables, the training tables, the club-activity tables, `friendly_matches`, the auth-lifecycle functions, the player lifecycle, tournament, training, club-activity, and friendly-match RPCs, and `reconcile_sp_balances()`. Sign-up, pending review, approval/rejection, role assignment, suspension, the one-time 1,000 SP award, directory and profile management, audited role/link changes, tournaments with draws and corrections, the current-SP leaderboard, personal ledger history, the balance check, training sessions and attendance, manual payments with soft voids, jersey projects and orders, polls, announcements, and the challenge-to-approval friendly workflow are implemented end to end. Local verification: 142 SQL assertions and 170 frontend tests, with typecheck, lint, Prettier, and build clean. Hosted verification (2026-11-01): `anon` is denied on every new table and on the reconciliation RPC, a signed-in demo Super Admin reads the provisional rule and a consistent ledger, policy 004 is confirmed, demo sign-in works, and the Phase 3 walkthrough, the Phase 5–7 walkthrough, the Gate G replay, and the owner Super Admin bootstrap are done. No screen awards SP yet, by design. The only remaining product work is the SP and season rules in §7.
+**What exists now:** the production frontend with real Supabase authentication, the player directory, the tournament console, the ShuttlePower leaderboard with live friendly awards, training and payments, jerseys, polls, announcements, and friendly matches, backed by sixteen migrations (ten applied to the hosted project) and fourteen policy files. `backend/` holds the identity/SP tables plus `sp_rule_versions`, the tournament tables, the training tables, the club-activity tables, `friendly_matches`, the seasonal tables, the auth-lifecycle functions, the player lifecycle, tournament, training, club-activity, and friendly-match RPCs, and `reconcile_sp_balances()`. Sign-up, pending review, approval/rejection, role assignment, suspension, the one-time 1,000 SP award, directory and profile management, audited role/link changes, tournaments with draws and corrections, the current-SP leaderboard, personal ledger history, the balance check, training sessions and attendance, manual payments with soft voids, jersey projects and orders, polls, announcements, and the challenge-to-approval friendly workflow are implemented end to end. Local verification: 168 SQL assertions and 228 frontend tests, with build clean (typecheck and lint still report the pre-existing unused jersey-payment declarations). Hosted verification (2026-11-01): `anon` is denied on every new table and on the reconciliation RPC, a signed-in demo Super Admin reads the provisional rule and a consistent ledger, policy 004 is confirmed, demo sign-in works, and the Phase 3 walkthrough, the Phase 5–7 walkthrough, the Gate G replay, and the owner Super Admin bootstrap are done. **A confirmed friendly now awards SP under the approved D13 rule; tournament and placement matches still award nothing.** The remaining product work is tournament awarding, F4 corrections/reversals, the placement system, and the unbuilt seasonal implementation whose rules are approved in §7.3.
 
 **Supabase status (Groups E–F):** the project is connected and verified with the publishable key: GoTrue v2.197.0,
 database API reachable, no stored session. Migrations 001–002 and policies 001–003 are committed, verified locally,
@@ -1408,9 +1836,9 @@ access, role unions for 1/2/3 roles, unknown routes, skip link, mobile bar at 39
 trap and focus return, persona persistence) and the production build was checked separately: `/` and
 `/players` both resolve to `/sign-in`, and the dev persona strings are absent from `dist/`.
 
-Next action: **record the SP formula decision (§7 rules 1, 2, and 6)** so Phase 4 can be activated and the friendly award added. The owner-facing summary of every open number is `docs/shuttlepower-decision-brief.md`. The hosted project is fully migrated through 010 and the Phase 5–7 walkthrough passed on 2026-11-01, so no deployment work is outstanding. Phase 8 (seasons and archives) stays blocked by §7 rules 3–5 and 10. Phase 4 remains inactive by design, and approving the formula is the only path to live SP awards. Record the choice here before starting it. The placement proposal in §7.2 is an **independent approval gate** (rules 16 and 20–25; rules 17–19 are approved as D12 and D11) and cannot be implemented or enabled before the formula is approved, because neither match source moves SP today.
+Next action: **build the remaining SP award paths.** D13 recorded and enabled the approved formula on 2026-11-03, so confirmed friendlies now award SP and the formula is no longer a gate. What remains, in order: approve F4 (corrections and reversals, §7.1.11) before a tournament awarding or correction RPC ships; build tournament awarding; then resolve the placement gates in §7.2 (the 10-match requirement and rules 20–25; rules 17–19 are approved as D12 and D11) and the seasonal implementation in §7.3. The hosted project is fully migrated through 010 and the Phase 5–7 walkthrough passed on 2026-11-01; migrations 011–016 are local only and still need applying to the hosted project. Phase 8's business rules are approved (S1–S15, §7.3) and migration 012 provides the storage layer locally, but the scheduler, notification, recovery view, and leaderboard remain unbuilt. Record each remaining decision here before starting its implementation.
 
-**Placement decisions (v40 — D11 and D12 approved, the rest not approved):** §7.2 records Option A — Hidden Provisional SP: new players remain publicly Unrated for their first 10 eligible finalized matches while a provisional balance is maintained internally and published unchanged at qualification. On 2026-11-01 the club approved **D11**: a Rated participant receives no SP gain, no SP loss, no ledger transaction, and no placement credit in a placement match (singles and doubles), which creates an intentional temporary rating asymmetry. It also approved **D12**, the Placement Match Eligibility Policy: a match counts only when an actual match was played and its result finalized; confirmed/auto-approved friendlies, resolved-in-favour friendlies, and completed tournament matches count; pending, unresolved disputes, cancelled matches, byes, walkovers, no-shows, forfeits before play, withdrawals before play, disqualifications, declined friendlies, and unplayed fixtures do not; retirement after play counts only when an official final result exists. Every eligible Unrated participant receives exactly one credit (each Unrated player in singles and doubles, regardless of composition); Rated participants receive none; progress comes from unique eligible finalized credits, not transactions; corrections, resubmissions, or replays cannot duplicate a credit; and invalidated matches have their credits voided with an audit trail. The 10-match system, the initial provisional value, visibility, qualification design, doubles distribution, seasons, the final schema/RLS, and the §7.1 SP formula remain unapproved. D12's retirement rule is approved, but it cannot yet be applied because the current schema has no result/termination marker. The analysis confirms the **current schema has no rating status, no placement credit or count, no placement marker, no qualification record, and no retirement/walkover/no-show/forfeit/DQ result marker**; `sp_accounts.current_sp` is a single club-readable balance, and the player's own ledger rows are readable under policy 003, so a hidden value cannot be produced by a UI change alone. It also records that `reconcile_sp_balances()` requires the cached balance to equal the ledger sum, so hiding must be an exposure-layer decision, not an accounting one. No source file, migration, policy, engine, configuration, test, or seed changed; migrations 001–010 and the disabled `provisional-2026-11` rule are untouched, and §7.1 remains provisional and not approved.
+**Placement decisions (v40 — D11 and D12 approved, the rest not approved):** §7.2 records Option A — Hidden Provisional SP: new players remain publicly Unrated for their first 10 eligible finalized matches while a provisional balance is maintained internally and published unchanged at qualification. On 2026-11-01 the club approved **D11**: a Rated participant receives no SP gain, no SP loss, no ledger transaction, and no placement credit in a placement match (singles and doubles), which creates an intentional temporary rating asymmetry. It also approved **D12**, the Placement Match Eligibility Policy: a match counts only when an actual match was played and its result finalized; confirmed/auto-approved friendlies, resolved-in-favour friendlies, and completed tournament matches count; pending, unresolved disputes, cancelled matches, byes, walkovers, no-shows, forfeits before play, withdrawals before play, disqualifications, declined friendlies, and unplayed fixtures do not; retirement after play counts only when an official final result exists. Every eligible Unrated participant receives exactly one credit (each Unrated player in singles and doubles, regardless of composition); Rated participants receive none; progress comes from unique eligible finalized credits, not transactions; corrections, resubmissions, or replays cannot duplicate a credit; and invalidated matches have their credits voided with an audit trail. The 10-match system, the initial provisional value, visibility, qualification design, the D11 Unrated-share question, seasons, and the final schema/RLS remain unapproved; the §7.1 formula and even doubles split are approved by D13 (2026-11-03). D12's retirement rule is approved, but it cannot yet be applied because the current schema has no result/termination marker. The analysis confirms the **current schema has no rating status, no placement credit or count, no placement marker, no qualification record, and no retirement/walkover/no-show/forfeit/DQ result marker**; `sp_accounts.current_sp` is a single club-readable balance, and the player's own ledger rows are readable under policy 003, so a hidden value cannot be produced by a UI change alone. It also records that `reconcile_sp_balances()` requires the cached balance to equal the ledger sum, so hiding must be an exposure-layer decision, not an accounting one. No source file, migration, policy, engine, configuration, test, or seed changed by that revision; migrations 001-010 and the disabled `provisional-2026-11` rule were untouched. The §7.1 formula was approved later by D13 (2026-11-03).
 
 **Steps only you can do:**
 
@@ -1470,6 +1898,14 @@ Next action: **record the SP formula decision (§7 rules 1, 2, and 6)** so Phase
 
 | Version | Date | Change |
 | --- | --- | --- |
+| v50 | 2026-11-03 | **D13 — the §7.1 ShuttlePower formula approved and enabled; rank titles and per-rank positions added to the leaderboard UI.** The club owner approved base 20, strength sensitivity 0.02, the 5–40 per-match clamp, floor 0, no ceiling, tournament ×2, half-up rounding on the magnitude **before** the multiplier, and an even doubles split with the odd point to the lower player id. Migration 016 (`016_approved_sp_rule.sql`) inserts the new `approved-2026-11` rule version and enables it; the applied `provisional-2026-11` row is untouched, so confirmed friendlies now award SP and every prior calculation stays auditable. `domain/sp.ts` was reordered to clamp → round → multiply and its guard now refuses any version that is not both approved and enabled. The five existing SP divisions gained display rank titles (Feather → Rookie, Rally → Challenger, Smash → Striker, Apex → Elite, Legend → Champion) without changing the divisions or the formula; `rankLeaderboard` now carries a `divisionId` and a `divisionPosition`, and `/shuttlepower`, the overview ladder, the fighter card, and the player profile show "rank title · #position" while keeping the overall club position. Tests: 168 SQL checks (including a proof that an equal-rating friendly awards +20/−20 under the approved rule) and 228 frontend checks (including division positions, ties, and the approved operation order), all passing. `PLAN.md`, `AGENT.md`, both READMEs, `docs/sp-formula-signoff.md`, and `docs/shuttlepower-decision-brief.md` now record F1–F3 as approved; **F4 (corrected and invalidated results), tournament awarding, placement, and seasonal implementation remain open.** |
+| v49 | 2026-11-02 | **Development tournament demo seed.** `backend/seeds/002_tournament_demo.sql` adds eight unlinked sample players and a published **Sample Open 2026** tournament with two single-elimination events: eight paid singles entries and four paid mixed-doubles teams (one male and one female per team). Every participant is marked paid, so both draws generate immediately from the tournament screen; marking one participant unpaid demonstrates the draw-exclusion rule. The seed uses fixed ids and per-row guards so a re-run adds nothing, and it keeps the `club.environment = development` guard. Group I now also generates both draws through `save_tournament_draw` (162 SQL checks, all passing). Root and backend READMEs document how to load it. |
+| v48 | 2026-11-02 | **Tournament registration, player IDs, friends, and notifications (migrations 013–014).** Migration 013 adds a generated `players.player_code` (`MBC-` + the first and last four hex characters of the id), `player_friendships` (request then accept; active linked players only; one pair, retryable after a decline), and `notifications` (per profile, optional tournament link and actor). Six RPCs cover sending, accepting/declining, and removing a friend plus reading and clearing notifications; clients hold SELECT only. Migration 014 adds `tournaments.poster_path` (constrained to `posters/<tournament-id>/<image-id>.(png\|jpg\|jpeg\|webp)`), `tournaments.entrance_fee`, `team_members.id` with nullable `player_id` and `guest_name`/`guest_gender`, `tournament_entry_payments` (one row per participant, fee snapshotted, `unpaid`/`paid`/`waived`), and `tournament_partner_invitations`. New RPCs: `set_tournament_poster`, `set_tournament_entrance_fee`, `set_entry_payment`, `join_tournament_event` (self-entry: singles and guest doubles immediately; a club partner invitation creates the entry only after acceptance), `respond_tournament_partner_invitation`, `cancel_tournament_partner_invitation`, and `withdraw_own_tournament_entry`. Draw coverage counts only fully paid or waived entries; existing entries were backfilled as `waived` at zero. Publishing notifies active club members except the actor. Policies 013–014 show friendships to the two players, notifications to their recipient, payments to staff/the payer/teammates, and invitations to the two players and staff. Frontend: `/tournaments` and `/tournaments/:id` are open to approved members; tournaments carry a poster and per-player fee; staff upload posters, edit the draft fee, add entries, and set each payment; players join singles or doubles with an accepted-friend partner or a guest, answer invitations, withdraw their own entry, and follow the draw; the player profile shows the ID and friend controls; a topbar bell links to `/notifications`. Pure helpers for poster validation/path, guest display, friend pairing, and payment eligibility have tests. 9 new SQL checks (161 total) and 21 new frontend tests (196 total); typecheck, lint, Prettier, and build clean. Migrations 013–014 and policies 013–014 are not yet applied to the hosted project. |
+| v47 | 2026-11-02 | **Migration 012 — the seasonal schema (S1–S23), implementation only.** Adds six tables: `seasons` (calendar dates, `scheduled → active → closed`, one active season enforced by a partial unique index), `season_balances` (Seasonal SP per player per season, allowed to go negative), `season_player_results` (the immutable per-player snapshot: position, Seasonal SP, Current SP at cutoff, rule version, and a `negative_seasonal_sp` reason code), `season_deduction_batches` (one pending and at most one approved batch per season, rejection reason preserved), `season_deduction_entries` (fixed 40/30/20/10 tier amounts with applied and waived columns), and `season_transition_steps` (one checkpoint per season and step). Four guarded RPCs: `create_season` (overlap refused), `start_season` (one active), `close_season` (snapshot with `rank()` competition ranking, negative balances excluded, one pending batch generated, checkpoints written, replay a no-op), and `decide_season_deduction_batch` (approve applies to the latest Current SP capped at the balance with the remainder permanently waived and each ledger row keyed `season:<season>:<player>:deduction`; reject needs a reason and applies nothing). `award_friendly_sp` is superseded to accrue Seasonal SP for the active season in the same transaction. Policy 012 keeps balances and snapshots member-readable for the published seasonal leaderboard while deduction batches and checkpoints stay Super Admin-only; no client write grant exists. 6 new SQL checks (152 total, all passing). **Not built:** the S18 tie-break statistics (snapshot columns reserved, left null), the scheduled January 1 job and its recovery screen, seasonal leaderboard UI, and any season-aware placement. No rule version is enabled and migration 012 is not applied to the hosted project. |
+| v46 | 2026-11-02 | **Migration 011 — the friendly SP award (implementation, inert).** `011_friendly_sp_award.sql` adds the internal `award_friendly_sp` helper: it reads the single rule version that is both approved and enabled, returns `status: disabled` and writes nothing when there is none, computes the singles change from config with exact integer halving (0.02 = 1/50) and half-up rounding before the multiplier, locks both accounts in player-id order, writes one append-only row per player keyed `friendly:<match_id>:<player>`, honours the configured floor (a zero delta writes no row), and updates the cached balance in the same transaction. `approve_friendly_result` and `auto_approve_friendly_matches` are superseded to call it, so the award is in the confirmation transaction. No new table, policy, or client grant; the helper is revoked from `public`, `anon`, and `authenticated`. 4 new SQL checks (146 total, all passing) cover: nothing awards while no version is enabled; an enabled synthetic rule awards both players exactly once with a replay skipping both and reconciliation still exact; the half-up case (20.5 → 21); and auto-approval awarding once while the helper is uncallable by members or `anon`. The club formula is still unsigned, `provisional-2026-11` is still disabled, no tournament award, reversal, placement, season, or screen exists, and migration 011 is **not** applied to the hosted project. |
+| v45 | TBD (formula package follow-up) | **Proposed §7.1.11 — corrected and invalidated results (sign-off decision F4).** Documentation only: a finalized result awards SP once; a changed result is corrected by compensating `reversal` rows keyed to the original row and written in the same transaction as the correction; winner flips reverse then re-award; invalidation reverses every award; retries and replays are no-ops through the unique key; a correction re-awards under the **original** rule version, never the currently enabled one; corrections to a closed season adjust Current SP only (S7, S19); the SP side of the placement void resolves to Option R while the credit-count question in §7.2.5 stays open; no edits, deletions, manual SP, or reconciliation repairs; and five required tests are listed. Added unresolved row 12 to §7.1.8 and cross-linked §7.2.5 rule 4. Also added decision F4 to `docs/sp-formula-signoff.md` and updated that document's "still missing" list. **Not approved and not built:** no code, migration, rule version, test, or seed changed; `provisional-2026-11` remains disabled and no match can move SP. |
+| v44 | TBD (continued seasonal review) | **Approved S16–S23 — the eight follow-up seasonal decisions.** Documentation only: added S16 (a Rated player with zero matches and no previous ranking is unranked, undeducted, and shown outside the table, with S11's "eligible" reading fixed), S17 (status at the December 31 cutoff decides ranking and deduction; excluded players keep earned Seasonal SP, Current SP, and their last known ranking; earned SP is never clawed back; a status correction never rewrites a closed season), S18 (the tie-break uses eligible finalized tournament matches only, scored as D9 does, credited per player in doubles, with ineligible matches contributing nothing and an empty set falling to shared rank), S19 (an immutable per-player season snapshot with a reason code for excluded players; placement facts only as achievements; permanent retention), S20 (a January 1 job at 00:05 `Asia/Manila` calling one idempotent RPC with per-step checkpoints, bounded retries, in-app Super Admin notification and recovery view, service-identity attribution, and no email or push in v1), S21 (no participant in a placement match accrues Seasonal SP and no zero row is written), S22 (no playoff for a seasonal tie; the shared rank sets the tier, including across a boundary), and S23 (last known ranking from the most recent earned snapshot, never decayed or cleared). Retitled §7.4 and resolved all eight rows while keeping their original rationale; added the decisions-table and resolved-table rows; updated the header, §7.1.10, §7.2.8, §7.2.10 row 5, the §7.3 conflict row, §6 Phase 8, §7 register closing paragraph, and §9. Phase 8 implementation remains **not authorised** and nothing is built; the §7.1 formula is still unapproved. No code, SQL, migration, policy, engine, configuration, test, or seed changed; nothing staged or committed. |
+| v43 | TBD (seasonal decision review) | **Approved S1–S15 — seasonal SP decisions.** Documentation only: added §7.3 with the fifteen approved seasonal rules (separate Current and Seasonal SP with the seasonal balance resetting and allowed to go negative; 12-month calendar seasons in `Asia/Manila`; the automatic idempotent January 1 transition with retry, notification, and recovery requirements; the December 31 cutoff and post-season finalization and correction rules; fixed 40/30/20/10 SP deduction tiers by fixed ranking position, applied to Current SP only, capped at the available balance with the remainder waived, through Super Admin batch approval; Unrated, zero-match, negative, and zero Seasonal SP eligibility rules; the ranking order and tie-break chain with competition ranking and shared ranks; the 1× friendly and 2× tournament contribution and per-player doubles contribution; and the labelled provisional live leaderboard), the Current SP / Seasonal SP separation table, and a conflict register. Added §7.4 for the eight remaining open seasonal questions. Marked register rows 3–5, 10, 15, and 23 approved; annotated §7.1.10, §7.1.8 rows 8–9, §7.2.8, §7.2.10 row 5, §5's seasonal tables, and §6 Phase 8; updated the header, decisions table, resolved table, and §9 next action. The seasonal **schema, scheduler, notifications, recovery, archive, and ranking computation remain unapproved and unbuilt**, as do the §7.1 formula and the placement system. No code, SQL, migration, policy, engine, configuration, test, or seed changed; nothing staged or committed. |
 | v1 | 2026-10-30 | Initial plan from `AGENT.md`: architecture options, design system, schema, roadmap, open decisions. |
 | v2 | 2026-10-30 | D1–D7 approved. Supabase-only settled. Final folder structure. Full Phase 1 checklist (§6.1). §7 converted to a tracked business-rule register with standing provisional policy. |
 | v3 | 2026-10-30 | D8 (first Super Admin via one-time SQL bootstrap), D9 (Round Robin tie-break chain + mini-table rule), D10 (Mixed Doubles one male + one female) approved. §4 gains `players.gender` and Mixed Doubles integrity rules; §7 register drops the two resolved rows into a "Resolved since v2" table; Phase 3 scope updated; Phase 1 Group J4 now specifies the bootstrap script. Group A executed. |

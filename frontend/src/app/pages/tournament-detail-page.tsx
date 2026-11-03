@@ -1,7 +1,8 @@
-import { ArrowLeft, CalendarDays, MapPin, Plus, Trophy } from 'lucide-react'
+import { ArrowLeft, CalendarDays, MapPin, Plus, Swords, Trophy } from 'lucide-react'
 import * as React from 'react'
 import { Link, useParams } from 'react-router-dom'
 
+import { ArenaStatStrip } from '@/components/arena/arena-ui'
 import { EmptyState } from '@/components/shared/empty-state'
 import { ErrorState } from '@/components/shared/error-state'
 import { LoadingState } from '@/components/shared/loading-state'
@@ -11,13 +12,22 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { errorMessage } from '@/features/auth/api'
-import { listPlayers } from '@/features/players/api'
-import type { PlayerRecord } from '@/features/players/types'
-import { getTournamentDetail } from '@/features/tournaments/api'
+import { useSession } from '@/features/auth/session-context'
+import { hasAnyRole } from '@/features/auth/types'
+import { listPlayers, getPlayerByProfile } from '@/features/players/api'
+import { buildFriendEntries, listFriendships } from '@/features/players/friends'
+import type { FriendEntry, PlayerRecord } from '@/features/players/types'
+import { formatMoney } from '@/features/training/money'
+import { getTournamentDetail, tournamentPosterUrl } from '@/features/tournaments/api'
 import { EventFormDialog } from '@/features/tournaments/event-form-dialog'
 import { EventPanel } from '@/features/tournaments/event-panel'
 import { LifecycleActions } from '@/features/tournaments/lifecycle-actions'
-import { DISCIPLINE_LABELS, type TournamentDetail } from '@/features/tournaments/types'
+import { TournamentSettings } from '@/features/tournaments/tournament-settings'
+import {
+  DISCIPLINE_LABELS,
+  TOURNAMENT_STAFF_ROLES,
+  type TournamentDetail,
+} from '@/features/tournaments/types'
 import { formatDateRange, formatDateTime } from '@/lib/format'
 
 function MetaItem({ label, children }: { label: string; children: React.ReactNode }) {
@@ -38,14 +48,20 @@ export function TournamentDetailPage() {
 }
 
 function TournamentDetailView({ id }: { id: string | undefined }) {
+  const { user } = useSession()
+  const userId = user?.id ?? null
   const [detail, setDetail] = React.useState<TournamentDetail | null>(null)
   const [players, setPlayers] = React.useState<PlayerRecord[]>([])
+  const [currentPlayer, setCurrentPlayer] = React.useState<PlayerRecord | null>(null)
+  const [friends, setFriends] = React.useState<FriendEntry[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [reloadKey, setReloadKey] = React.useState(0)
   const [eventOpen, setEventOpen] = React.useState(false)
   /** Captured when the data arrives, so deadline checks stay out of render. */
   const [loadedAt, setLoadedAt] = React.useState(0)
+
+  const canManage = hasAnyRole(user?.roles ?? [], TOURNAMENT_STAFF_ROLES)
 
   const reload = React.useCallback(() => {
     setLoading(true)
@@ -58,12 +74,23 @@ function TournamentDetailView({ id }: { id: string | undefined }) {
 
     if (!id) return
 
-    void Promise.all([getTournamentDetail(id), listPlayers()])
-      .then(([nextDetail, nextPlayers]) => {
+    void Promise.all([
+      getTournamentDetail(id),
+      listPlayers(),
+      userId ? getPlayerByProfile(userId) : Promise.resolve(null),
+      listFriendships(),
+    ])
+      .then(([nextDetail, nextPlayers, nextPlayer, nextFriendships]) => {
         if (!active) return
+
+        const playersById = new Map(nextPlayers.map((player) => [player.id, player]))
 
         setDetail(nextDetail)
         setPlayers(nextPlayers)
+        setCurrentPlayer(nextPlayer)
+        setFriends(
+          nextPlayer ? buildFriendEntries(nextFriendships, playersById, nextPlayer.id) : [],
+        )
         setLoadedAt(Date.now())
       })
       .catch((loadError: unknown) => {
@@ -76,7 +103,7 @@ function TournamentDetailView({ id }: { id: string | undefined }) {
     return () => {
       active = false
     }
-  }, [id, reloadKey])
+  }, [id, reloadKey, userId])
 
   if (!id) {
     return (
@@ -140,8 +167,17 @@ function TournamentDetailView({ id }: { id: string | undefined }) {
   }
 
   const { tournament, events } = detail
-  const canEditEvents = tournament.status === 'draft' || tournament.status === 'published'
+  const posterUrl = tournamentPosterUrl(tournament.poster_path)
+  const canEditEvents =
+    canManage && (tournament.status === 'draft' || tournament.status === 'published')
   const openEventSlots = 4 - events.length
+
+  const registeredByEvent = new Map<string, number>()
+
+  for (const entry of detail.entries) {
+    if (entry.status !== 'registered') continue
+    registeredByEvent.set(entry.event_id, (registeredByEvent.get(entry.event_id) ?? 0) + 1)
+  }
 
   return (
     <>
@@ -154,8 +190,38 @@ function TournamentDetailView({ id }: { id: string | undefined }) {
       </Link>
 
       <PageHeader
+        kicker="Draw room"
         title={tournament.name}
         description={tournament.description ?? 'Tournament record and official results.'}
+        actions={
+          events.length > 0 ? (
+            <Button asChild variant="secondary" size="sm">
+              <Link to={`/tournaments/${tournament.id}/draws`}>
+                <Swords aria-hidden="true" />
+                Open draw room
+              </Link>
+            </Button>
+          ) : null
+        }
+      />
+
+      <ArenaStatStrip
+        className="mt-4"
+        stats={[
+          { label: 'Events', value: String(events.length), detail: 'One per discipline' },
+          { label: 'Entries', value: String(detail.entries.length), detail: 'Players and teams' },
+          {
+            label: 'Matches',
+            value: String(detail.matches.length),
+            detail: 'Scheduled and played',
+          },
+          {
+            label: 'Entry fee',
+            value:
+              Number(tournament.entrance_fee) === 0 ? 'Free' : formatMoney(tournament.entrance_fee),
+            detail: 'Per player',
+          },
+        ]}
       />
 
       {error ? (
@@ -167,66 +233,107 @@ function TournamentDetailView({ id }: { id: string | undefined }) {
         />
       ) : null}
 
-      <Card className="mt-5">
-        <CardContent className="flex flex-col gap-5 p-5">
-          <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <MetaItem label="Status">
-              <StatusBadge status={tournament.status} />
-            </MetaItem>
+      <div className="mt-5 flex flex-col gap-4 lg:flex-row lg:items-start">
+        {posterUrl ? (
+          <Card className="overflow-hidden lg:w-72 lg:shrink-0">
+            <img
+              src={posterUrl}
+              alt={`${tournament.name} poster`}
+              className="max-h-96 w-full bg-surface-2 object-contain"
+            />
+          </Card>
+        ) : null}
 
-            <MetaItem label="Dates">
-              <span className="inline-flex items-center gap-1.5">
-                <CalendarDays className="size-3.5 text-text-faint" aria-hidden="true" />
-                {formatDateRange(tournament.starts_on, tournament.ends_on)}
-              </span>
-            </MetaItem>
+        <Card className="flex-1">
+          <CardContent className="flex flex-col gap-5 p-5">
+            <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <MetaItem label="Status">
+                <StatusBadge status={tournament.status} />
+              </MetaItem>
 
-            <MetaItem label="Venue">
-              {tournament.venue ? (
+              <MetaItem label="Dates">
                 <span className="inline-flex items-center gap-1.5">
-                  <MapPin className="size-3.5 text-text-faint" aria-hidden="true" />
-                  {tournament.venue}
+                  <CalendarDays className="size-3.5 text-text-faint" aria-hidden="true" />
+                  {formatDateRange(tournament.starts_on, tournament.ends_on)}
                 </span>
-              ) : (
-                '—'
-              )}
-            </MetaItem>
+              </MetaItem>
 
-            <MetaItem label="Registration deadline">
-              {tournament.registration_deadline
-                ? formatDateTime(tournament.registration_deadline)
-                : 'Not set'}
-            </MetaItem>
-          </dl>
+              <MetaItem label="Venue">
+                {tournament.venue ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    <MapPin className="size-3.5 text-text-faint" aria-hidden="true" />
+                    {tournament.venue}
+                  </span>
+                ) : (
+                  '—'
+                )}
+              </MetaItem>
 
-          <div className="border-t border-border pt-4">
-            <LifecycleActions tournament={tournament} events={events} onChanged={reload} />
-          </div>
-        </CardContent>
-      </Card>
+              <MetaItem label="Entry fee">
+                {Number(tournament.entrance_fee) === 0
+                  ? 'Free'
+                  : `${formatMoney(tournament.entrance_fee)} per player`}
+              </MetaItem>
+
+              <MetaItem label="Registration deadline">
+                {tournament.registration_deadline
+                  ? formatDateTime(tournament.registration_deadline)
+                  : 'Not set'}
+              </MetaItem>
+            </dl>
+
+            {canManage ? (
+              <div className="border-t border-border pt-4">
+                <LifecycleActions tournament={tournament} events={events} onChanged={reload} />
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      </div>
+
+      {canManage ? (
+        <div className="mt-4">
+          <TournamentSettings tournament={tournament} onChanged={reload} />
+        </div>
+      ) : null}
 
       <section className="mt-6" aria-labelledby="tournament-events-heading">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
+            <p className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.18em] text-accent">
+              <span aria-hidden="true" className="h-px w-6 bg-accent" />
+              Draw room
+            </p>
             <h2
               id="tournament-events-heading"
-              className="text-base font-semibold tracking-tight text-text"
+              className="mt-1 text-lg font-semibold tracking-tight text-text"
             >
               Events
             </h2>
             <p className="mt-0.5 text-sm text-text-muted">
               {events.length === 0
-                ? 'Add the disciplines this tournament runs.'
-                : `${events.length} event${events.length === 1 ? '' : 's'} · one per discipline.`}
+                ? 'The disciplines this tournament runs.'
+                : `${events.length} event${events.length === 1 ? '' : 's'} · entries and fees here, brackets in the draw room.`}
             </p>
           </div>
 
-          {canEditEvents && openEventSlots > 0 ? (
-            <Button variant="secondary" className="self-start" onClick={() => setEventOpen(true)}>
-              <Plus aria-hidden="true" />
-              Add event
-            </Button>
-          ) : null}
+          <div className="flex flex-wrap gap-2 self-start">
+            {events.length > 0 ? (
+              <Button asChild variant="secondary" size="sm">
+                <Link to={`/tournaments/${tournament.id}/draws`}>
+                  <Swords aria-hidden="true" />
+                  Open draw room
+                </Link>
+              </Button>
+            ) : null}
+
+            {canEditEvents && openEventSlots > 0 ? (
+              <Button variant="secondary" size="sm" onClick={() => setEventOpen(true)}>
+                <Plus aria-hidden="true" />
+                Add event
+              </Button>
+            ) : null}
+          </div>
         </div>
 
         {canEditEvents && openEventSlots === 0 ? (
@@ -243,7 +350,7 @@ function TournamentDetailView({ id }: { id: string | undefined }) {
               description={
                 canEditEvents
                   ? 'Add Singles, doubles, or Mixed Doubles. Each discipline can appear once.'
-                  : 'This tournament has no events.'
+                  : 'This tournament has no events yet.'
               }
               action={
                 canEditEvents ? (
@@ -256,10 +363,13 @@ function TournamentDetailView({ id }: { id: string | undefined }) {
             />
           ) : (
             <Tabs defaultValue={events[0]?.id}>
-              <TabsList className="max-w-full overflow-x-auto">
+              <TabsList className="w-full max-w-full overflow-x-auto">
                 {events.map((event) => (
                   <TabsTrigger key={event.id} value={event.id}>
                     {DISCIPLINE_LABELS[event.discipline]}
+                    <span className="rounded-pill border border-border bg-surface-2 px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-text-muted">
+                      {registeredByEvent.get(event.id) ?? 0}
+                    </span>
                   </TabsTrigger>
                 ))}
               </TabsList>
@@ -271,9 +381,13 @@ function TournamentDetailView({ id }: { id: string | undefined }) {
                     event={event}
                     entries={detail.entries}
                     teamMembers={detail.teamMembers}
+                    payments={detail.payments}
+                    invitations={detail.invitations}
                     matches={detail.matches}
-                    games={detail.games}
                     players={players}
+                    friends={friends}
+                    currentPlayer={currentPlayer}
+                    canManage={canManage}
                     now={loadedAt}
                     onChanged={reload}
                   />

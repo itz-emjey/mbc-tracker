@@ -2,6 +2,7 @@ import { BarChart3, Plus } from 'lucide-react'
 import * as React from 'react'
 import { toast } from 'sonner'
 
+import { ArenaStatStrip } from '@/components/arena/arena-ui'
 import { EmptyState } from '@/components/shared/empty-state'
 import { ErrorState } from '@/components/shared/error-state'
 import { LoadingState } from '@/components/shared/loading-state'
@@ -105,6 +106,9 @@ export function PollsPage() {
 
   const reload = React.useCallback(() => setReloadKey((current) => current + 1), [])
 
+  const openPolls = views.filter((view) => view.poll.status === 'open').length
+  const voted = views.filter((view) => view.results.my_option_ids.length > 0).length
+
   async function closePoll(poll: PollRecord) {
     try {
       await setPollStatus(poll.id, 'closed')
@@ -141,8 +145,9 @@ export function PollsPage() {
   return (
     <>
       <PageHeader
+        kicker="Club vote"
         title="Polls"
-        description="Club votes. One response per player; tallies never reveal who voted."
+        description="Club votes. One response per player; tallies never reveal who voted unless the poll says otherwise."
         actions={
           isStaff ? (
             <Button onClick={() => setCreateOpen(true)}>
@@ -153,8 +158,18 @@ export function PollsPage() {
         }
       />
 
+      <ArenaStatStrip
+        className="mt-5"
+        stats={[
+          { label: 'Polls', value: String(views.length), detail: 'On the club record' },
+          { label: 'Open', value: String(openPolls), detail: 'Taking responses' },
+          { label: 'Closed', value: String(views.length - openPolls), detail: 'Results final' },
+          { label: 'You voted', value: String(voted), detail: 'Responses recorded' },
+        ]}
+      />
+
       {views.length === 0 ? (
-        <Card className="mt-5">
+        <Card className="mt-4">
           <CardContent className="p-5">
             <EmptyState
               icon={BarChart3}
@@ -176,7 +191,7 @@ export function PollsPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="mt-5 flex flex-col gap-4">
+        <div className="mt-4 grid gap-4 xl:grid-cols-2">
           {views.map(({ poll, options, results }) => (
             <Card key={poll.id}>
               <CardHeader>

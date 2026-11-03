@@ -5,7 +5,9 @@ import { buildJerseyImagePath, JERSEY_IMAGE_BUCKET, validateJerseyImage } from '
 
 import type {
   JerseyDesignRecord,
+  JerseyOrderPaymentRecord,
   JerseyOrderRecord,
+  JerseyPaymentStatus,
   JerseyProjectRecord,
   JerseyProjectStatus,
   JerseySizeRecord,
@@ -15,6 +17,8 @@ const PROJECT_COLUMNS = 'id, name, description, price, order_deadline, status, c
 const DESIGN_COLUMNS = 'id, project_id, name, description, image_path, position'
 const SIZE_COLUMNS = 'id, project_id, label, position'
 const ORDER_COLUMNS = 'id, project_id, player_id, design_id, size_id, quantity, status, created_at'
+const PAYMENT_COLUMNS =
+  'id, order_id, player_id, amount, status, marked_by, marked_at, note, created_at, updated_at'
 
 export async function listJerseyProjects(): Promise<JerseyProjectRecord[]> {
   const { data, error } = await getSupabaseClient()
@@ -58,6 +62,17 @@ export async function listJerseyOrders(): Promise<JerseyOrderRecord[]> {
   if (error) throw new Error(errorMessage(error))
 
   return (data ?? []) as unknown as JerseyOrderRecord[]
+}
+
+export async function listJerseyOrderPayments(): Promise<JerseyOrderPaymentRecord[]> {
+  const { data, error } = await getSupabaseClient()
+    .from('jersey_order_payments')
+    .select(PAYMENT_COLUMNS)
+    .order('created_at', { ascending: true })
+
+  if (error) throw new Error(errorMessage(error))
+
+  return (data ?? []) as unknown as JerseyOrderPaymentRecord[]
 }
 
 export async function createJerseyProject(input: {
@@ -134,6 +149,21 @@ export async function submitJerseyOrder(input: {
 export async function cancelJerseyOrder(orderId: string): Promise<void> {
   const { error } = await getSupabaseClient().rpc('cancel_jersey_order', {
     p_order_id: orderId,
+  })
+
+  if (error) throw new Error(errorMessage(error))
+}
+
+/** Staff-only; the RPC re-checks the role and audits the change. */
+export async function setJerseyOrderPayment(
+  paymentId: string,
+  status: JerseyPaymentStatus,
+  note: string | null = null,
+): Promise<void> {
+  const { error } = await getSupabaseClient().rpc('set_jersey_order_payment', {
+    p_payment_id: paymentId,
+    p_status: status,
+    p_note: note,
   })
 
   if (error) throw new Error(errorMessage(error))

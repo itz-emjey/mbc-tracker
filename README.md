@@ -90,6 +90,16 @@ backend/migrations/009_jersey_images.sql
 backend/policies/009_jersey_images.sql
 backend/migrations/010_friendly_matches.sql
 backend/policies/010_friendly_matches.sql
+backend/migrations/011_friendly_sp_award.sql
+backend/migrations/012_seasons.sql
+backend/policies/012_seasons.sql
+backend/migrations/013_players_friends_notifications.sql
+backend/policies/013_players_social.sql
+backend/migrations/014_tournament_registration.sql
+backend/policies/014_tournament_registration.sql
+backend/migrations/015_payment_receipts.sql
+backend/policies/015_payment_receipts.sql
+backend/migrations/016_approved_sp_rule.sql
 ```
 
 The migrations are **not** idempotent: re-running one fails at the first `CREATE` by design. There
@@ -130,6 +140,16 @@ The seed also creates an unlinked active player, **Gabi Walkin**, so a Super Adm
 account-link flow after unlinking an approved member. That player has no SP account until it is linked
 and funded.
 
+### Ready-to-draw tournament (optional)
+
+After `001_fictional_players.sql`, run `backend/seeds/002_tournament_demo.sql` to add eight unlinked
+sample players and a published **Sample Open 2026** tournament. It contains two single-elimination
+events: eight paid singles entries and four paid mixed-doubles teams. Every participant is already
+marked paid, so signing in as `ben.sample@example.test` (Tournament Manager) or
+`ada.demo@example.test` and opening **Tournaments → Sample Open 2026** lets you generate either draw
+immediately. Change one participant to unpaid to see that entry excluded from the draw. This file is
+idempotent and also refuses projects that are not marked as development.
+
 ## 5. Create the first Super Admin (one time)
 
 There is no public Super Admin signup, and approval needs an existing Super Admin, so the first one
@@ -159,27 +179,29 @@ Open the printed URL (Vite defaults to `http://localhost:5173`), sign in, and Su
 `/admin` for approvals and access changes. Every approved member can open **Players** for the club
 directory, and the account menu's **My profile** opens the signed-in member's linked player record.
 Tournament staff get **Tournaments** to run events and results. **ShuttlePower** shows the current-SP
-leaderboard, your own ledger history, and the provisional-rule notice; a Super Admin also gets a
-balance check that compares every cached balance with its ledger sum. **Training** and **Payments** are
+leaderboard with rank titles and per-rank positions, your own ledger history, and the live rule version;
+a Super Admin also gets a balance check that compares every cached balance with its ledger sum. **Training** and **Payments** are
 visible to every approved member: staff schedule sessions and record fees, while players see their own
 attendance, their period balance, and their payment history.
 
 ## Tests and checks
 
 ```bash
-npm run test:db                       # 124 SQL checks on real Postgres (PGlite), no Docker
-npm --prefix frontend test            # 146 frontend unit tests (Vitest)
+npm run test:db                       # 168 SQL checks on real Postgres (PGlite), no Docker
+npm --prefix frontend test            # 228 frontend unit tests (Vitest)
 npm --prefix frontend run typecheck
 npm --prefix frontend run lint
 npm --prefix frontend run build
 ```
 
-`npm run test:db` applies all seven migrations and all seven policy files to a real PostgreSQL engine,
-stubs Supabase Auth (`auth.users`, `auth.uid()`), and covers schema, RLS, column privileges,
+`npm run test:db` applies all sixteen migrations and all fourteen policy files to a real PostgreSQL
+engine, stubs Supabase Auth (`auth.users`, `auth.uid()`), and covers schema, RLS, column privileges,
 ownership/privacy negatives, approval idempotency, starting SP, player role/link RPCs, tournament
 visibility, D10 entry rules, draw validation, result advancement, correction order, the SP rule-version
 guardrails, balance reconciliation, training sessions and attendance, partial-payment and soft-void rules,
-and the development seed and bootstrap scripts.
+player IDs, friend request/accept, notifications, per-player tournament fees, guest partners, partner
+invitations, self-entry, draw eligibility, the approved SP award, and the development seed and bootstrap
+scripts.
 
 ## Security notes
 
@@ -207,6 +229,17 @@ are voided rather than edited or deleted. Staff schedule sessions, mark attendan
 payments, and void a mistake with a reason; players see their own attendance and payment records. The
 schema (migration 007) and screens are verified locally and still need applying to the hosted project.
 
+Tournament registration is now player-facing. Migration 013 adds `players.player_code` (`MBC-` plus eight
+hex characters), friend requests that require acceptance, and notifications; migration 014 adds the poster
+path and per-player entrance fee, per-participant payment rows, guest partners on `team_members`, player
+self-entry, doubles partner invitations, and draw eligibility. `/tournaments` and `/tournaments/:id` are
+open to every approved member: players see published tournaments, the poster, events, draws, and results,
+join singles directly, invite an accepted friend for doubles, or name a guest partner. An entry exists for
+a club partnership only after the partner accepts, and only fully paid or waived entries enter the draw.
+Staff mark each participant paid, unpaid, or waived and keep the poster current. The notification bell and
+`/notifications` surface publishing, invitation, and payment announcements. Migrations 013–014 and
+policies 013–014 are verified locally and still need applying to the hosted project.
+
 Phase 7 adds jerseys, polls, and announcements: jersey projects with designs, sizes, and one active order
 per player; single- or multiple-choice polls that refuse late and duplicate votes; and announcements that
 staff publish and archive. Staff manage everything through audited RPCs, players view designs, vote, and
@@ -218,15 +251,14 @@ applied to the hosted project, since the local harness has no storage schema.
 Phase 5 adds friendly matches: singles challenges between two active players with linked accounts, the
 winner submits the result, and the losing side confirms or disputes it within 24 hours (a scheduled job
 auto-approves after that). A disputed result stays disputed — no resolution process is invented while the
-club rule is open. **No ShuttlePower moves:** the win/loss formula is still unapproved, so a confirmed
-friendly records the match only. Migration 010 is verified locally and still needs applying to the hosted
-project.
+club rule is open. **A confirmed friendly now awards ShuttlePower** under the approved `approved-2026-11`
+rule (D13, 2026-11-03); the award is idempotent and writes one immutable ledger row per player. Migrations
+010 and 016 are verified locally; the hosted project is migrated through 010, so 011–016 still need applying.
 
-Phase 4 is scaffolded, not activated. Migration 006 adds versioned SP rule configuration with a single
-provisional, **disabled** default and a reconciliation function; the pure engine in `domain/sp.ts` refuses
-to calculate while the rule is unapproved, uses the already-approved 2× tournament impact and team-average
-doubles basis, and keeps the curve, caps, floor, rounding, and split in config. `/shuttlepower` shows the
-leaderboard, your own ledger history, and the provisional-rule notice, so no screen pretends an unapproved
-formula is live. Seasonal ranking and the award workflow wait on the open rules in `PLAN.md` §7. There is no
-hosted setup left; the open SP/season decisions and the choice of the next phase are tracked in `PLAN.md` §7
-and §9.
+Phase 4's formula is approved and live for friendlies. Migration 006 adds versioned SP rule configuration
+with a provisional, disabled proposal and a reconciliation function; migration 016 records the club-approved
+formula as the enabled `approved-2026-11` version. The pure engine in `domain/sp.ts` uses the approved order
+(clamp → round → multiply), the approved 2× tournament impact, and the even doubles split. `/shuttlepower`
+shows the leaderboard with rank titles and per-rank positions, your own ledger history, and the live rule
+version. Tournament awarding, corrections/reversals (F4), placement, and seasonal implementation remain
+unbuilt; the open decisions are tracked in `PLAN.md` §7 and §9.

@@ -20,6 +20,10 @@ export const tournamentFormSchema = z
       .max(2000, 'Keep the description under 2,000 characters.')
       .nullable(),
     registration_deadline: z.string().nullable(),
+    entrance_fee: z.coerce
+      .number()
+      .min(0, 'The entrance fee cannot be negative.')
+      .max(1000000, 'Keep the entrance fee at 1,000,000 or less.'),
   })
   .refine((values) => values.ends_on >= values.starts_on, {
     path: ['ends_on'],

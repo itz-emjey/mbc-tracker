@@ -9,7 +9,15 @@ function player(
   status: PlayerRecord['status'],
   joined_on: string,
 ): PlayerRecord {
-  return { id, profile_id: null, full_name, gender: null, status, joined_on }
+  return {
+    id,
+    player_code: `MBC-${id.padStart(8, '0')}`,
+    profile_id: null,
+    full_name,
+    gender: null,
+    status,
+    joined_on,
+  }
 }
 
 const roster: PlayerRecord[] = [

@@ -281,48 +281,82 @@ Confirmed rules:
     its two players, then distribute the calculated change to the
     individual players. The exact distribution/rounding rule must be
     deterministic and documented.
--   Seasonal rankings run in three-month seasons.
--   At season end, current SP is **not reset to zero**. A rank-based
-    deduction is applied, with higher-ranked players losing more points.
--   Previous seasons remain available as an achievement archive.
+-   Seasonal rankings run in **12-month seasons** following the calendar
+    year (January 1 through December 31), with every boundary evaluated in
+    `Asia/Manila` (UTC+8).
+-   At season end, current SP is **not reset to zero**; it carries over.
+    **Seasonal SP** resets to zero, and a rank-based deduction is applied to
+    **current SP only**, with higher-ranked players losing more points.
+-   Previous seasons remain available as an **immutable archive** of final
+    positions and seasonal SP, never recalculated.
 -   Seasonal deduction must not delete or rewrite historical match
     transactions.
+-   **The match-SP formula is approved (D13, 2026-11-03).** The club owner
+    approved: base **20**, strength sensitivity **0.02** (1 point per 50 SP
+    of gap), per-match clamp **5–40** on the magnitude, **half-up** rounding
+    applied **before** the multiplier, tournament **×2**, floor **0**, no
+    ceiling, and an **even** doubles split with the odd point to the lower
+    player id. It is recorded as the enabled `approved-2026-11` rule version
+    in migration 016. Confirmed friendlies now award SP; tournament
+    awarding and corrections/reversals are still unbuilt.
+
+> **Reconciliation (2026-11-02).** These bullets now reflect the approved
+> decisions S1–S23 in `PLAN.md` §7.3. Superseded drafts: three-month seasons
+> (now S2), deduction tiers left as percentages (now fixed amounts, S8), and
+> the open question of which balance a deduction reduces (now current SP only,
+> S1 and S8).
 
 #### SP items that remain to be finalized
 
-The club has not yet specified exact numeric formulas. Do not invent
-final values and silently ship them. Implement the calculation behind a
-well-tested, configurable server-side rules module and document the
-proposed defaults for club approval.
+The match-SP formula is **approved** (D13, `PLAN.md` §7.1,
+`docs/sp-formula-signoff.md` F1–F3) and the enabled `approved-2026-11` rule
+awards confirmed friendlies. Do not change its values without a new recorded
+approval and a new rule version; never edit the applied `provisional-2026-11`
+or `approved-2026-11` rows.
 
-Awaiting confirmation:
+Still open:
 
-1.  Friendly match SP formula and its strength-difference curve.
-2.  Minimum/maximum SP change per match, if any.
-3.  Whether SP can fall below zero.
-4.  Rank tiers and exact seasonal deduction per tier (percentage or
-    fixed amount).
-5.  Whether rank for seasonal deduction is based on final leaderboard
-    position, rank tier, or another rule.
-6.  Whether seasonal deduction applies to current SP or only a separate
-    seasonal value.
-7.  Doubles rounding and how team-level changes are split between
-    partners.
-8.  Whether a tournament walkover, withdrawal, disqualification, or
-    forfeit changes SP.
+1.  **F4 — corrected and invalidated results.** Compensating rows only,
+    re-award under the original rule version, one transaction per correction
+    (`PLAN.md` §7.1.11). Must be approved and implemented before a tournament
+    awarding or correction RPC ships.
+2.  **Tournament awarding.** Only friendlies award SP today.
+3.  **Walkover, withdrawal, disqualification, and forfeit SP treatment.**
+    Placement eligibility is approved (D12), but SP treatment is part of F4.
+4.  **The near-zero doubles floor interaction.** If one partner is clamped at
+    0, whether the other partner's share is reduced is still open
+    (`PLAN.md` §7.1.5 #18).
+5.  **Placement implementation.** The 10-match system, initial provisional
+    value, visibility, qualification, and the D11 Unrated-share question are
+    still unapproved.
+6.  **Seasonal implementation.** The business rules are approved (S1–S23,
+    `PLAN.md` §7.3); the scheduler, notifications, recovery view, leaderboard,
+    and award integration are unbuilt.
+
+Decided and no longer open: the friendly formula and curve (D13), the
+per-match minimum and maximum (D13), whether SP can go below zero (D13: no,
+floor 0), the seasonal deduction amounts (S8: fixed 40 / 30 / 20 / 10 by
+fixed position), the seasonal rank basis (S8, S10–S12), the deduction target
+(S1 and S8: current SP only), and the doubles split and rounding (D13: even
+split, lower-id odd point, half-up before the multiplier).
 
 Recommended separation of values:
 
 -   **Current SP:** persistent competitive rating used to compare player
-    strength.
--   **Seasonal SP:** points earned during the current season for the
-    seasonal leaderboard.
--   **Season archive:** immutable snapshot of a player's final seasonal
-    position, SP, and achievement.
+    strength. It carries over between seasons and is the balance a seasonal
+    deduction reduces.
+-   **Seasonal SP:** net actual SP gained and lost from eligible finalized
+    matches during the current season. It resets to zero each season, may
+    become negative, and drives the seasonal ranking; a deduction never
+    changes it.
+-   **Season archive:** immutable per-player snapshot of the final seasonal
+    position, seasonal SP, current SP at the cutoff, matches played, wins,
+    and the rule version used, with a reason code for any player excluded
+    from the ranking; achievements are limited to placement facts.
 
-This separation is a recommended design, not yet a confirmed club rule.
-The product owner must approve how the rank-based deduction interacts
-with current SP and seasonal SP before production activation.
+This separation is **approved** as club rules (S1, S8, and S19 in `PLAN.md`
+§7.3); the earlier note that it was "a recommended design, not a confirmed
+club rule" is superseded.
 
 #### SP ledger
 
@@ -520,9 +554,14 @@ Suggested tables:
     totals, if justified.
 -   `sp_transactions`: immutable ledger of all point changes.
 -   `sp_rule_versions`: calculation settings/version history.
--   `seasons`: start/end dates and status.
--   `season_player_results`: final seasonal snapshots and achievements.
--   `season_deductions`: recorded rank-based deduction events.
+-   `seasons`: start/end dates and status (12-month calendar seasons in
+    `Asia/Manila`, S2).
+-   `season_player_results`: immutable final seasonal snapshots, with a
+    reason code for any player excluded from the ranking (S19).
+-   `season_deductions`: deduction batches and their approved rows, each
+    linked to its originating season and applied exactly once (S8, S9).
+-   `season_transition_steps`: one checkpoint per season and step, so a
+    retried transition is a no-op (S20).
 
 ### Training and payments
 
@@ -599,16 +638,25 @@ auto-approval. Ensure exactly-once SP processing.
 
 ### Season transition
 
-1.  Identify the season end using the configured club timezone.
-2.  Freeze and snapshot final seasonal rankings.
-3.  Create achievement archive records.
-4.  Apply the approved rank-based deduction to the approved SP value.
-5.  Record each deduction in the SP ledger.
-6.  Start the next season.
+1.  Identify the season end using `Asia/Manila` (December 31,
+    11:59:59 PM).
+2.  Freeze and snapshot final seasonal rankings in the same transaction as
+    the close, with one immutable snapshot per player (S19).
+3.  Create achievement archive records (placement facts only in v1).
+4.  Generate the previous season's deduction batch from the approved fixed
+    tiers. Do not apply it here: a Super Admin must approve or reject the
+    batch, and approval applies it to the latest current SP balance, capped
+    at the available amount (S9).
+5.  Record each deduction in the SP ledger, linked to its originating
+    season.
+6.  Start the next season and reset seasonal SP to zero, preserving current
+    SP.
 7.  Do not erase match history or previous seasonal archives.
 
-The exact deduction formula and which SP balance it affects must be
-approved before this workflow is enabled in production.
+The transition is automatic, at 00:05 `Asia/Manila` on January 1: each step
+is idempotent with a recorded checkpoint, a failed step is retried, and a
+Super Admin is notified after repeated failure. A pending deduction batch
+must never block the next season (S3, S4, S20).
 
 ------------------------------------------------------------------------
 
@@ -754,8 +802,9 @@ Test:
 -   Seasonal snapshot and rank-based deduction.
 -   Historical season archives remain unchanged.
 
-Do not write tests that lock in an unapproved formula. Test the
-calculation engine against the approved configuration.
+Do not write tests that lock in an unapproved formula or a provisional row's
+numbers. Test the calculation engine against the approved configuration (D13);
+keep test-only synthetic configs clearly separate from club values.
 
 ### Friendly match workflow
 
@@ -832,8 +881,9 @@ in one giant code-generation pass.
 -   Friendly and official tournament multipliers.
 -   Doubles team-average logic.
 -   Leaderboards and player SP history.
--   Keep unapproved formula settings disabled or clearly marked as
-    provisional.
+-   Keep the unapproved proposal disabled and clearly marked as
+    provisional. The approved formula is live (D13); never enable or change a
+    rule version without a recorded club approval.
 
 ### Phase 5 --- Friendly challenges
 
@@ -858,10 +908,12 @@ in one giant code-generation pass.
 
 ### Phase 8 --- Seasonal ranking and archives
 
--   Season configuration.
--   Seasonal snapshots.
--   Rank-based deductions after club approval of the formula.
--   Achievement archive and historical leaderboard.
+-   Season configuration (12-month calendar seasons in `Asia/Manila`, S2).
+-   Seasonal snapshots (immutable, one per player per season, S19).
+-   Rank-based deductions using the approved fixed tiers (S8), applied
+    through a Super Admin-approved batch (S9).
+-   Achievement archive and historical leaderboard, read from the snapshots
+    (S19).
 
 ### Phase 9 --- Quality and deployment
 
@@ -944,22 +996,34 @@ A feature is done only when:
 The following items must remain visible in project documentation and
 must not be silently decided by the coding agent.
 
+> **Partly resolved (2026-11-02).** The seasonal rows are now decided: the
+> deduction tiers and amounts (fixed 40 / 30 / 20 / 10 SP, S8), the rank basis
+> (S8 and S12), the seasonal-versus-current SP relationship (S1 and S8), the
+> season boundaries (S2), and the archive (S19) — see `PLAN.md` §7.3. The table
+> below is retained for history; where it disagrees with §7.3, §7.3 governs.
+> **The match-SP formula was approved 2026-11-03 (D13)** and the enabled
+> `approved-2026-11` rule awards confirmed friendlies; F4 (corrected and
+> invalidated results) is still open (`docs/sp-formula-signoff.md`).
+
   -----------------------------------------------------------------------
   Topic                   Current understanding   Still needs
                                                   confirmation
   ----------------------- ----------------------- -----------------------
-  Seasonal deduction      Higher-ranked players   Exact rank tiers and
-                          lose more SP            deduction amounts
+  Seasonal deduction      Higher-ranked players   Decided — S8: fixed
+                          lose more SP            SP by rank position
 
-  SP formula              Strength-based          Exact win/loss formula
-                                                  and caps
+  SP formula              Strength-based          **Decided — D13: base
+                                                  20, sensitivity 0.02,
+                                                  clamp 5–40, half-up
+                                                  before ×2, floor 0**
 
-  Seasonal SP             Seasonal leaderboard    Exact relationship
-                          exists                  between seasonal SP and
-                                                  current SP
+  Seasonal SP             Seasonal leaderboard    **Decided — S1/S8:
+                          exists                  separate value; Current
+                                                  SP carries over**
 
-  Doubles SP              Team average SP         Exact rounding and
-                                                  partner distribution
+  Doubles SP              Team average SP         **Decided — D13: even
+                                                  split, lower-id odd
+                                                  point, half-up**
 
   Friendly doubles        Losing side approves    Whether one or both
   approval                                        losing partners must
@@ -976,13 +1040,13 @@ must not be silently decided by the coding agent.
                                                   rule
 
   Walkovers/forfeits      Tournament matches      Whether and how they
-                          supported               affect SP
+                          supported               affect SP (F4, open)
 
-  SP lower bound          Not specified           Whether SP may go below
-                                                  zero
+  SP lower bound          Not specified           **Decided — D13: floor
+                                                  0**
 
-  Season dates            Every three months      Exact season boundaries
-                                                  and club timezone
+  Season dates            12-month year (S2)      Approved: Jan 1 to
+                                                  Dec 31, Asia/Manila
   -----------------------------------------------------------------------
 
 Use configurable rules where practical. Add a visible product decision

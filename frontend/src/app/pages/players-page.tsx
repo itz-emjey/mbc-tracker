@@ -2,11 +2,11 @@ import { Search, SearchX, UserPlus, Users } from 'lucide-react'
 import * as React from 'react'
 import { Link } from 'react-router-dom'
 
+import { ArenaAvatar, ArenaStatStrip } from '@/components/arena/arena-ui'
 import { EmptyState } from '@/components/shared/empty-state'
 import { ErrorState } from '@/components/shared/error-state'
 import { LoadingState } from '@/components/shared/loading-state'
 import { PageHeader } from '@/components/shared/page-header'
-import { PlayerIdentity } from '@/components/shared/player-identity'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -18,14 +18,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 import { errorMessage } from '@/features/auth/api'
 import { useSession } from '@/features/auth/session-context'
 import { hasAnyRole } from '@/features/auth/types'
@@ -92,6 +84,8 @@ export function PlayersPage() {
   )
 
   const hasFilters = query.trim() !== '' || status !== 'all'
+  const active = players.filter((player) => player.status === 'active').length
+  const linked = players.filter((player) => player.profile_id !== null).length
 
   function clearFilters() {
     setQuery('')
@@ -101,8 +95,9 @@ export function PlayersPage() {
   return (
     <>
       <PageHeader
+        kicker="Club roster"
         title="Players"
-        description="The club directory. Every approved member can browse it; staff maintain the records."
+        description="Every fighter on the club record. Approved members can browse it; staff maintain the records and link accounts."
         actions={
           canManage ? (
             <Button onClick={() => setFormOpen(true)}>
@@ -122,6 +117,20 @@ export function PlayersPage() {
         />
       ) : null}
 
+      <ArenaStatStrip
+        className="mt-5"
+        stats={[
+          { label: 'On the roster', value: String(players.length), detail: 'Player records' },
+          { label: 'Active', value: String(active), detail: 'Eligible to compete' },
+          { label: 'Linked accounts', value: String(linked), detail: 'Can sign in' },
+          {
+            label: 'No account',
+            value: String(Math.max(0, players.length - linked)),
+            detail: 'Record only',
+          },
+        ]}
+      />
+
       <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative flex-1">
           <Search
@@ -135,7 +144,7 @@ export function PlayersPage() {
             id="player-search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search by name"
+            placeholder="Search the roster by name"
             className="pl-9"
             autoComplete="off"
           />
@@ -219,47 +228,49 @@ export function PlayersPage() {
           />
         ) : (
           <>
-            <p className="mb-2 text-xs text-text-muted" aria-live="polite">
-              {filtered.length} of {players.length} player{players.length === 1 ? '' : 's'}
+            <p className="mb-2 text-[11px] text-text-muted" aria-live="polite">
+              Showing {filtered.length} of {players.length} player{players.length === 1 ? '' : 's'}
             </p>
 
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Player</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="hidden sm:table-cell">Joined</TableHead>
-                  <TableHead>Account</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.map((player) => (
-                  <TableRow key={player.id}>
-                    <TableCell className="max-w-64">
-                      <Link
-                        to={`/players/${player.id}`}
-                        className="inline-flex max-w-full rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring"
-                      >
-                        <PlayerIdentity name={player.full_name} size="sm" />
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge status={player.status} />
-                    </TableCell>
-                    <TableCell className="hidden whitespace-nowrap text-text-muted sm:table-cell">
-                      {formatDate(player.joined_on)}
-                    </TableCell>
-                    <TableCell>
-                      {player.profile_id ? (
-                        <Badge tone="accent">Linked</Badge>
-                      ) : (
-                        <span className="text-xs text-text-faint">No account</span>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {filtered.map((player) => {
+                const isActive = player.status === 'active'
+
+                return (
+                  <li key={player.id}>
+                    <Link
+                      to={`/players/${player.id}`}
+                      className="group flex h-full items-center gap-3 rounded-md border border-border bg-surface-1 p-3 transition-colors duration-fast hover:border-border-strong hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring"
+                    >
+                      <ArenaAvatar
+                        name={player.full_name}
+                        size="md"
+                        tone={isActive ? 'accent' : 'neutral'}
+                        ring={isActive}
+                      />
+
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium text-text">
+                          {player.full_name}
+                        </span>
+                        <span className="mt-0.5 block truncate font-mono text-[10px] text-text-faint">
+                          {player.player_code} · joined {formatDate(player.joined_on)}
+                        </span>
+                      </span>
+
+                      <span className="flex shrink-0 flex-col items-end gap-1">
+                        <StatusBadge status={player.status} />
+                        {player.profile_id ? (
+                          <Badge tone="accent">Linked</Badge>
+                        ) : (
+                          <span className="text-[10px] text-text-faint">No account</span>
+                        )}
+                      </span>
+                    </Link>
+                  </li>
+                )
+              })}
+            </ul>
           </>
         )}
       </div>
