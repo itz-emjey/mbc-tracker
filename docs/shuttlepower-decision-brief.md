@@ -7,8 +7,10 @@
 **Status:** the formula decisions (F1–F3, rows 1–6) were **approved 2026-11-03 by the club owner** and recorded as
 D13 in `PLAN.md` §7. **F4 (corrected/invalidated results) was approved the same day as D14.** Migration 016 enabled the
 `approved-2026-11` rule, and migration 017 added the tournament award and F4 reversals, so confirmed friendlies and
-completed tournament matches now award SP and a corrected tournament result reverses and re-awards. The placement and
-unplayed-match rows (7–8) remain open.
+completed tournament matches now award SP and a corrected tournament result reverses and re-awards. The seasonal rules
+S1–S23 are **implemented locally in migration 018** (ranking, snapshot, deduction batch, transition job, recovery, and
+leaderboard); migration 018 and policy 018 still need applying to the hosted project. The placement and unplayed-match
+rows (7–8) remain open.
 
 **Read time:** about 5 minutes. Every number has a one-line reason.
 
@@ -190,9 +192,12 @@ These are real, but they block only later phases. Approving the five decisions a
    the 2× adjustment; a winner-flip correction reverses its prior rows and re-awards under the original rule version,
    while a score-only correction that keeps the winner writes no SP rows.
 5. The version is **enabled**, and confirmed friendlies and completed tournament matches now move SP.
+6. Migration 018 implemented the approved seasonal rules S1–S23 locally: the ranking and tie-break statistics, the
+   immutable season snapshot, the fixed-tier deduction batch, the January transition with retries and Super Admin
+   recovery, and the seasonal leaderboard. Migration 018 and policy 018 are not yet applied to the hosted project.
 
 **What is still not switched on:** placement and SP for unplayed matches. Those remain separate approvals and
-implementation work.
+implementation work. The seasonal implementation is complete locally but awaits the hosted migration.
 
 ---
 

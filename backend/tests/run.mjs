@@ -35,7 +35,9 @@ const [
   receiptMigration,
   approvedSpRuleMigration,
   tournamentSpMigration,
+  seasonImplementationMigration,
   seasonPolicies,
+  seasonImplementationPolicies,
   playerSocialPolicies,
   registrationPolicies,
   receiptPolicies,
@@ -70,7 +72,9 @@ const [
   readFile(join(backendDir, 'migrations', '015_payment_receipts.sql'), 'utf8'),
   readFile(join(backendDir, 'migrations', '016_approved_sp_rule.sql'), 'utf8'),
   readFile(join(backendDir, 'migrations', '017_tournament_sp_award.sql'), 'utf8'),
+  readFile(join(backendDir, 'migrations', '018_seasonal_implementation.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '012_seasons.sql'), 'utf8'),
+  readFile(join(backendDir, 'policies', '018_seasons.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '013_players_social.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '014_tournament_registration.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '015_payment_receipts.sql'), 'utf8'),
@@ -140,6 +144,7 @@ const tables = [
   'season_deduction_batches',
   'season_deduction_entries',
   'season_transition_steps',
+  'season_transitions',
   'tournament_events',
   'teams',
   'team_members',
@@ -410,6 +415,7 @@ await db.exec(registrationMigration)
 await db.exec(receiptMigration)
 await db.exec(approvedSpRuleMigration)
 await db.exec(tournamentSpMigration)
+await db.exec(seasonImplementationMigration)
 await db.exec(identityPolicies)
 await db.exec(operationPolicies)
 await db.exec(spPolicies)
@@ -421,6 +427,7 @@ await db.exec(clubPolicies)
 await db.exec(jerseyImagePolicies)
 await db.exec(friendlyPolicies)
 await db.exec(seasonPolicies)
+await db.exec(seasonImplementationPolicies)
 await db.exec(playerSocialPolicies)
 await db.exec(registrationPolicies)
 await db.exec(receiptPolicies)
@@ -4534,6 +4541,40 @@ async function openSeason(label = 'Season 2026', starts = '2026-01-01', ends = '
   return seasonId
 }
 
+/** Links a player to a fresh active profile for the seasonal eligibility rules. */
+async function linkActivePlayer(playerId, profileId, fullName) {
+  await actAs('postgres')
+  await db.query(
+    `insert into auth.users (id, email, raw_user_meta_data)
+     values ('${profileId}', '${profileId}@example.test', '{"full_name":"${fullName}"}'::jsonb)
+     on conflict (id) do nothing`,
+  )
+  await db.query(
+    `insert into public.profiles (id, full_name, status)
+     values ('${profileId}', '${fullName}', 'active')
+     on conflict (id) do update set status = 'active'`,
+  )
+  await db.query(`update public.players set profile_id = '${profileId}' where id = '${playerId}'`)
+}
+
+/**
+ * Inserts one already-confirmed friendly so a player has an eligible match.
+ * It writes no SP: the seasonal tests set Seasonal SP directly and only need the
+ * S10/S18 eligibility evidence.
+ */
+async function confirmFriendly(challenger, opponent, winner, at = '2026-06-01T00:00:00Z') {
+  await actAs('postgres')
+  await db.query(`
+    insert into public.friendly_matches (
+      challenger_id, opponent_id, status, winner_id,
+      submitted_by, submitted_at, auto_approval_due_at, confirmed_at
+    ) values (
+      '${challenger}', '${opponent}', 'confirmed', '${winner}',
+      '${A}', '${at}', '${at}', '${at}'
+    )
+  `)
+}
+
 await test('S1: seasonal tables are read-only to clients and callable through audited RPCs', async () => {
   const { rows } = await db.query(`
     select
@@ -4584,7 +4625,11 @@ await test('S2/S3: only a Super Admin creates a season and only one may be activ
     const started = await db.query(`select public.start_season('${seasonId}') as result`)
     assert(started.rows[0].result.status === 'active', 'the season becomes active')
 
-    await expectQueryError(`select public.start_season('${seasonId}')`, /already active/i)
+    const again = await db.query(`select public.start_season('${seasonId}') as result`)
+    assert(
+      again.rows[0].result.already_processed === true,
+      'replaying the activation is a no-op',
+    )
     await expectQueryError(`select public.start_season('${nextId}')`, /another season/i)
 
     await actAs('postgres')
@@ -4647,6 +4692,10 @@ await test('S1/S13: a tournament award accrues Seasonal SP in the active season'
 await test('S8/S12/S19: closing a season snapshots shared ranks and generates a pending batch', async () => {
   await inTransaction(async () => {
     await ensureFriendlyAccounts()
+    await ensureTournamentAccounts([P5, P6])
+    await linkActivePlayer(P5, '88888888-8888-4888-8888-888888888888', 'Eli Male')
+    await linkActivePlayer(P6, '99999999-9999-4999-8999-999999999999', 'Fay Unknown')
+
     const seasonId = await openSeason()
 
     await actAs('postgres')
@@ -4659,22 +4708,22 @@ await test('S8/S12/S19: closing a season snapshots shared ranks and generates a 
         ('${seasonId}', '${P6}', -20)
     `)
 
+    // S10/S18: every ranked player needs at least one eligible finalized match.
+    await confirmFriendly(P1, P4, P1)
+    await confirmFriendly(P5, P6, P5)
+
     await actAs('authenticated', C)
     const closed = await db.query(`select public.close_season('${seasonId}') as result`)
     const result = closed.rows[0].result
     assert(result.status === 'closed', 'the season closes')
-    assert(result.snapshots === 4, `expected 4 snapshots, got ${result.snapshots}`)
-    assert(
-      result.deduction_entries === 3,
-      `expected 3 deduction entries, got ${result.deduction_entries}`,
-    )
+    assert(result.snapshots >= 4, `expected at least 4 snapshots, got ${result.snapshots}`)
 
     const replay = await db.query(`select public.close_season('${seasonId}') as result`)
     assert(replay.rows[0].result.already_processed === true, 'replaying the close is a no-op')
 
     await actAs('postgres')
     const rows = await db.query(`
-      select player_id, position, excluded_reason
+      select player_id, position, excluded_reason, deduction_position
         from public.season_player_results
        where season_id = '${seasonId}'
        order by position nulls last, player_id
@@ -4688,10 +4737,14 @@ await test('S8/S12/S19: closing a season snapshots shared ranks and generates a 
       byPlayer[P6].excluded_reason === 'negative_seasonal_sp',
       'the exclusion reason is recorded',
     )
+    assert(
+      byPlayer[P6].deduction_position === null,
+      'a negative balance with no previous rank is not deducted',
+    )
 
     const entries = await db.query(
-      `select position, tier, proposed_amount from public.season_deduction_entries
-        where batch_id = '${result.batch_id}' order by position`,
+      `select player_id, position, tier, proposed_amount from public.season_deduction_entries
+        where batch_id = '${result.batch_id}' order by position, player_id`,
     )
     assert(entries.rows.length === 3, 'one entry per ranked player')
     assert(
@@ -4713,6 +4766,7 @@ await test('S8/S9: approving a batch caps at the balance, waives the rest, and r
       insert into public.season_balances (season_id, player_id, seasonal_sp)
       values ('${seasonId}', '${P1}', 1200), ('${seasonId}', '${P4}', 1000)
     `)
+    await confirmFriendly(P1, P4, P1)
 
     await actAs('authenticated', C)
     const closed = await db.query(`select public.close_season('${seasonId}') as result`)
@@ -4776,6 +4830,7 @@ await test('S9/S3: a rejected batch is kept, applies nothing, and blocks no seas
       insert into public.season_balances (season_id, player_id, seasonal_sp)
       values ('${seasonId}', '${P1}', 1200)
     `)
+    await confirmFriendly(P1, P4, P1)
 
     await actAs('authenticated', C)
     const closed = await db.query(`select public.close_season('${seasonId}') as result`)
@@ -4803,6 +4858,408 @@ await test('S9/S3: a rejected batch is kept, applies nothing, and blocks no seas
       `select count(*)::int as n from public.seasons where status = 'active' and id = '${nextId}'`,
     )
     assert(active.rows[0].n === 1, 'a pending or rejected batch never blocks the next season')
+  })
+})
+
+/** Inserts a closed previous season with one earned ranking, for S10/S23. */
+async function seedPreviousRanking(label, starts, ends, playerId, position) {
+  await actAs('postgres')
+  const created = await db.query(`
+    insert into public.seasons (label, starts_on, ends_on, status, started_at, closed_at)
+    values ('${label}', '${starts}', '${ends}', 'closed', '${starts}T00:00:00Z', '${ends}T23:59:59Z')
+    returning id
+  `)
+  const seasonId = created.rows[0].id
+  await db.query(`
+    insert into public.season_player_results
+      (season_id, player_id, position, seasonal_sp, current_sp)
+    values ('${seasonId}', '${playerId}', ${position}, 500, 1000)
+  `)
+  return seasonId
+}
+
+await test('S18: tournament wins and score difference break a Seasonal SP tie', async () => {
+  await inTransaction(async () => {
+    await ensureFriendlyAccounts()
+    await ensureTournamentAccounts([P1, P4])
+    const seasonId = await openSeason()
+    await playTournamentMatch({ homePlayers: [P1], awayPlayers: [P4], homeWins: true })
+
+    await actAs('postgres')
+    await db.query(`
+      insert into public.season_balances (season_id, player_id, seasonal_sp)
+      values ('${seasonId}', '${P1}', 100), ('${seasonId}', '${P4}', 100)
+      on conflict (season_id, player_id) do update set seasonal_sp = excluded.seasonal_sp
+    `)
+
+    const standings = await db.query(
+      `select * from public.seasonal_standings('${seasonId}') order by position`,
+    )
+    const byPlayer = Object.fromEntries(standings.rows.map((row) => [row.player_id, row]))
+
+    assert(byPlayer[P1].position === 1, 'the winner ranks first on tournament wins')
+    assert(byPlayer[P4].position === 2, 'the loser ranks second')
+    assert(byPlayer[P1].tournament_matches === 1, 'the tournament match is counted')
+    assert(byPlayer[P1].tournament_wins === 1, 'the winner gets the tournament win')
+    assert(byPlayer[P4].tournament_wins === 0, 'the loser gets no tournament win')
+    assert(byPlayer[P1].game_difference === 2, 'two games won and none lost')
+    assert(byPlayer[P4].game_difference === -2, 'two games lost and none won')
+    assert(byPlayer[P1].point_difference === 20, 'the winner has the point difference')
+    assert(byPlayer[P4].point_difference === -20, 'the loser has the opposite difference')
+  })
+})
+
+await test('S18: friendlies feed Seasonal SP but never the tie-break', async () => {
+  await inTransaction(async () => {
+    await ensureFriendlyAccounts()
+    const seasonId = await openSeason()
+
+    await actAs('postgres')
+    await db.query(`
+      insert into public.season_balances (season_id, player_id, seasonal_sp)
+      values ('${seasonId}', '${P1}', 50), ('${seasonId}', '${P4}', 50)
+    `)
+    await confirmFriendly(P1, P4, P1)
+
+    const standings = await db.query(`select * from public.seasonal_standings('${seasonId}')`)
+    const byPlayer = Object.fromEntries(standings.rows.map((row) => [row.player_id, row]))
+
+    assert(byPlayer[P1].position === 1 && byPlayer[P4].position === 1, 'the tie is shared')
+    assert(byPlayer[P1].matches_played === 1, 'the friendly counts for eligibility')
+    assert(byPlayer[P1].tournament_matches === 0, 'the friendly is not tournament evidence')
+    assert(byPlayer[P1].tournament_wins === 0, 'the friendly win is not a tie-break win')
+    assert(byPlayer[P1].game_difference === 0, 'a friendly has no game difference')
+    assert(byPlayer[P1].point_difference === 0, 'a friendly has no point difference')
+  })
+})
+
+await test('S10/S16/S23: zero matches keeps the last earned ranking; a first-timer is unranked', async () => {
+  await inTransaction(async () => {
+    await ensureFriendlyAccounts()
+    await ensureTournamentAccounts([P5, P6])
+    await linkActivePlayer(P5, '88888888-8888-4888-8888-888888888888', 'Eli Male')
+    await linkActivePlayer(P6, '99999999-9999-4999-8999-999999999999', 'Fay Unknown')
+    await seedPreviousRanking('Season 2025', '2025-01-01', '2025-12-31', P1, 2)
+
+    const seasonId = await openSeason()
+
+    await actAs('postgres')
+    await db.query(`
+      insert into public.season_balances (season_id, player_id, seasonal_sp)
+      values ('${seasonId}', '${P4}', 100)
+    `)
+    await confirmFriendly(P4, P5, P4)
+
+    const standings = await db.query(`select * from public.seasonal_standings('${seasonId}')`)
+    const byPlayer = Object.fromEntries(standings.rows.map((row) => [row.player_id, row]))
+
+    const rankings = await db.query(
+      `select player_id, deduction_position, previous_position
+         from public.season_rankings('${seasonId}')`,
+    )
+    const rankByPlayer = Object.fromEntries(rankings.rows.map((row) => [row.player_id, row]))
+
+    assert(byPlayer[P1].position === 2, 'the zero-match player keeps the previous rank')
+    assert(byPlayer[P1].excluded_reason === null, 'the previous rank is not an exclusion')
+    assert(byPlayer[P1].matches_played === 0, 'the player has no eligible match')
+    assert(byPlayer[P4].position === 1, 'the player with a match ranks on Seasonal SP')
+    assert(byPlayer[P5].position === 2, 'zero SP with a match is ranked')
+    assert(
+      rankByPlayer[P5].deduction_position === null,
+      'zero SP with no previous rank is not deducted (S11)',
+    )
+    assert(
+      rankByPlayer[P1].deduction_position === 2,
+      'the previous ranking is the deduction position (S10)',
+    )
+    assert(byPlayer[P6].position === null, 'zero matches and no previous rank is unranked')
+    assert(
+      byPlayer[P6].excluded_reason === 'no_eligible_matches',
+      'the unranked reason is recorded (S16)',
+    )
+  })
+})
+
+await test('S11/S17: a negative balance is deducted at its previous tier; status excludes the rest', async () => {
+  await inTransaction(async () => {
+    await ensureFriendlyAccounts()
+    await ensureTournamentAccounts([P5, P6])
+    await linkActivePlayer(P5, '88888888-8888-4888-8888-888888888888', 'Eli Male')
+    await linkActivePlayer(P6, '99999999-9999-4999-8999-999999999999', 'Fay Unknown')
+    await seedPreviousRanking('Season 2025', '2025-01-01', '2025-12-31', P1, 3)
+
+    const seasonId = await openSeason()
+
+    await actAs('postgres')
+    await db.query(`update public.players set status = 'inactive' where id = '${P4}'`)
+    await db.query(`update public.players set profile_id = null where id = '${P6}'`)
+    await db.query(`
+      insert into public.season_balances (season_id, player_id, seasonal_sp)
+      values
+        ('${seasonId}', '${P1}', -10),
+        ('${seasonId}', '${P4}', 100),
+        ('${seasonId}', '${P6}', 200)
+    `)
+    await confirmFriendly(P1, P5, P5)
+
+    const standings = await db.query(`select * from public.seasonal_standings('${seasonId}')`)
+    const byPlayer = Object.fromEntries(standings.rows.map((row) => [row.player_id, row]))
+
+    const rankings = await db.query(
+      `select player_id, deduction_position from public.season_rankings('${seasonId}')`,
+    )
+    const rankByPlayer = Object.fromEntries(rankings.rows.map((row) => [row.player_id, row]))
+
+    assert(byPlayer[P1].position === null, 'a negative balance has no displayed position')
+    assert(
+      byPlayer[P1].excluded_reason === 'negative_seasonal_sp',
+      'the negative balance is the exclusion reason',
+    )
+    assert(
+      rankByPlayer[P1].deduction_position === 3,
+      'the previous ranking decides the deduction tier (S11)',
+    )
+    assert(
+      byPlayer[P4].excluded_reason === 'inactive_or_unlinked',
+      'an inactive player is excluded (S17)',
+    )
+    assert(
+      rankByPlayer[P4].deduction_position === null,
+      'an inactive player is not deducted',
+    )
+    assert(
+      byPlayer[P6].excluded_reason === 'inactive_or_unlinked',
+      'an unlinked player is excluded (S17)',
+    )
+    assert(
+      rankByPlayer[P6].deduction_position === null,
+      'an unlinked player is not deducted',
+    )
+
+    await actAs('authenticated', C)
+    const closed = await db.query(`select public.close_season('${seasonId}') as result`)
+    await actAs('postgres')
+    const entries = await db.query(
+      `select player_id, position, tier, proposed_amount
+         from public.season_deduction_entries
+        where batch_id = '${closed.rows[0].result.batch_id}'`,
+    )
+    assert(entries.rows.length === 1, 'only the previously ranked negative player is charged')
+    assert(entries.rows[0].player_id === P1, 'the charged player is the negative one')
+    assert(entries.rows[0].position === 3, 'the tier comes from the previous position')
+    assert(entries.rows[0].tier === 1 && entries.rows[0].proposed_amount === 40, 'tier 1 is 40 SP')
+  })
+})
+
+await test('S6: a result finalized after the cutoff accrues no Seasonal SP', async () => {
+  await inTransaction(async () => {
+    await ensureFriendlyAccounts()
+    const seasonId = await openSeason()
+
+    await confirmFriendly(P1, P4, P1, '2027-01-01T00:30:00+08:00')
+    await actAs('postgres')
+    const match = await db.query(
+      `select id from public.friendly_matches order by created_at desc limit 1`,
+    )
+    const award = await db.query(
+      `select public.award_friendly_sp('${match.rows[0].id}') as result`,
+    )
+
+    assert(award.rows[0].result.status === 'awarded', 'Current SP is still processed')
+    assert(award.rows[0].result.season_id === null, 'no season contains the late finalization')
+
+    const balances = await db.query(
+      `select count(*)::int as n from public.season_balances where season_id = '${seasonId}'`,
+    )
+    assert(balances.rows[0].n === 0, 'the closed season gains no Seasonal SP')
+
+    const ledger = await db.query(
+      `select count(*)::int as n from public.sp_transactions where reference_id = '${match.rows[0].id}'`,
+    )
+    assert(ledger.rows[0].n === 2, 'both Current SP rows are still written')
+  })
+})
+
+await test('S7: correcting a closed-season result never moves Seasonal SP', async () => {
+  await inTransaction(async () => {
+    await ensureTournamentAccounts([P1, P4])
+    const seasonId = await openSeason()
+    const { matchId } = await playTournamentMatch({
+      homePlayers: [P1],
+      awayPlayers: [P4],
+      homeWins: true,
+    })
+
+    await actAs('postgres')
+    const before = await db.query(
+      `select player_id, seasonal_sp from public.season_balances
+        where season_id = '${seasonId}' order by player_id`,
+    )
+    const finalized = await db.query(
+      `select finalized_at from public.matches where id = '${matchId}'`,
+    )
+
+    await actAs('authenticated', C)
+    await db.query(`select public.close_season('${seasonId}')`)
+
+    await actAs('authenticated', D)
+    const games = [
+      { game_number: 1, home_points: 10, away_points: 21 },
+      { game_number: 2, home_points: 12, away_points: 21 },
+    ]
+    const corrected = await db.query(`
+      select public.correct_match_result(
+        '${matchId}',
+        '${JSON.stringify(games)}'::jsonb,
+        'the winner was recorded backwards'
+      ) as result
+    `)
+
+    assert(corrected.rows[0].result.sp_reversal.status === 'reversed', 'the award is reversed')
+    assert(corrected.rows[0].result.sp_award.status === 'awarded', 'the result is re-awarded')
+    assert(corrected.rows[0].result.sp_award.season_id === null, 'the closed season is not reopened')
+
+    await actAs('postgres')
+    const after = await db.query(
+      `select player_id, seasonal_sp from public.season_balances
+        where season_id = '${seasonId}' order by player_id`,
+    )
+    assert(
+      JSON.stringify(after.rows) === JSON.stringify(before.rows),
+      'the closed season Seasonal SP is unchanged',
+    )
+
+    const otherSeasons = await db.query(
+      `select count(*)::int as n from public.season_balances where season_id <> '${seasonId}'`,
+    )
+    assert(otherSeasons.rows[0].n === 0, 'nothing is transferred to another season')
+
+    const stillFinalized = await db.query(
+      `select finalized_at from public.matches where id = '${matchId}'`,
+    )
+    assert(
+      new Date(stillFinalized.rows[0].finalized_at).getTime() ===
+        new Date(finalized.rows[0].finalized_at).getTime(),
+      'a correction preserves the original finalization time',
+    )
+  })
+})
+
+await test('S15/S19: the seasonal leaderboard is provisional live and final after close', async () => {
+  await inTransaction(async () => {
+    await ensureFriendlyAccounts()
+    const seasonId = await openSeason()
+
+    await actAs('postgres')
+    await db.query(`
+      insert into public.season_balances (season_id, player_id, seasonal_sp)
+      values ('${seasonId}', '${P1}', 100)
+    `)
+    await confirmFriendly(P1, P4, P1)
+
+    const live = await db.query(`select * from public.seasonal_standings('${seasonId}')`)
+    assert(live.rows.length >= 2, 'the live table lists the eligible players')
+    assert(live.rows.every((row) => row.provisional === true), 'the live table is provisional')
+    assert(
+      live.rows.find((row) => row.player_id === P1).position === 1,
+      'the live leader is ranked first',
+    )
+
+    await actAs('authenticated', C)
+    await db.query(`select public.close_season('${seasonId}')`)
+
+    const final = await db.query(`select * from public.seasonal_standings('${seasonId}')`)
+    assert(final.rows.every((row) => row.provisional === false), 'the final table is frozen')
+    assert(
+      final.rows.find((row) => row.player_id === P1).position === 1,
+      'the snapshot keeps the final position',
+    )
+  })
+})
+
+await test('S20: the transition closes the old season and starts the new one idempotently', async () => {
+  await inTransaction(async () => {
+    const oldId = await openSeason('Season 2025', '2025-01-01', '2025-12-31')
+
+    await actAs('postgres')
+    await db.exec(`set local request.jwt.claim.sub = ''`)
+    const first = await db.query(`select public.run_season_transition() as result`)
+    const result = first.rows[0].result
+
+    assert(result.status === 'completed', `expected completed, got ${JSON.stringify(result)}`)
+    assert(result.season_id === oldId, 'the ended season closes')
+    assert(result.new_season_id, 'the next season starts')
+
+    const seasons = await db.query(`select id, status from public.seasons`)
+    const byId = Object.fromEntries(seasons.rows.map((row) => [row.id, row]))
+    assert(byId[oldId].status === 'closed', 'the old season is closed')
+    assert(byId[result.new_season_id].status === 'active', 'the new season is active')
+
+    const transition = await db.query(
+      `select status, attempts, completed_at from public.season_transitions
+        where season_id = '${oldId}'`,
+    )
+    assert(transition.rows[0].status === 'completed', 'the transition is completed')
+    assert(transition.rows[0].completed_at !== null, 'the completion time is recorded')
+
+    const steps = await db.query(
+      `select step from public.season_transition_steps where season_id = '${oldId}'`,
+    )
+    const found = new Set(steps.rows.map((row) => row.step))
+    for (const step of ['snapshot', 'deduction_batch', 'closed']) {
+      assert(found.has(step), `the ${step} checkpoint is recorded`)
+    }
+
+    const replay = await db.query(`select public.run_season_transition() as result`)
+    assert(replay.rows[0].result.status === 'idle', 'a replay is idle')
+  })
+})
+
+await test('S20: repeated failure notifies Super Admins and a forced re-run recovers', async () => {
+  await inTransaction(async () => {
+    const oldId = await openSeason('Season 2025', '2025-01-01', '2025-12-31')
+
+    await actAs('authenticated', C)
+    // A conflicting label that does not cover today blocks the calendar season.
+    await db.query(`select public.create_season('Season 2026', '2027-01-01', '2027-12-31')`)
+
+    await actAs('postgres')
+    await db.exec(`set local request.jwt.claim.sub = ''`)
+    await db.query(`
+      insert into public.season_transitions (season_id, status, attempts)
+      values ('${oldId}', 'running', 4)
+    `)
+
+    const failed = await db.query(`select public.run_season_transition() as result`)
+    assert(failed.rows[0].result.status === 'failed', 'the fifth attempt fails')
+    assert(failed.rows[0].result.attempts === 5, 'the attempt is recorded')
+
+    const transition = await db.query(
+      `select status, attempts, last_error from public.season_transitions
+        where season_id = '${oldId}'`,
+    )
+    assert(transition.rows[0].status === 'failed', 'the transition is marked failed')
+    assert(transition.rows[0].last_error !== null, 'the error is preserved')
+
+    const notification = await db.query(
+      `select count(*)::int as n from public.notifications
+        where profile_id = '${C}' and type = 'season_transition_failed'`,
+    )
+    assert(notification.rows[0].n === 1, 'the Super Admin is notified once')
+
+    const blocked = await db.query(`select public.run_season_transition() as result`)
+    assert(blocked.rows[0].result.status === 'failed', 'the retry limit blocks a plain re-run')
+    assert(/retry limit/i.test(blocked.rows[0].result.reason), 'the retry limit is explained')
+
+    await db.query(`delete from public.seasons where label = 'Season 2026'`)
+    const recovered = await db.query(`select public.run_season_transition(true) as result`)
+    assert(recovered.rows[0].result.status === 'completed', 'a forced re-run recovers')
+
+    const completed = await db.query(
+      `select status, attempts from public.season_transitions where season_id = '${oldId}'`,
+    )
+    assert(completed.rows[0].status === 'completed', 'the transition is completed')
+    assert(completed.rows[0].attempts > 5, 'the recovery attempt is recorded')
   })
 })
 

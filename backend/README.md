@@ -44,13 +44,15 @@ backend/
 29. `policies/015_payment_receipts.sql`
 30. `migrations/016_approved_sp_rule.sql`
 31. `migrations/017_tournament_sp_award.sql`
+32. `migrations/018_seasonal_implementation.sql`
+33. `policies/018_seasons.sql`
 
 The migrations are **not** idempotent: re-running one fails at the first
 `CREATE`, by design. Never add `IF NOT EXISTS` or `DROP` to a migration.
 
 ### Applying to the hosted Supabase project
 
-Open **Supabase Dashboard → SQL Editor** and run the thirty-one files above, in
+Open **Supabase Dashboard → SQL Editor** and run the thirty-three files above, in
 order, as the project owner. No dashboard schema edits are required, and no
 service-role key or database password is involved. Confirm afterwards that
 `public` contains every expected table and every one has RLS enabled, that the six
@@ -99,6 +101,15 @@ correction writes append-only `reversal` rows keyed to the original row and
 re-awards under the **original** rule version (F4, D14), while a score-only
 correction that keeps the winner writes no SP rows. Guests and unlinked players
 without an SP account are skipped, and Seasonal SP accrues for the active season.
+Step 32 (`018_seasonal_implementation.sql`) implements the approved S1–S23 rules:
+`matches.finalized_at` with a preservation trigger, the S18 ranking statistics and
+tie-break helpers, `season_rankings` and `seasonal_standings`, the immutable
+snapshot and next-season activation inside `close_season_internal` and
+`start_season_internal`, and `run_season_transition` with per-step checkpoints,
+bounded retries, and a Super Admin notification. It also supersedes
+`award_friendly_sp` and `award_tournament_sp` so both resolve the season from the
+immutable finalization time and enforce the S6/S7 guards. Step 33 adds policy 018,
+which keeps `season_transitions` Super Admin-only.
 
 **Status:** files 1–20 are applied to the hosted `mbc-arena` project.
 Files 1–5 went in on 2026-10-30 and files 6–8 on 2026-10-31; files 9–12
@@ -113,19 +124,18 @@ API cannot read back; the owner confirmed
 and that `profiles_insert_self_pending` is gone. A signed-in demo Super Admin
 reads `provisional-2026-11` (provisional, disabled) and gets
 `{checked: 7, consistent: true}` from reconciliation. The Phase 3 walkthrough,
-the Gate G replay, and the owner's Super Admin bootstrap are complete. Files
-13–20 (Phase 6 training and payments; Phase 7 jerseys, polls, announcements,
-and design images; Phase 5 friendly matches) are verified locally only; apply
-them to the hosted project before using those screens. Migration 011 (the
-friendly SP award), migration 012 (the seasonal schema), migrations 013–015
-(player IDs, friendships, notifications, tournament registration, and payment
-receipts), migration 016 (the approved SP rule), and migration 017 (the
-tournament award and F4 reversals) are verified locally only as well. Migration
-016 is what turns the friendly award on, and migration 017 turns the tournament
-award on; the seasonal schema stays inert until a Super Admin starts a season.
-Remaining work is product scope (§7 rules and the next phase), not hosted setup.
-The repository intentionally stores no credentials that would let an agent apply
-migrations automatically.
+the Gate G replay, and the owner's Super Admin bootstrap are complete. The owner
+applied migrations 011–017 to the hosted project, so the friendly award, the
+seasonal schema, player IDs and the social graph, tournament registration,
+payment receipts, the approved rule version, and the tournament award with F4
+reversals are live there. Migration 016 is what turns the friendly award on, and
+migration 017 turns the tournament award on. **Still to apply: migration 018
+(the seasonal implementation) and policy 018.** Migration 018 activates the
+seasonal ranking, transition, and leaderboard; a deduction still moves no SP
+until a Super Admin closes the season and approves the generated batch.
+Remaining product work is placement and unplayed-match SP. The repository
+intentionally stores no credentials that would let an agent apply migrations
+automatically.
 
 ## Seeds
 
@@ -209,8 +219,8 @@ npm run test:db
 `backend/tests/run.mjs` runs a real PostgreSQL engine compiled to WebAssembly
 (PGlite), stubs `auth.users` and `auth.uid()` with the same shape Supabase
 provides (the token, bool, and integer columns GoTrue reads are declared
-nullable so the seed's repair pass is exercised), applies all seventeen migrations
-and all fourteen policy files, and asserts (176 checks):
+nullable so the seed's repair pass is exercised), applies all eighteen migrations
+and all fifteen policy files, and asserts (185 checks):
 
 - every expected table exists and has RLS enabled;
 - the migrations fail loudly on a second run;
@@ -293,15 +303,21 @@ and all fourteen policy files, and asserts (176 checks):
   nothing, no award runs while no rule version is enabled, an
   awarded tournament match accrues Seasonal SP in the active season, and the
   internal award and reversal helpers are callable by nobody;
-- seasons (S1–S23, migration 012): every seasonal table is read-only to clients
-  and `anon` is denied, only a Super Admin creates, starts, closes, and decides a
-  season, one season is active at a time and overlapping ranges are refused, an
-  awarded friendly accrues Seasonal SP in the active season, closing writes one
-  snapshot per player with competition ranks (ties share a position) and excludes
-  a negative balance with a reason code, the generated batch carries the fixed
-  40/30/20/10 tiers, approval caps each deduction at the balance and waives the
-  remainder exactly once, a deduction never touches Seasonal SP, and a rejected
-  batch is preserved, applies nothing, and blocks no later season;
+- seasons (S1–S23, migrations 012 and 018): every seasonal table is read-only to
+  clients and `anon` is denied, only a Super Admin creates, starts, closes, and
+  decides a season, one season is active at a time and overlapping ranges are
+  refused, an awarded friendly accrues Seasonal SP in the active season, closing
+  writes one snapshot per player with competition ranks (ties share a position)
+  and excludes a negative balance with a reason code, the generated batch carries
+  the fixed 40/30/20/10 tiers, approval caps each deduction at the balance and
+  waives the remainder exactly once, a deduction never touches Seasonal SP, and a
+  rejected batch is preserved, applies nothing, and blocks no later season.
+  Migration 018 adds the S18 tie-break statistics from eligible finalized
+  tournament matches, the S16/S17 exclusion reasons, the immutable `finalized_at`
+  that keeps a late result and a correction in their original season, the
+  transition checkpoints with retry and recovery, and the `seasonal_standings`
+  leaderboard; a zero-match player with no previous ranking stays unranked and
+  undeducted, and a replay of start or close reports `already_processed`;
 - player IDs and social graph (migration 013): every player receives a stable,
   unique, readable `MBC-XXXXXXXX` code, a request needs an active linked target
   and can be accepted once, a declined request creates no friendship and can be
@@ -326,7 +342,7 @@ supabase gen types typescript --project-id <project-ref> --schema public \
 ```
 
 The committed `frontend/src/types/database.ts` covers migrations 001–010 and
-013–014: the
+013–018: the
 `players` table and its profile relationship, the four auth-lifecycle RPCs, the
 three Group K RPCs (`set_profile_roles`, `link_player_account`,
 `unlink_player_account`), the tournament tables and RPCs, the
@@ -335,7 +351,10 @@ tables plus their six RPCs, the eight club activity tables plus their twelve
 RPCs, `jersey_designs.image_path` plus `set_jersey_design_image(uuid,text)`, and
 the `friendly_matches` table plus its seven RPCs, `players.player_code`, the
 friendship and notification tables plus their six RPCs, and the tournament
-payment, invitation, poster, fee, self-entry, and withdrawal RPCs. The Supabase
+payment, invitation, poster, fee, self-entry, and withdrawal RPCs, and the
+seasonal tables (`seasons`, `season_balances`, `season_player_results`,
+`season_deduction_batches`, `season_deduction_entries`, `season_transitions`,
+`season_transition_steps`) plus the seasonal RPCs and `matches.finalized_at`. The Supabase
 CLI was unavailable in the development environment, so those
 signatures were checked against `migrations/004_players.sql`,
 `migrations/005_tournaments.sql`, `migrations/006_shuttlepower_rules.sql`,
@@ -344,7 +363,7 @@ signatures were checked against `migrations/004_players.sql`,
 `migrations/013_players_friends_notifications.sql`, and
 `migrations/014_tournament_registration.sql` and
 added to the committed file; application builds treat it as authoritative.
-Regenerate it against the hosted project after step 27 and after every later
+Regenerate it against the hosted project after step 33 and after every later
 migration. Never edit regenerated output by hand.
 
 ## Security notes

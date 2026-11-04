@@ -1,5 +1,6 @@
-import { RefreshCw, ShieldCheck, Zap } from 'lucide-react'
+import { CalendarRange, RefreshCw, ShieldCheck, Zap } from 'lucide-react'
 import * as React from 'react'
+import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { ArenaAvatar, ArenaPanel, ArenaStatStrip, RankBadge } from '@/components/arena/arena-ui'
@@ -31,6 +32,7 @@ import {
   reconcileSpBalances,
 } from '@/features/shuttlepower/api'
 import { rankLeaderboard } from '@/features/shuttlepower/leaderboard'
+import { SeasonalStandingsPanel } from '@/features/shuttlepower/seasonal-standings-panel'
 import {
   SP_TRANSACTION_LABELS,
   type ReconciliationResult,
@@ -212,6 +214,8 @@ export function ShuttlepowerPage() {
         </div>
       </ArenaPanel>
 
+      <SeasonalStandingsPanel className="mt-4" highlightPlayerId={ownPlayer?.id ?? null} />
+
       {podium.length > 0 ? (
         <div className="mt-4 grid gap-2 sm:grid-cols-3">
           {podium.map((row) => {
@@ -373,6 +377,13 @@ export function ShuttlepowerPage() {
               Verifies that every cached balance equals its ledger sum. It reports mismatches and
               never writes a repair.
             </p>
+
+            <Button variant="secondary" className="self-start" asChild>
+              <Link to="/admin/seasons">
+                <CalendarRange aria-hidden="true" />
+                Manage seasons and deductions
+              </Link>
+            </Button>
 
             <Button
               variant="secondary"

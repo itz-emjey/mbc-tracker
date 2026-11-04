@@ -206,13 +206,16 @@ compensating `reversal` rows, re-award under the original rule version, and one 
 
 ## What is still missing
 
-F1–F4 are approved and both the friendly and tournament awards are live. These items remain:
+F1–F4 are approved and both the friendly and tournament awards are live. These items remain open:
 
 | # | What | Why it matters |
 | --- | --- | --- |
 | 1 | **Placement** | New-player placement (§7 rules 16, 20–25) is a separate gate and is not implemented. |
 | 2 | **Unplayed-match SP** | Walkovers, no-shows, forfeits, disqualifications, and withdrawals have no approved SP rule. |
-| 3 | **Seasonal implementation** | The rules are approved (S1–S23) and migration 012 provides the storage layer, but the scheduler, notification, recovery view, and leaderboard are unbuilt. |
+
+The seasonal rules (S1–S23) are outside this formula sign-off and are implemented locally in migration 018 (ranking,
+snapshot, deduction batch, transition job, recovery, and leaderboard); migration 018 and policy 018 still need
+applying to the hosted project.
 
 ## What this page does not approve
 
@@ -220,8 +223,8 @@ F1–F4 are approved and both the friendly and tournament awards are live. These
 - **SP for unplayed matches** — walkovers, no-shows, forfeits before play, disqualifications, and withdrawals
   (§7 rule 9; still open after F4).
 - **Dispute resolution** (§7 rule 8).
-- **Seasons and deductions** — the rules are approved (S1–S23) and the storage layer exists, but the scheduled job,
-  notifications, recovery view, and leaderboard are unbuilt.
+- **Seasons and deductions** — the rules are approved (S1–S23) and implemented locally in migration 018; migration 018
+  and policy 018 still need applying to the hosted project.
 - **Any further code, migration, or rule change.** F1–F4 are in force; F4 created no version.
 
 ---

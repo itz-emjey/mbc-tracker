@@ -123,6 +123,7 @@ export type Database = {
           conditional: boolean
           created_at: string
           event_id: string
+          finalized_at: string | null
           home_entry_id: string | null
           home_source_match_id: string | null
           home_source_outcome: string | null
@@ -145,6 +146,7 @@ export type Database = {
           conditional?: boolean
           created_at?: string
           event_id: string
+          finalized_at?: string | null
           home_entry_id?: string | null
           home_source_match_id?: string | null
           home_source_outcome?: string | null
@@ -166,6 +168,7 @@ export type Database = {
           conditional?: boolean
           created_at?: string
           event_id?: string
+          finalized_at?: string | null
           home_entry_id?: string | null
           home_source_match_id?: string | null
           home_source_outcome?: string | null
@@ -609,6 +612,359 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      season_balances: {
+        Row: {
+          created_at: string
+          player_id: string
+          season_id: string
+          seasonal_sp: number
+          updated_at: string
+        }
+        ComputedFields: never
+        Insert: {
+          created_at?: string
+          player_id: string
+          season_id: string
+          seasonal_sp?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          player_id?: string
+          season_id?: string
+          seasonal_sp?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'season_balances_player_id_fkey'
+            columns: ['player_id']
+            isOneToOne: false
+            referencedRelation: 'players'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'season_balances_season_id_fkey'
+            columns: ['season_id']
+            isOneToOne: false
+            referencedRelation: 'seasons'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      season_deduction_batches: {
+        Row: {
+          decided_at: string | null
+          decided_by: string | null
+          generated_at: string
+          id: string
+          rejection_reason: string | null
+          season_id: string
+          status: string
+        }
+        ComputedFields: never
+        Insert: {
+          decided_at?: string | null
+          decided_by?: string | null
+          generated_at?: string
+          id?: string
+          rejection_reason?: string | null
+          season_id: string
+          status?: string
+        }
+        Update: {
+          decided_at?: string | null
+          decided_by?: string | null
+          generated_at?: string
+          id?: string
+          rejection_reason?: string | null
+          season_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'season_deduction_batches_decided_by_fkey'
+            columns: ['decided_by']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'season_deduction_batches_season_id_fkey'
+            columns: ['season_id']
+            isOneToOne: false
+            referencedRelation: 'seasons'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      season_deduction_entries: {
+        Row: {
+          applied_amount: number | null
+          batch_id: string
+          created_at: string
+          id: string
+          player_id: string
+          position: number
+          proposed_amount: number
+          tier: number
+          transaction_id: string | null
+          waived_amount: number | null
+        }
+        ComputedFields: never
+        Insert: {
+          applied_amount?: number | null
+          batch_id: string
+          created_at?: string
+          id?: string
+          player_id: string
+          position: number
+          proposed_amount: number
+          tier: number
+          transaction_id?: string | null
+          waived_amount?: number | null
+        }
+        Update: {
+          applied_amount?: number | null
+          batch_id?: string
+          created_at?: string
+          id?: string
+          player_id?: string
+          position?: number
+          proposed_amount?: number
+          tier?: number
+          transaction_id?: string | null
+          waived_amount?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'season_deduction_entries_batch_id_fkey'
+            columns: ['batch_id']
+            isOneToOne: false
+            referencedRelation: 'season_deduction_batches'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'season_deduction_entries_player_id_fkey'
+            columns: ['player_id']
+            isOneToOne: false
+            referencedRelation: 'players'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'season_deduction_entries_transaction_id_fkey'
+            columns: ['transaction_id']
+            isOneToOne: false
+            referencedRelation: 'sp_transactions'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      season_player_results: {
+        Row: {
+          current_sp: number
+          deduction_position: number | null
+          excluded_reason: string | null
+          game_difference: number | null
+          id: string
+          matches_played: number | null
+          player_id: string
+          point_difference: number | null
+          position: number | null
+          previous_position: number | null
+          recorded_at: string
+          rule_version: string | null
+          season_id: string
+          seasonal_sp: number
+          tournament_matches: number | null
+          tournament_wins: number | null
+          wins: number | null
+        }
+        ComputedFields: never
+        Insert: {
+          current_sp: number
+          deduction_position?: number | null
+          excluded_reason?: string | null
+          game_difference?: number | null
+          id?: string
+          matches_played?: number | null
+          player_id: string
+          point_difference?: number | null
+          position?: number | null
+          previous_position?: number | null
+          recorded_at?: string
+          rule_version?: string | null
+          season_id: string
+          seasonal_sp: number
+          tournament_matches?: number | null
+          tournament_wins?: number | null
+          wins?: number | null
+        }
+        Update: {
+          current_sp?: number
+          deduction_position?: number | null
+          excluded_reason?: string | null
+          game_difference?: number | null
+          id?: string
+          matches_played?: number | null
+          player_id?: string
+          point_difference?: number | null
+          position?: number | null
+          previous_position?: number | null
+          recorded_at?: string
+          rule_version?: string | null
+          season_id?: string
+          seasonal_sp?: number
+          tournament_matches?: number | null
+          tournament_wins?: number | null
+          wins?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'season_player_results_player_id_fkey'
+            columns: ['player_id']
+            isOneToOne: false
+            referencedRelation: 'players'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'season_player_results_season_id_fkey'
+            columns: ['season_id']
+            isOneToOne: false
+            referencedRelation: 'seasons'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      season_transition_steps: {
+        Row: {
+          attempts: number
+          completed_at: string | null
+          last_error: string | null
+          season_id: string
+          status: string
+          step: string
+          updated_at: string
+        }
+        ComputedFields: never
+        Insert: {
+          attempts?: number
+          completed_at?: string | null
+          last_error?: string | null
+          season_id: string
+          status?: string
+          step: string
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          completed_at?: string | null
+          last_error?: string | null
+          season_id?: string
+          status?: string
+          step?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'season_transition_steps_season_id_fkey'
+            columns: ['season_id']
+            isOneToOne: false
+            referencedRelation: 'seasons'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      season_transitions: {
+        Row: {
+          attempts: number
+          completed_at: string | null
+          id: string
+          last_error: string | null
+          season_id: string
+          started_at: string
+          status: string
+          updated_at: string
+        }
+        ComputedFields: never
+        Insert: {
+          attempts?: number
+          completed_at?: string | null
+          id?: string
+          last_error?: string | null
+          season_id: string
+          started_at?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          completed_at?: string | null
+          id?: string
+          last_error?: string | null
+          season_id?: string
+          started_at?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'season_transitions_season_id_fkey'
+            columns: ['season_id']
+            isOneToOne: true
+            referencedRelation: 'seasons'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      seasons: {
+        Row: {
+          closed_at: string | null
+          created_at: string
+          created_by: string | null
+          ends_on: string
+          id: string
+          label: string
+          started_at: string | null
+          starts_on: string
+          status: string
+          updated_at: string
+        }
+        ComputedFields: never
+        Insert: {
+          closed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          ends_on: string
+          id?: string
+          label: string
+          started_at?: string | null
+          starts_on: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          closed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          ends_on?: string
+          id?: string
+          label?: string
+          started_at?: string | null
+          starts_on?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'seasons_created_by_fkey'
+            columns: ['created_by']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
       }
       sp_accounts: {
         Row: {
@@ -1863,10 +2219,22 @@ export type Database = {
         Args: { p_invitation_id: string }
         Returns: Json
       }
+      close_season: { Args: { p_season_id: string }; Returns: Json }
       correct_match_result: {
         Args: { p_games: Json; p_match_id: string; p_reason: string }
         Returns: Json
       }
+      create_season: {
+        Args: { p_ends_on: string; p_label: string; p_starts_on: string }
+        Returns: Json
+      }
+      decide_season_deduction_batch: {
+        Args: { p_approve: boolean; p_batch_id: string; p_reason?: string | null }
+        Returns: Json
+      }
+      run_season_transition: { Args: { p_force?: boolean }; Returns: Json }
+      seasonal_standings: { Args: { p_season_id?: string | null }; Returns: Json }
+      start_season: { Args: { p_season_id: string }; Returns: Json }
       create_tournament: {
         Args: {
           p_description?: string | null

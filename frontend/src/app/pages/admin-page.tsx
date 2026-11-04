@@ -1,4 +1,5 @@
 import {
+  CalendarRange,
   Clock,
   Inbox,
   Link2,
@@ -139,7 +140,17 @@ export function AdminPage() {
         title="Administration"
         description="Approve registrations, link player records, assign roles, and manage account access."
         actions={
-          <Badge tone={pending.length > 0 ? 'warning' : 'neutral'}>{pending.length} pending</Badge>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" size="sm" asChild>
+              <Link to="/admin/seasons">
+                <CalendarRange aria-hidden="true" />
+                Seasons
+              </Link>
+            </Button>
+            <Badge tone={pending.length > 0 ? 'warning' : 'neutral'}>
+              {pending.length} pending
+            </Badge>
+          </div>
         }
       />
 

@@ -6,6 +6,7 @@ import { RequireRole } from '@/app/guards/require-role'
 import { AppShell } from '@/app/layouts/app-shell'
 import { APP_MODULES } from '@/app/navigation'
 import { AdminPage } from '@/app/pages/admin-page'
+import { AdminSeasonsPage } from '@/app/pages/admin-seasons-page'
 import { AnnouncementsPage } from '@/app/pages/announcements-page'
 import { FriendlyMatchesPage } from '@/app/pages/friendly-matches-page'
 import { ModulePage } from '@/app/pages/module-page'
@@ -84,6 +85,14 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <OverviewPage /> },
           ...moduleRoutes,
+          {
+            path: 'admin/seasons',
+            element: (
+              <RequireRole roles={['super_admin']}>
+                <AdminSeasonsPage />
+              </RequireRole>
+            ),
+          },
           {
             path: 'tournaments/:id/draws',
             element: (

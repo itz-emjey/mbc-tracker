@@ -327,17 +327,16 @@ Still open:
 3.  **Placement implementation.** The 10-match system, initial provisional
     value, visibility, qualification, and the D11 Unrated-share question are
     still unapproved.
-4.  **Seasonal implementation.** The business rules are approved (S1–S23,
-    `PLAN.md` §7.3); the scheduler, notifications, recovery view, leaderboard,
-    and award integration are unbuilt.
 
 Decided and no longer open: the friendly and tournament formula and curve
 (D13), the per-match minimum and maximum (D13), whether SP can go below zero
 (D13: no, floor 0), the seasonal deduction amounts (S8: fixed 40 / 30 / 20 / 10
 by fixed position), the seasonal rank basis (S8, S10–S12), the deduction target
 (S1 and S8: current SP only), the doubles split and rounding (D13: even split,
-lower-id odd point, half-up before the multiplier), and corrected/invalidated
-results (D14: compensating rows only, re-award under the original version).
+lower-id odd point, half-up before the multiplier), corrected/invalidated
+results (D14: compensating rows only, re-award under the original version), and
+the seasonal implementation (S1–S23, migration 018: ranking, snapshot, deduction
+batch, transition job, recovery, and leaderboard built locally).
 
 Recommended separation of values:
 
@@ -914,6 +913,13 @@ in one giant code-generation pass.
 -   Achievement archive and historical leaderboard, read from the snapshots
     (S19).
 
+> **Implemented locally (2026-11-04, migration 018).** The seasonal ranking,
+> immutable snapshot, fixed-tier deduction batch, transition job with retries
+> and Super Admin recovery, and the seasonal leaderboard are built, with policy
+> 018 and the `/admin/seasons` screen. Migration 018 is not yet applied to the
+> hosted project. Placement matches (§7.2) and SP for unplayed matches remain
+> unbuilt and unapproved.
+
 ### Phase 9 --- Quality and deployment
 
 -   Full RLS/security review.
@@ -1003,7 +1009,9 @@ must not be silently decided by the coding agent.
 > **The match-SP formula was approved 2026-11-03 (D13)** and the enabled
 > `approved-2026-11` rule awards confirmed friendlies and completed tournament
 > matches. **F4 was approved the same day (D14)** and is implemented in
-> migration 017 (`docs/sp-formula-signoff.md`).
+> migration 017 (`docs/sp-formula-signoff.md`). **The seasonal rules (S1–S23) are
+> implemented locally in migration 018**; placement and unplayed-match SP remain
+> open.
 
   -----------------------------------------------------------------------
   Topic                   Current understanding   Still needs

@@ -101,6 +101,8 @@ backend/migrations/015_payment_receipts.sql
 backend/policies/015_payment_receipts.sql
 backend/migrations/016_approved_sp_rule.sql
 backend/migrations/017_tournament_sp_award.sql
+backend/migrations/018_seasonal_implementation.sql
+backend/policies/018_seasons.sql
 ```
 
 The migrations are **not** idempotent: re-running one fails at the first `CREATE` by design. There
@@ -188,21 +190,21 @@ attendance, their period balance, and their payment history.
 ## Tests and checks
 
 ```bash
-npm run test:db                       # 176 SQL checks on real Postgres (PGlite), no Docker
+npm run test:db                       # 185 SQL checks on real Postgres (PGlite), no Docker
 npm --prefix frontend test            # 228 frontend unit tests (Vitest)
 npm --prefix frontend run typecheck
 npm --prefix frontend run lint
 npm --prefix frontend run build
 ```
 
-`npm run test:db` applies all seventeen migrations and all fourteen policy files to a real PostgreSQL
+`npm run test:db` applies all eighteen migrations and all fifteen policy files to a real PostgreSQL
 engine, stubs Supabase Auth (`auth.users`, `auth.uid()`), and covers schema, RLS, column privileges,
 ownership/privacy negatives, approval idempotency, starting SP, player role/link RPCs, tournament
 visibility, D10 entry rules, draw validation, result advancement, correction order, the SP rule-version
 guardrails, balance reconciliation, training sessions and attendance, partial-payment and soft-void rules,
 player IDs, friend request/accept, notifications, per-player tournament fees, guest partners, partner
-invitations, self-entry, draw eligibility, the friendly and tournament SP awards with reversals, and the
-development seed and bootstrap scripts.
+invitations, self-entry, draw eligibility, the friendly and tournament SP awards with reversals, the seasonal
+ranking, snapshot, deduction, and transition rules, and the development seed and bootstrap scripts.
 
 ## Security notes
 
@@ -228,7 +230,7 @@ replay, and the owner's Super Admin bootstrap are complete.
 Phase 6 adds training and payments: sessions, attendance, club-wide fee periods, and manual payments that
 are voided rather than edited or deleted. Staff schedule sessions, mark attendance, record partial or full
 payments, and void a mistake with a reason; players see their own attendance and payment records. The
-schema (migration 007) and screens are verified locally and still need applying to the hosted project.
+schema (migration 007) and screens are applied to the hosted project.
 
 Tournament registration is now player-facing. Migration 013 adds `players.player_code` (`MBC-` plus eight
 hex characters), friend requests that require acceptance, and notifications; migration 014 adds the poster
@@ -239,15 +241,15 @@ join singles directly, invite an accepted friend for doubles, or name a guest pa
 a club partnership only after the partner accepts, and only fully paid or waived entries enter the draw.
 Staff mark each participant paid, unpaid, or waived and keep the poster current. The notification bell and
 `/notifications` surface publishing, invitation, and payment announcements. Migrations 013–014 and
-policies 013–014 are verified locally and still need applying to the hosted project.
+policies 013–014 are applied to the hosted project.
 
 Phase 7 adds jerseys, polls, and announcements: jersey projects with designs, sizes, and one active order
 per player; single- or multiple-choice polls that refuse late and duplicate votes; and announcements that
 staff publish and archive. Staff manage everything through audited RPCs, players view designs, vote, and
 update their own order before the deadline. Migration 009 adds design mockups: the bytes live in the public
 `jersey-designs` bucket (created by the migration), and only training staff may upload, replace, or delete an
-object. Migrations 008–009 and their screens are verified locally only; the bucket is created when the file is
-applied to the hosted project, since the local harness has no storage schema.
+object. Migrations 008–009 and their screens are applied to the hosted project; the bucket was created when the
+files were applied.
 
 Phase 5 adds friendly matches: singles challenges between two active players with linked accounts, the
 winner submits the result, and the losing side confirms or disputes it within 24 hours (a scheduled job
@@ -256,13 +258,17 @@ club rule is open. **A confirmed friendly and a completed tournament match now a
 approved `approved-2026-11` rule (D13, 2026-11-03); the awards are idempotent and write one immutable ledger row
 per player. Migration 017 adds the tournament award and F4's compensating reversals (D14): a winner-flip correction
 reverses the prior rows and re-awards under the original rule version, while a score-only correction writes nothing.
-Migrations 010, 016, and 017 are verified locally; the hosted project is migrated through 010, so 011–017 still need
-applying.
+Migrations 010, 016, and 017 are verified locally and applied to the hosted project; migration 018 and policy 018
+still need applying.
 
 Phase 4's formula is approved and live for friendlies and tournaments. Migration 006 adds versioned SP rule
 configuration with a provisional, disabled proposal and a reconciliation function; migration 016 records the
 club-approved formula as the enabled `approved-2026-11` version, and migration 017 implements the tournament award
 and corrections. The pure engine in `domain/sp.ts` uses the approved order (clamp → round → multiply), the approved
 2× tournament impact, and the even doubles split. `/shuttlepower` shows the leaderboard with rank titles and per-rank
-positions, your own ledger history, and the live rule version. Placement, unplayed-match SP, and the seasonal
-implementation remain unbuilt; the open decisions are tracked in `PLAN.md` §7 and §9.
+positions, your own ledger history, the live rule version, and the seasonal standings panel. Phase 8 is implemented
+locally in migration 018: it computes the seasonal ranking from eligible finalized tournament matches, freezes the
+immutable snapshot and deduction batch on close, runs the idempotent January transition with retries and Super Admin
+recovery, and adds `/admin/seasons` for season and deduction management. Placement and unplayed-match SP remain
+unbuilt; the open decisions are tracked in `PLAN.md` §7 and §9. Migration 018 and policy 018 are local only and still
+need applying to the hosted project.
