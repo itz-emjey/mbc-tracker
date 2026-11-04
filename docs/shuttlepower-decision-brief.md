@@ -9,8 +9,9 @@ D13 in `PLAN.md` §7. **F4 (corrected/invalidated results) was approved the same
 `approved-2026-11` rule, and migration 017 added the tournament award and F4 reversals, so confirmed friendlies and
 completed tournament matches now award SP and a corrected tournament result reverses and re-awards. The seasonal rules
 S1–S23 are **implemented locally in migration 018** (ranking, snapshot, deduction batch, transition job, recovery, and
-leaderboard); migration 018 and policy 018 still need applying to the hosted project. The placement and unplayed-match
-rows (7–8) remain open.
+leaderboard). **Placement (D15–D17) and unplayed-match SP (D18–D19) were approved 2026-11-04** and implemented locally
+in migration 019 and policy 019. Migrations 018 and 019 and policies 018 and 019 still need applying to the hosted
+project, in that order. Every decision on this page is now approved.
 
 **Read time:** about 5 minutes. Every number has a one-line reason.
 
@@ -18,12 +19,12 @@ rows (7–8) remain open.
 
 ## Why you are being asked
 
-The app already records friendly matches, tournament results, and player profiles. **Confirmed friendlies and completed
-tournament matches now award SP** under the approved formula. Placement and unplayed matches still do not, because
-those paths are unbuilt or unapproved. The exact numbers were approved by the club, never guessed by a developer.
+The app already records friendly matches, tournament results, and player profiles. **Confirmed friendlies, completed
+tournament matches, and placement matches now award SP** under the approved formula. Unplayed matches move nothing.
+Every number was approved by the club, never guessed by a developer.
 
-This page originally asked for every number in one sitting. The formula and correction rules are now decided; what
-remains is placement and the unplayed-match rule.
+This page originally asked for every number in one sitting. All five decisions are now approved; it is retained as the
+owner-facing record of what was decided and how it is implemented.
 
 **Formula only, nothing else?** `docs/sp-formula-signoff.md` packages just §7 rules 1, 2, and 6 plus F4; its F1–F4 rows
 are all approved.
@@ -37,6 +38,9 @@ are all approved.
 | Manual SP edits | Never. Every change is a permanent ledger row | Already built |
 | Rated player facing a new player (D11) | **No change at all** — no gain, no loss, no ledger row | You approved this on 2026-11-01 |
 | Which matches count toward placement (D12) | Only matches actually played and finalized | You approved this on 2026-11-01 |
+| Placement length and value (D15–D17) | **10** eligible matches; hidden **1,000** start; publish unchanged | You approved this on 2026-11-04 |
+| Unplayed matches (D18) | **No SP**, no placement credit | You approved this on 2026-11-04 |
+| Unrated doubles partner (D19) | Receives **their own share only**; a Rated partner's share is not applied | You approved this on 2026-11-04 |
 
 ## How the formula behaves, in plain English
 
@@ -109,11 +113,11 @@ table runs away.
 adjustment, then **split it evenly**. A doubles match then moves the same combined total as an equivalent
 singles match.
 
-**One caveat, if Decision 4 is also approved.** During a new player's placement matches the rated partner does
-not move (D11, already approved). If a newcomer plays doubles with a rated partner, only their half of the
+**Placement doubles (decided 2026-11-04 as D19).** During a new player's placement matches the rated partner does
+not move (D11, already approved). If a newcomer plays doubles with a rated partner, only their own half of the
 team adjustment is applied, so they move at half the rate of a singles newcomer — and depending on which player
-id sorts first, the odd point can be dropped. That is a consequence of D11, not of the split itself, and it is
-why a mixed rated/unrated doubles pair still needs a decided rule.
+id sorts first, the odd point can be discarded. That is a consequence of D11, not of the split itself; D19 settled it:
+the Unrated partner receives their own share only and the Rated partner's share is not applied.
 
 - Example: Team A averages 1,100, Team B averages 1,400. A wins → team adjustment **+26** → **+13 / +13**.
 - An odd adjustment cannot split evenly. The extra point goes to the partner whose **player id sorts first** —
@@ -123,60 +127,62 @@ why a mixed rated/unrated doubles pair still needs a decided rule.
 
 **Approved 2026-11-03: the even split, the lower-id odd point, and one shared parameter set.**
 
-## Decision 4 — new players: hide their SP for 10 matches?
+## Decision 4 — new players: hide their SP for 10 matches? (approved 2026-11-04)
 
 This is the one genuinely new feature in the proposal. It is **separate from the formula**: you can switch SP on
 without it.
 
-> **Not implementable as it reads (2026-11-02 review).** Hiding the number needs a permission and read-path
-> change, not a screen change: today every member can read every balance, and a player can read their own
-> ledger. Approving Path B approves that work too. The detail is in
-> `docs/sp-placement-technical-review.md`.
+> **Approved 2026-11-04 as D15–D17, and implemented locally in migration 019 and policy 019.** Hiding the number
+> required a permission and read-path change, not a screen change: policy 019 revokes direct `sp_accounts` and
+> `sp_transactions` reads and replaces them with published views. Only a Super Admin can read a provisional value.
 
-**The proposal:** a new player is publicly **Unrated** for their first **10 eligible finalized matches**. Their SP
-is calculated normally from match one, but kept hidden. At the 10th match the accumulated value is published
+**The approved design:** a new player is publicly **Unrated** for their first **10 eligible finalized matches**. Their
+SP is calculated normally from match one, but kept hidden. At the 10th match the accumulated value is published
 **unchanged** — no reset to 1,000, no bonus. The player sees only progress, e.g. `6 / 10`. Rated opponents in
 those matches get **no SP change at all** (D11, already approved).
 
 Why bother: a brand-new player's first results are noisy, and publishing them immediately can put a beginner at
 the bottom of the table on day one and make them reluctant to play.
 
-| What must be confirmed | Recommended |
+| Decision | Approved 2026-11-04 |
 | --- | --- |
-| Number of placement matches | **10** |
-| Starting hidden value | **1,000** (the existing starting award becomes the hidden balance) |
-| Who can see the hidden number | Not true today: every member can read every balance, and a player can read their own ledger. Hiding it is a policy and read-path change that ships with Path B |
-| After qualification | The hidden value becomes the public SP, unchanged; no bonus row |
-| Can a player be un-qualified later | **No**; a late correction adds an 11th match to an already-Rated player |
-| Existing players | Backfill as **Rated** — they are already published |
+| Number of placement matches | **10** (D15) |
+| Starting hidden value | **1,000** — the existing starting award becomes the hidden balance (D16) |
+| Who can see the hidden number | **Super Admin only**; the player sees progress, never the value (D17) |
+| After qualification | The hidden value becomes the public SP, unchanged; no bonus row (D15) |
+| Can a player be un-qualified later | **No**; a late correction adds an 11th match to an already-Rated player (D15) |
+| Existing players | Backfill as **Rated** — they are already published (D15) |
 
-**Two ways to go live — pick one:**
+**Path B was chosen:** the formula **and** placement shipped together. New players are protected from day
+one, and the app ships the full design in one reviewed migration. Path A (formula only, everyone Rated) was not
+selected.
 
-- **Path A (fastest):** approve the formula only. Everyone is Rated, new players appear at 1,000 immediately,
-  and SP starts moving. Placement can be added later as a separate change.
-- **Path B (recommended):** approve the formula **and** placement together. New players are protected from day
-  one, and the app ships the full design in one reviewed migration.
+## Decision 5 — what happens to unplayed matches (approved 2026-11-04)
 
-## Decision 5 — what happens to unplayed matches
-
-Walkovers, no-shows, forfeits before play, disqualifications, and withdrawals before play should **not move SP**.
+Walkovers, no-shows, forfeits before play, disqualifications, and withdrawals before play **do not move SP**.
 A retirement after play counts only when an official final result exists. Placement eligibility for these is
-already settled by D12; this decision is only about SP.
+already settled by D12; this decision covers SP as well.
 
-**Recommendation: no SP for any match that was not actually played to a final result.**
+**Approved 2026-11-04 as D18:** no SP for any match that was not actually played to a final result, and no placement
+credit either. Migration 019 adds the `result_kind` vocabulary and `mark_match_unplayed(...)`, so an unplayed outcome
+writes no ledger row and reverses a prior award if a result is later invalidated.
+
+**D19 also approved:** in a placement doubles match, an Unrated partner receives their normal own share only. The
+share that would have gone to a Rated partner is not applied, and the odd point follows the existing lower-player-id
+split and may be discarded. Every Rated participant, including opponents, receives no SP.
 
 ---
 
-## What is NOT being decided today
+## Not decided by this brief
 
-These are real, but they block only later phases. Approving the five decisions above does not require them.
+These are real, but they block only later phases. Approving the five decisions above did not require them.
 
 | Topic | Why it can wait |
 | --- | --- |
 | Seasonal deduction tiers and dates | Phase 8 only. SP works without seasons |
 | Who resolves a disputed friendly result | Only matters once a dispute is raised; the app already blocks SP for disputed matches |
 | Whether one or both losing doubles partners must approve | Friendly doubles is not built yet; only singles friendlies ship |
-| Historical placement credit | Existing players simply start as Rated; no backfill is proposed |
+| Historical placement credit | Existing players simply start as Rated; no backfill was approved |
 
 ---
 
@@ -194,10 +200,15 @@ These are real, but they block only later phases. Approving the five decisions a
 5. The version is **enabled**, and confirmed friendlies and completed tournament matches now move SP.
 6. Migration 018 implemented the approved seasonal rules S1–S23 locally: the ranking and tie-break statistics, the
    immutable season snapshot, the fixed-tier deduction batch, the January transition with retries and Super Admin
-   recovery, and the seasonal leaderboard. Migration 018 and policy 018 are not yet applied to the hosted project.
+   recovery, and the seasonal leaderboard.
+7. Migration 019 and policy 019 implemented placement and unplayed-match SP (D15–D19): `players.rating_status`,
+   `result_kind`, `placement_credits`, immutable `placement_qualifications`, the placement-aware award functions,
+   `mark_match_unplayed(...)`, and the published views that hide provisional values. The `/shuttlepower` and player
+   profile screens show placement progress, and a Super Admin sees the provisional audit.
 
-**What is still not switched on:** placement and SP for unplayed matches. Those remain separate approvals and
-implementation work. The seasonal implementation is complete locally but awaits the hosted migration.
+**What is still not switched on:** nothing in this brief. Migrations 018 and 019 and policies 018 and 019 are complete
+locally and still need applying to the hosted project, in that order (018, policy 018, 019, policy 019). The only
+placement-related workflow still undecided is how a disputed result is resolved (§7 rule 8).
 
 ---
 
@@ -214,12 +225,12 @@ Initial each line you approve, or write the value you prefer.
 | 5 | Doubles split | Even, odd point to lower id | **Approved** | Club owner | 2026-11-03 |
 | 6 | Doubles parameters | One set for singles and doubles | **Approved** | Club owner | 2026-11-03 |
 | F4 | Corrected / invalidated results | Compensating rows only; re-award under the original rule version | **Approved** | Club owner | 2026-11-03 |
-| 7 | Placement system | Path B (10 matches, hidden, publish unchanged) or Path A (defer) | **Open** | | |
-| 8 | Unplayed matches | No SP | **Open** | | |
+| 7 | Placement system | Path B (10 matches, hidden, publish unchanged) or Path A (defer) | **Approved — Path B** | Club owner | 2026-11-04 |
+| 8 | Unplayed matches | No SP | **Approved** | Club owner | 2026-11-04 |
 
-**Approved by:** Club owner  **Role:** Club owner  **Date:** 2026-11-03 (rows 1–6 and F4; rows 7–8 open)
+**Approved by:** Club owner  **Role:** Club owner  **Date:** 2026-11-03 (rows 1–6 and F4); 2026-11-04 (rows 7–8 and D19)
 
 ---
 
-*Sources: `AGENT.md` §4.3 and §7 rules 1–14; `PLAN.md` §7.1 (approved formula), §7.2 (placement proposal),
-D11 and D12. Where this page and those documents disagree, those documents win.*
+*Sources: `AGENT.md` §4.3 and §7 rules 1–14; `PLAN.md` §7.1 (approved formula), §7.2 (approved placement design),
+D11–D19. Where this page and those documents disagree, those documents win.*

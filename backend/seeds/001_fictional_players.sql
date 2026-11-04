@@ -347,7 +347,7 @@ on conflict (id) do nothing;
 -- one active unlinked player so the Super Admin link flow can be demonstrated.
 -- Erin has none, because a player record is created at approval.
 -- ---------------------------------------------------------------------------
-insert into public.players (id, profile_id, full_name, gender, status, joined_on)
+insert into public.players (id, profile_id, full_name, gender, status, joined_on, rating_status)
 values
   (
     '5eed1000-0000-4000-8000-000000000001',
@@ -355,7 +355,8 @@ values
     'Ada Demo',
     'female',
     'active',
-    date '2026-01-10'
+    date '2026-01-10',
+    'rated'
   ),
   (
     '5eed1000-0000-4000-8000-000000000002',
@@ -363,7 +364,8 @@ values
     'Ben Sample',
     'male',
     'active',
-    date '2026-01-10'
+    date '2026-01-10',
+    'rated'
   ),
   (
     '5eed1000-0000-4000-8000-000000000003',
@@ -371,7 +373,8 @@ values
     'Cleo Placeholder',
     'female',
     'active',
-    date '2026-01-17'
+    date '2026-01-17',
+    'rated'
   ),
   (
     '5eed1000-0000-4000-8000-000000000004',
@@ -379,7 +382,8 @@ values
     'Drew Testcase',
     'male',
     'active',
-    date '2026-02-01'
+    date '2026-02-01',
+    'rated'
   ),
   (
     '5eed1000-0000-4000-8000-000000000005',
@@ -387,7 +391,8 @@ values
     'Finn Suspended',
     'male',
     'suspended',
-    date '2026-02-01'
+    date '2026-02-01',
+    'rated'
   ),
   (
     '5eed1000-0000-4000-8000-000000000006',
@@ -395,7 +400,8 @@ values
     'Gabi Walkin',
     'female',
     'active',
-    date '2026-02-15'
+    date '2026-02-15',
+    'rated'
   )
 on conflict (id) do nothing;
 

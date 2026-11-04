@@ -249,6 +249,7 @@ function playerRecord(): PlayerRecord {
     full_name: 'Ana Reyes',
     gender: 'female',
     status: 'active',
+    rating_status: 'rated',
     joined_on: '2026-01-01',
   }
 }

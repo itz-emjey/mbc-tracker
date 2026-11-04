@@ -36,8 +36,10 @@ const [
   approvedSpRuleMigration,
   tournamentSpMigration,
   seasonImplementationMigration,
+  placementMigration,
   seasonPolicies,
   seasonImplementationPolicies,
+  placementPolicies,
   playerSocialPolicies,
   registrationPolicies,
   receiptPolicies,
@@ -73,8 +75,10 @@ const [
   readFile(join(backendDir, 'migrations', '016_approved_sp_rule.sql'), 'utf8'),
   readFile(join(backendDir, 'migrations', '017_tournament_sp_award.sql'), 'utf8'),
   readFile(join(backendDir, 'migrations', '018_seasonal_implementation.sql'), 'utf8'),
+  readFile(join(backendDir, 'migrations', '019_placement_and_unplayed_sp.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '012_seasons.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '018_seasons.sql'), 'utf8'),
+  readFile(join(backendDir, 'policies', '019_placement.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '013_players_social.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '014_tournament_registration.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '015_payment_receipts.sql'), 'utf8'),
@@ -124,6 +128,8 @@ const tables = [
   'sp_accounts',
   'sp_rule_versions',
   'sp_transactions',
+  'placement_credits',
+  'placement_qualifications',
   'tournaments',
   'training_attendance',
   'training_fee_periods',
@@ -416,6 +422,7 @@ await db.exec(receiptMigration)
 await db.exec(approvedSpRuleMigration)
 await db.exec(tournamentSpMigration)
 await db.exec(seasonImplementationMigration)
+await db.exec(placementMigration)
 await db.exec(identityPolicies)
 await db.exec(operationPolicies)
 await db.exec(spPolicies)
@@ -428,6 +435,7 @@ await db.exec(jerseyImagePolicies)
 await db.exec(friendlyPolicies)
 await db.exec(seasonPolicies)
 await db.exec(seasonImplementationPolicies)
+await db.exec(placementPolicies)
 await db.exec(playerSocialPolicies)
 await db.exec(registrationPolicies)
 await db.exec(receiptPolicies)
@@ -547,18 +555,18 @@ await db.exec(`
   insert into public.user_roles (profile_id, role_id, granted_by)
     select '${D}', id, '${C}' from public.roles where key = 'tournament_manager';
 
-  insert into public.players (id, profile_id, full_name, gender)
-    values ('${P1}', '${A}', 'Alex Player', 'male');
+  insert into public.players (id, profile_id, full_name, gender, rating_status)
+    values ('${P1}', '${A}', 'Alex Player', 'male', 'rated');
 
-  insert into public.players (id, full_name, gender)
-    values ('${P2}', 'Unlinked Player', 'female');
+  insert into public.players (id, full_name, gender, rating_status)
+    values ('${P2}', 'Unlinked Player', 'female', 'rated');
 
-  insert into public.players (id, full_name, gender, status) values
-    ('${P3}', 'Carlo Male', 'male', 'active'),
-    ('${P4}', 'Dana Female', 'female', 'active'),
-    ('${P5}', 'Eli Male', 'male', 'active'),
-    ('${P6}', 'Fay Unknown', null, 'active'),
-    ('${P7}', 'Gina Inactive', 'female', 'inactive');
+  insert into public.players (id, full_name, gender, status, rating_status) values
+    ('${P3}', 'Carlo Male', 'male', 'active', 'rated'),
+    ('${P4}', 'Dana Female', 'female', 'active', 'rated'),
+    ('${P5}', 'Eli Male', 'male', 'active', 'rated'),
+    ('${P6}', 'Fay Unknown', null, 'active', 'rated'),
+    ('${P7}', 'Gina Inactive', 'female', 'inactive', 'rated');
 
   insert into public.registration_requests (id, profile_id, email, full_name) values
     ('${RR1}', '${B}', 'bea@example.test', 'Bea Pending'),
@@ -836,14 +844,14 @@ await test('app settings are readable by active club members only', async () => 
   const pending = await asUser(B, `select key from public.app_settings`)
   const admin = await asUser(C, `select key from public.app_settings`)
   assert(
-    member.rows.length === 1 && member.rows[0].key === 'club.name',
+    member.rows.some((row) => row.key === 'club.name'),
     'A should read club settings',
   )
   assert(
     pending.rows.length === 0,
     `pending user should see 0 settings, got ${pending.rows.length}`,
   )
-  assert(admin.rows.length === 1, `admin should see 1 setting, got ${admin.rows.length}`)
+  assert(admin.rows.length === member.rows.length, 'admin should see every setting')
 })
 
 await test('anon has no access to profiles', async () => {
@@ -985,20 +993,27 @@ await test('clients cannot write audit logs', async () => {
 // ---------------------------------------------------------------------------
 // ShuttlePower bootstrap
 // ---------------------------------------------------------------------------
-await test('club members read SP accounts, pending users do not', async () => {
-  const member = await asUser(A, `select player_id, current_sp from public.sp_accounts`)
-  const pending = await asUser(B, `select player_id from public.sp_accounts`)
+await test('club members read published SP balances, pending users do not', async () => {
+  const member = await asUser(A, `select player_id, current_sp from public.published_sp_balances`)
+  const pending = await asUser(B, `select player_id from public.published_sp_balances`)
   assert(member.rows.length === 1 && member.rows[0].current_sp === 1000, 'A should see 1000 SP')
   assert(
     pending.rows.length === 0,
-    `pending user should see 0 accounts, got ${pending.rows.length}`,
+    `pending user should see 0 balances, got ${pending.rows.length}`,
   )
 })
 
+await test('direct SP tables are closed to clients after policy 019', async () => {
+  await expectErrorAs(A, `select current_sp from public.sp_accounts`, /permission denied/i)
+  await expectErrorAs(A, `select id from public.sp_transactions`, /permission denied/i)
+  await expectErrorAs(A, `select * from public.placement_credits`, /permission denied/i)
+  await expectErrorAs(A, `select * from public.placement_qualifications`, /permission denied/i)
+})
+
 await test('the SP ledger is visible to its owner and a super admin only', async () => {
-  const owner = await asUser(A, `select id from public.sp_transactions`)
-  const other = await asUser(B, `select id from public.sp_transactions`)
-  const admin = await asUser(C, `select id from public.sp_transactions`)
+  const owner = await asUser(A, `select id from public.published_sp_transactions`)
+  const other = await asUser(B, `select id from public.published_sp_transactions`)
+  const admin = await asUser(C, `select id from public.published_sp_transactions`)
   assert(owner.rows.length === 1, `owner should see 1 transaction, got ${owner.rows.length}`)
   assert(
     other.rows.length === 0,
@@ -4540,6 +4555,401 @@ async function openSeason(label = 'Season 2026', starts = '2026-01-01', ends = '
   await actAs('postgres')
   return seasonId
 }
+
+// ---------------------------------------------------------------------------
+// Placement and unplayed matches (D15-D19, S21)
+// ---------------------------------------------------------------------------
+await test('D15/D17: a friendly placement moves only the Unrated player and hides the value', async () => {
+  await inTransaction(async () => {
+    await ensureFriendlyAccounts()
+    await enableTestRule()
+    await db.query(
+      `update public.sp_accounts set current_sp = 1000 where player_id in ('${P1}', '${P4}')`,
+    )
+    await db.query(`update public.players set rating_status = 'unrated' where id = '${P4}'`)
+
+    const matchId = await playFriendly()
+
+    await actAs('postgres')
+    const rows = await db.query(`
+      select player_id, sp_delta, metadata
+        from public.sp_transactions
+       where reference_id = '${matchId}'
+       order by player_id
+    `)
+    assert(rows.rows.length === 1, `only the Unrated player gets a row, got ${rows.rows.length}`)
+    assert(rows.rows[0].player_id === P4, 'the Unrated loser owns the row')
+    assert(rows.rows[0].sp_delta === -10, 'the Unrated player keeps their normal change')
+    assert(rows.rows[0].metadata.placement === true, 'the row is marked as placement')
+    assert(rows.rows[0].metadata.rating_status === 'unrated', 'the row records the rating status')
+
+    const credits = await db.query(`
+      select count(*)::int as n
+        from public.placement_credits
+       where player_id = '${P4}' and source = 'friendly' and voided_at is null
+    `)
+    assert(credits.rows[0].n === 1, 'one placement credit is recorded')
+
+    const balance = await db.query(
+      `select current_sp from public.sp_accounts where player_id = '${P4}'`,
+    )
+    assert(balance.rows[0].current_sp === 990, 'the hidden provisional balance moves to 990')
+
+    await actAs('authenticated', A)
+    const publicRows = await db.query(
+      `select player_id from public.published_sp_leaderboard where player_id = '${P4}'`,
+    )
+    assert(publicRows.rows.length === 0, 'the public leaderboard excludes an Unrated player')
+
+    await actAs('authenticated', D)
+    const hidden = await db.query(
+      `select id from public.published_sp_transactions where player_id = '${P4}'`,
+    )
+    assert(hidden.rows.length === 0, 'the Unrated player cannot read their own ledger')
+
+    const progress = await db.query(
+      `select credits, required, rating_status
+         from public.placement_progress where player_id = '${P4}'`,
+    )
+    assert(
+      progress.rows[0].credits === 1 && progress.rows[0].required === 10,
+      `expected progress 1/10, got ${progress.rows[0].credits}/${progress.rows[0].required}`,
+    )
+    assert(progress.rows[0].rating_status === 'unrated', 'the player is still Unrated')
+
+    await actAs('authenticated', C)
+    const audit = await db.query(
+      `select current_sp, credits from public.placement_audit where player_id = '${P4}'`,
+    )
+    assert(audit.rows[0].current_sp === 990, 'a Super Admin sees the provisional value')
+    assert(audit.rows[0].credits === 1, 'a Super Admin sees the credit count')
+
+    await actAs('authenticated', A)
+    const notAudit = await db.query(
+      `select player_id from public.placement_audit where player_id = '${P4}'`,
+    )
+    assert(notAudit.rows.length === 0, 'a non-admin sees no placement audit')
+    await actAs('postgres')
+  })
+})
+
+await test('D15: the 10th credit publishes the provisional balance unchanged', async () => {
+  await inTransaction(async () => {
+    await ensureFriendlyAccounts()
+    await enableTestRule()
+    await db.query(
+      `update public.sp_accounts set current_sp = 1000 where player_id in ('${P1}', '${P4}')`,
+    )
+    await db.query(`update public.players set rating_status = 'unrated' where id = '${P4}'`)
+
+    const matchId = await playFriendly()
+    // P4 lost 10 (990) and already owns one credit. Add eight more directly,
+    // then let the ninth call go through the RPC so qualification is exercised.
+    await actAs('postgres')
+    await db.query(`
+      insert into public.placement_credits (player_id, source, match_id, rule_version)
+      select '${P4}', 'friendly', gen_random_uuid(), 'test-award'
+        from generate_series(1, 8)
+    `)
+    const tenth = await db.query(
+      `select public.record_placement_credit('${P4}', 'friendly', gen_random_uuid(), 'test-award') as result`,
+    )
+    assert(tenth.rows[0].result.status === 'qualified', 'the 10th credit qualifies the player')
+
+    const player = await db.query(`select rating_status from public.players where id = '${P4}'`)
+    assert(player.rows[0].rating_status === 'rated', 'the player is permanently Rated')
+
+    const qualification = await db.query(
+      `select credit_count, published_sp
+         from public.placement_qualifications where player_id = '${P4}'`,
+    )
+    assert(qualification.rows[0].credit_count === 10, 'the qualification records 10 credits')
+    assert(
+      qualification.rows[0].published_sp === 990,
+      `expected the unchanged provisional value 990, got ${qualification.rows[0].published_sp}`,
+    )
+
+    const balance = await db.query(
+      `select current_sp from public.sp_accounts where player_id = '${P4}'`,
+    )
+    assert(balance.rows[0].current_sp === 990, 'qualification does not reset or bonus the balance')
+
+    await actAs('authenticated', A)
+    const published = await db.query(
+      `select current_sp from public.published_sp_balances where player_id = '${P4}'`,
+    )
+    assert(
+      published.rows.length === 1 && published.rows[0].current_sp === 990,
+      'the balance is now public',
+    )
+
+    await actAs('authenticated', D)
+    const ledger = await db.query(
+      `select id from public.published_sp_transactions
+        where player_id = '${P4}' and reference_id = '${matchId}'`,
+    )
+    assert(ledger.rows.length === 1, 'the placement row becomes ordinary history')
+
+    await actAs('postgres')
+    const again = await db.query(
+      `select public.record_placement_credit('${P4}', 'friendly', gen_random_uuid(), 'test-award') as result`,
+    )
+    assert(again.rows[0].result.status === 'already_rated', 'a Rated player earns no further credit')
+  })
+})
+
+await test('D19: an Unrated doubles partner keeps only their own share', async () => {
+  await inTransaction(async () => {
+    await ensureTournamentAccounts([P1, P2, P3, P4])
+    await enableTestRule()
+    await db.query(
+      `update public.sp_accounts set current_sp = 1000
+        where player_id in ('${P1}', '${P2}', '${P3}', '${P4}')`,
+    )
+    await db.query(`update public.players set rating_status = 'unrated' where id = '${P4}'`)
+
+    const { matchId, result } = await playTournamentMatch({
+      discipline: 'mixed_doubles',
+      homePlayers: [P1, P4],
+      awayPlayers: [P2, P3],
+      homeWins: true,
+    })
+    assert(result.sp_award.placement === true, 'the match is a placement match')
+    assert(result.sp_award.team_total === 20, 'the test rule makes a 20-point team total')
+    assert(result.sp_award.awarded === 1, 'only the Unrated participant moves')
+
+    await actAs('postgres')
+    const rows = await db.query(`
+      select player_id, sp_delta
+        from public.sp_transactions
+       where reference_type = 'match' and reference_id = '${matchId}'
+       order by player_id
+    `)
+    const byPlayer = Object.fromEntries(rows.rows.map((row) => [row.player_id, row.sp_delta]))
+    assert(rows.rows.length === 1, `only the Unrated partner gets a row, got ${rows.rows.length}`)
+    assert(byPlayer[P1] === undefined, 'the Rated partner receives no SP change')
+    assert(byPlayer[P4] === 10, 'the Unrated partner keeps their own half share')
+    assert(
+      byPlayer[P2] === undefined && byPlayer[P3] === undefined,
+      'Rated opponents receive no SP change in a placement match',
+    )
+
+    const credits = await db.query(`
+      select count(*)::int as n
+        from public.placement_credits
+       where player_id = '${P4}' and source = 'tournament' and voided_at is null
+    `)
+    assert(credits.rows[0].n === 1, 'the Unrated partner earns one credit')
+
+    const ratedCredits = await db.query(
+      `select count(*)::int as n from public.placement_credits where player_id = '${P1}'`,
+    )
+    assert(ratedCredits.rows[0].n === 0, 'a Rated participant earns no placement credit')
+  })
+})
+
+await test('S21: a placement match accrues no Seasonal SP for anyone', async () => {
+  await inTransaction(async () => {
+    await ensureTournamentAccounts([P1, P4])
+    const seasonId = await openSeason()
+    await db.query(
+      `update public.sp_accounts set current_sp = 1000 where player_id in ('${P1}', '${P4}')`,
+    )
+    await db.query(`update public.players set rating_status = 'unrated' where id = '${P4}'`)
+
+    const { matchId } = await playTournamentMatch({
+      homePlayers: [P1],
+      awayPlayers: [P4],
+    })
+
+    await actAs('postgres')
+    const seasonal = await db.query(
+      `select count(*)::int as n from public.season_balances where season_id = '${seasonId}'`,
+    )
+    assert(seasonal.rows[0].n === 0, 'no participant accrues Seasonal SP in a placement match')
+
+    const rows = await db.query(
+      `select metadata from public.sp_transactions where reference_id = '${matchId}'`,
+    )
+    assert(rows.rows.length === 1, 'only the Unrated participant moves')
+    assert(rows.rows[0].metadata.season_id === null, 'the placement row records no season')
+  })
+})
+
+await test('D15: qualification is permanent and later matches are ordinary', async () => {
+  await inTransaction(async () => {
+    await ensureFriendlyAccounts()
+    await enableTestRule()
+    await db.query(
+      `update public.sp_accounts set current_sp = 1000 where player_id in ('${P1}', '${P4}')`,
+    )
+    await db.query(`update public.players set rating_status = 'unrated' where id = '${P4}'`)
+
+    for (let index = 0; index < 10; index += 1) {
+      await db.query(
+        `select public.record_placement_credit('${P4}', 'friendly', gen_random_uuid(), 'test-award')`,
+      )
+    }
+
+    const qualified = await db.query(`select rating_status from public.players where id = '${P4}'`)
+    assert(qualified.rows[0].rating_status === 'rated', 'ten credits qualify the player')
+
+    const matchId = await playFriendly()
+
+    await actAs('postgres')
+    const rows = await db.query(`
+      select player_id, sp_delta
+        from public.sp_transactions
+       where reference_id = '${matchId}'
+       order by player_id
+    `)
+    assert(rows.rows.length === 2, 'an ordinary match moves both players')
+    const deltas = rows.rows.map((row) => row.sp_delta).sort((a, b) => a - b)
+    assert(JSON.stringify(deltas) === JSON.stringify([-10, 10]), 'the normal rule applies')
+
+    const credits = await db.query(
+      `select count(*)::int as n from public.placement_credits where player_id = '${P4}'`,
+    )
+    assert(credits.rows[0].n === 10, 'a Rated player earns no further credits')
+  })
+})
+
+await test('D15: a zero-delta placement result still earns a credit', async () => {
+  await inTransaction(async () => {
+    await ensureFriendlyAccounts()
+    await enableTestRule('test-floor', { baseChange: 10, floor: 0 })
+    await db.query(
+      `update public.sp_accounts set current_sp = 0 where player_id in ('${P1}', '${P4}')`,
+    )
+    await db.query(`update public.players set rating_status = 'unrated' where id = '${P4}'`)
+
+    const matchId = await playFriendly()
+
+    await actAs('postgres')
+    const rows = await db.query(
+      `select count(*)::int as n from public.sp_transactions where reference_id = '${matchId}'`,
+    )
+    assert(rows.rows[0].n === 0, 'a zero change writes no ledger row')
+
+    const credits = await db.query(`
+      select count(*)::int as n
+        from public.placement_credits
+       where player_id = '${P4}' and voided_at is null
+    `)
+    assert(credits.rows[0].n === 1, 'the match still counts toward placement')
+  })
+})
+
+await test('D18: an unplayed tournament result reverses SP and voids placement credits', async () => {
+  await inTransaction(async () => {
+    await ensureTournamentAccounts([P1, P4])
+    await enableTestRule()
+    await db.query(
+      `update public.sp_accounts set current_sp = 1000 where player_id in ('${P1}', '${P4}')`,
+    )
+    await db.query(`update public.players set rating_status = 'unrated' where id = '${P4}'`)
+
+    const { matchId, home } = await playTournamentMatch({
+      homePlayers: [P1],
+      awayPlayers: [P4],
+      homeWins: true,
+    })
+    // P1 is Rated and gets no row; P4 lost 20 and owns one credit.
+    await actAs('authenticated', D)
+    const marked = await db.query(
+      `select public.mark_match_unplayed(
+         '${matchId}', '${home}', 'walkover', 'Opponent withdrew'
+       ) as result`,
+    )
+    const outcome = marked.rows[0].result
+    assert(outcome.status === 'recorded', 'the unplayed outcome is recorded')
+    assert(outcome.result_kind === 'walkover', 'the result kind is walkover')
+    assert(outcome.sp_reversal.reversed === 1, 'the Unrated award is reversed')
+
+    await actAs('postgres')
+    const balance = await db.query(
+      `select current_sp from public.sp_accounts where player_id = '${P4}'`,
+    )
+    assert(balance.rows[0].current_sp === 1000, 'the provisional balance returns to 1000')
+
+    const credit = await db.query(`
+      select voided_at, void_reason
+        from public.placement_credits
+       where player_id = '${P4}' and source = 'tournament'
+    `)
+    assert(credit.rows[0].voided_at !== null, 'the placement credit is voided, not deleted')
+    assert(credit.rows[0].void_reason === 'Opponent withdrew', 'the void reason is kept')
+
+    const progress = await db.query(
+      `select credits from public.placement_progress where player_id = '${P4}'`,
+    )
+    assert(progress.rows[0].credits === 0, 'voided credits do not count toward placement')
+
+    const award = await db.query(`select public.award_tournament_sp('${matchId}') as result`)
+    assert(award.rows[0].result.status === 'skipped', 'an unplayed result awards nothing')
+  })
+})
+
+await test('D18: a pending match can record a walkover without moving SP', async () => {
+  await inTransaction(async () => {
+    await ensureTournamentAccounts([P1, P4])
+    await enableTestRule()
+    await db.query(
+      `update public.sp_accounts set current_sp = 1000 where player_id in ('${P1}', '${P4}')`,
+    )
+
+    await actAs('authenticated', D)
+    const tournament = await createTournament('Walkover Cup')
+    const event = await createEvent(tournament.id, 'singles')
+    const home = (await registerEntry(event.id, [P1], 1)).rows[0].result.entry_id
+    const away = (await registerEntry(event.id, [P4], 2)).rows[0].result.entry_id
+    await saveDraw(event.id, [
+      {
+        key: 'm1',
+        bracket: 'winners',
+        round: 1,
+        position: 1,
+        home_entry_id: home,
+        away_entry_id: away,
+      },
+    ])
+    const matchId = await matchIdFor(event.id, 'winners', 1)
+
+    const marked = await db.query(
+      `select public.mark_match_unplayed(
+         '${matchId}', '${home}', 'no_show', 'Away did not appear'
+       ) as result`,
+    )
+    assert(marked.rows[0].result.result_kind === 'no_show', 'the walkover is recorded')
+
+    await actAs('postgres')
+    const rows = await db.query(
+      `select count(*)::int as n from public.sp_transactions where reference_id = '${matchId}'`,
+    )
+    assert(rows.rows[0].n === 0, 'no SP row is written for an unplayed match')
+  })
+})
+
+await test('D18: a friendly recorded as a walkover awards nothing', async () => {
+  await inTransaction(async () => {
+    await disableEnabledRules()
+    const matchId = await playFriendly()
+
+    await actAs('postgres')
+    await db.query(
+      `update public.friendly_matches set result_kind = 'walkover' where id = '${matchId}'`,
+    )
+    await enableTestRule()
+
+    const award = await db.query(`select public.award_friendly_sp('${matchId}') as result`)
+    assert(award.rows[0].result.status === 'skipped', 'the unplayed friendly is skipped')
+
+    const rows = await db.query(
+      `select count(*)::int as n from public.sp_transactions where reference_id = '${matchId}'`,
+    )
+    assert(rows.rows[0].n === 0, 'no SP row is written')
+  })
+})
 
 /** Links a player to a fresh active profile for the seasonal eligibility rules. */
 async function linkActivePlayer(playerId, profileId, fullName) {

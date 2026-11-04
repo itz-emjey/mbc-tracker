@@ -13,6 +13,7 @@ function player(id: string, fullName: string): PlayerRecord {
     full_name: fullName,
     gender: null,
     status: 'active',
+    rating_status: 'rated',
     joined_on: '2026-01-01',
   }
 }

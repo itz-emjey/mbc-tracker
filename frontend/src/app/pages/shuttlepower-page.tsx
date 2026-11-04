@@ -3,7 +3,13 @@ import * as React from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
-import { ArenaAvatar, ArenaPanel, ArenaStatStrip, RankBadge } from '@/components/arena/arena-ui'
+import {
+  ArenaAvatar,
+  ArenaPanel,
+  ArenaStatStrip,
+  PowerMeter,
+  RankBadge,
+} from '@/components/arena/arena-ui'
 import { EmptyState } from '@/components/shared/empty-state'
 import { ErrorState } from '@/components/shared/error-state'
 import { LoadingState } from '@/components/shared/loading-state'
@@ -27,6 +33,8 @@ import { getPlayerByProfile } from '@/features/players/api'
 import type { PlayerRecord } from '@/features/players/types'
 import {
   getCurrentRuleVersion,
+  getPlacementProgress,
+  listPlacementAudit,
   listPlayerSpHistory,
   listSpLeaderboard,
   reconcileSpBalances,
@@ -35,6 +43,8 @@ import { rankLeaderboard } from '@/features/shuttlepower/leaderboard'
 import { SeasonalStandingsPanel } from '@/features/shuttlepower/seasonal-standings-panel'
 import {
   SP_TRANSACTION_LABELS,
+  type PlacementAuditRecord,
+  type PlacementProgressRecord,
   type ReconciliationResult,
   type SpLeaderboardEntry,
   type SpRuleVersionRecord,
@@ -59,6 +69,8 @@ export function ShuttlepowerPage() {
   const [leaderboard, setLeaderboard] = React.useState<SpLeaderboardEntry[]>([])
   const [ownPlayer, setOwnPlayer] = React.useState<PlayerRecord | null>(null)
   const [history, setHistory] = React.useState<SpTransactionRecord[]>([])
+  const [placement, setPlacement] = React.useState<PlacementProgressRecord | null>(null)
+  const [placementAudit, setPlacementAudit] = React.useState<PlacementAuditRecord[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [reloadKey, setReloadKey] = React.useState(0)
@@ -78,7 +90,11 @@ export function ShuttlepowerPage() {
           listSpLeaderboard(),
         ])
         const player = user ? await getPlayerByProfile(user.id) : null
-        const rows = player ? await listPlayerSpHistory(player.id) : []
+        const [rows, progress, audit] = await Promise.all([
+          player ? listPlayerSpHistory(player.id) : Promise.resolve([]),
+          player ? getPlacementProgress(player.id) : Promise.resolve(null),
+          isSuperAdmin ? listPlacementAudit() : Promise.resolve([]),
+        ])
 
         if (!active) return
 
@@ -86,6 +102,8 @@ export function ShuttlepowerPage() {
         setLeaderboard(nextLeaderboard)
         setOwnPlayer(player)
         setHistory(rows)
+        setPlacement(progress)
+        setPlacementAudit(audit)
       } catch (loadError) {
         if (active) setError(errorMessage(loadError))
       } finally {
@@ -98,7 +116,7 @@ export function ShuttlepowerPage() {
     return () => {
       active = false
     }
-  }, [user, reloadKey])
+  }, [user, isSuperAdmin, reloadKey])
 
   const reload = React.useCallback(() => setReloadKey((current) => current + 1), [])
 
@@ -154,6 +172,11 @@ export function ShuttlepowerPage() {
   const ownRow = ownPlayer ? ranked.find((row) => row.playerId === ownPlayer.id) : undefined
   const ownTier = ownRow ? tierFor(ownRow.sp).tier : null
   const podium = ranked.slice(0, 3)
+  const unrated = ownPlayer?.rating_status === 'unrated'
+  const placementCredits = placement?.credits ?? 0
+  const placementRequired = placement?.required ?? 10
+  const placementRatio =
+    placementRequired > 0 ? Math.min(1, placementCredits / placementRequired) : 0
 
   return (
     <>
@@ -168,26 +191,33 @@ export function ShuttlepowerPage() {
         stats={[
           {
             label: 'Your SP',
-            value: ownRow ? formatSp(ownRow.sp) : '—',
-            detail: ownRow ? 'Current balance' : 'No SP account linked',
+            value: unrated ? 'Hidden' : ownRow ? formatSp(ownRow.sp) : '—',
+            detail: unrated
+              ? 'Provisional until placement ends'
+              : ownRow
+                ? 'Current balance'
+                : 'No SP account linked',
           },
           {
             label: 'Your rank',
-            value: ownTier?.rankTitle ?? '—',
-            detail:
-              ownRow && ownTier
+            value: unrated ? 'Unrated' : (ownTier?.rankTitle ?? '—'),
+            detail: unrated
+              ? `Placement ${placementCredits}/${placementRequired} matches`
+              : ownRow && ownTier
                 ? `${ownTier.label} division · #${ownRow.divisionPosition} in rank`
                 : 'Display rank · ties share a position',
           },
           {
             label: 'Club position',
-            value: ownRow ? `#${ownRow.position}` : '—',
-            detail: `${ranked.length} ranked player${ranked.length === 1 ? '' : 's'}`,
+            value: unrated ? '—' : ownRow ? `#${ownRow.position}` : '—',
+            detail: unrated
+              ? 'Not ranked during placement'
+              : `${ranked.length} ranked player${ranked.length === 1 ? '' : 's'}`,
           },
           {
             label: 'Ledger entries',
-            value: String(history.length),
-            detail: 'Your immutable transaction history',
+            value: unrated ? 'Hidden' : String(history.length),
+            detail: unrated ? 'Appears after qualification' : 'Your immutable transaction history',
           },
         ]}
       />
@@ -213,6 +243,42 @@ export function ShuttlepowerPage() {
           </div>
         </div>
       </ArenaPanel>
+
+      {unrated ? (
+        <ArenaPanel
+          kicker="Placement"
+          title={`Unrated · ${placementCredits}/${placementRequired} matches`}
+          className="mt-4"
+          action={{ href: '/matches', label: 'Play a match' }}
+        >
+          <div className="flex flex-col gap-3 px-4 py-3">
+            <div className="flex items-start gap-3">
+              <Badge tone="warning">Unrated</Badge>
+
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-text">
+                  Your provisional ShuttlePower is calculated but stays hidden.
+                </p>
+                <p className="mt-1 text-xs leading-relaxed text-text-muted">
+                  After {placementRequired} eligible finalized matches it is published unchanged —
+                  no reset and no bonus. Only a Super Admin can see the provisional value.
+                </p>
+              </div>
+            </div>
+
+            <PowerMeter
+              progress={placementRatio}
+              label={`${placementCredits} of ${placementRequired} placement matches`}
+            />
+
+            <p className="text-xs leading-relaxed text-text-muted">
+              {Math.max(0, placementRequired - placementCredits)} match
+              {placementRequired - placementCredits === 1 ? '' : 'es'} to go. Walkovers, no-shows,
+              forfeits, withdrawals, and disqualifications do not count.
+            </p>
+          </div>
+        </ArenaPanel>
+      ) : null}
 
       <SeasonalStandingsPanel className="mt-4" highlightPlayerId={ownPlayer?.id ?? null} />
 
@@ -303,10 +369,11 @@ export function ShuttlepowerPage() {
             </Table>
 
             <p className="border-t border-border px-4 py-2 text-[10px] leading-snug text-text-faint">
-              Balanced cached balances are what reconciliation checks against the immutable ledger.
-              Equal SP shares a position, including inside a rank. Rank titles map to divisions:
-              Rookie (Feather), Challenger (Rally), Striker (Smash), Elite (Apex), Champion
-              (Legend). Divisions and titles are display labels and do not change the formula.
+              Unrated players are excluded until they finish placement. Balanced cached balances are
+              what reconciliation checks against the immutable ledger. Equal SP shares a position,
+              including inside a rank. Rank titles map to divisions: Rookie (Feather), Challenger
+              (Rally), Striker (Smash), Elite (Apex), Champion (Legend). Divisions and titles are
+              display labels and do not change the formula.
             </p>
           </>
         )}
@@ -319,6 +386,14 @@ export function ShuttlepowerPage() {
               icon={Zap}
               title="No player record linked"
               description="Your SP history appears once your approved account is linked to a player record."
+            />
+          </div>
+        ) : unrated ? (
+          <div className="p-4">
+            <EmptyState
+              icon={Zap}
+              title="SP history is hidden during placement"
+              description={`Your ledger becomes visible after ${placementRequired} eligible matches, when your provisional balance is published unchanged.`}
             />
           </div>
         ) : history.length === 0 ? (
@@ -369,6 +444,62 @@ export function ShuttlepowerPage() {
           </Table>
         )}
       </ArenaPanel>
+
+      {isSuperAdmin ? (
+        <ArenaPanel
+          kicker="Placement audit"
+          title="Provisional balances"
+          description="Super Admin only. Players see placement progress, never the provisional value."
+          className="mt-4"
+        >
+          {placementAudit.length === 0 ? (
+            <div className="p-4">
+              <EmptyState
+                icon={ShieldCheck}
+                title="No player records yet"
+                description="Placement progress appears once a player record exists."
+              />
+            </div>
+          ) : (
+            <Table containerClassName="rounded-none border-0">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Player</TableHead>
+                  <TableHead>Rating</TableHead>
+                  <TableHead className="text-right">Placement</TableHead>
+                  <TableHead className="text-right">Current SP</TableHead>
+                  <TableHead className="hidden text-right sm:table-cell">Qualified SP</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {placementAudit.map((row) => (
+                  <TableRow key={row.player_id}>
+                    <TableCell className="max-w-56 truncate font-medium text-text">
+                      {row.full_name}
+                    </TableCell>
+                    <TableCell>
+                      <Badge tone={row.rating_status === 'unrated' ? 'warning' : 'neutral'}>
+                        {row.rating_status === 'unrated' ? 'Unrated' : 'Rated'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-sm tabular-nums text-text-muted">
+                      {row.rating_status === 'unrated'
+                        ? `${row.credits}/${row.required}`
+                        : 'Qualified'}
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-sm tabular-nums text-text">
+                      {formatSp(row.current_sp)}
+                    </TableCell>
+                    <TableCell className="hidden text-right font-mono text-sm tabular-nums text-text-muted sm:table-cell">
+                      {row.published_sp === null ? '—' : formatSp(row.published_sp)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </ArenaPanel>
+      ) : null}
 
       {isSuperAdmin ? (
         <ArenaPanel kicker="Integrity" title="Balance check" className="mt-4">

@@ -132,6 +132,7 @@ export type Database = {
           recorded_at: string | null
           recorded_by: string | null
           reset: boolean
+          result_kind: string
           round: number
           status: string
           updated_at: string
@@ -155,6 +156,7 @@ export type Database = {
           recorded_at?: string | null
           recorded_by?: string | null
           reset?: boolean
+          result_kind?: string
           round: number
           status?: string
           updated_at?: string
@@ -177,6 +179,7 @@ export type Database = {
           recorded_at?: string | null
           recorded_by?: string | null
           reset?: boolean
+          result_kind?: string
           round?: number
           status?: string
           updated_at?: string
@@ -344,6 +347,94 @@ export type Database = {
           },
         ]
       }
+      placement_credits: {
+        Row: {
+          id: string
+          match_id: string
+          player_id: string
+          recorded_at: string
+          rule_version: string | null
+          source: string
+          void_reason: string | null
+          voided_at: string | null
+          voided_by: string | null
+        }
+        ComputedFields: never
+        Insert: {
+          id?: string
+          match_id: string
+          player_id: string
+          recorded_at?: string
+          rule_version?: string | null
+          source: string
+          void_reason?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
+        }
+        Update: {
+          id?: string
+          match_id?: string
+          player_id?: string
+          recorded_at?: string
+          rule_version?: string | null
+          source?: string
+          void_reason?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'placement_credits_player_id_fkey'
+            columns: ['player_id']
+            isOneToOne: false
+            referencedRelation: 'players'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'placement_credits_voided_by_fkey'
+            columns: ['voided_by']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      placement_qualifications: {
+        Row: {
+          created_at: string
+          credit_count: number
+          player_id: string
+          published_sp: number
+          qualified_at: string
+          rule_version: string | null
+        }
+        ComputedFields: never
+        Insert: {
+          created_at?: string
+          credit_count: number
+          player_id: string
+          published_sp: number
+          qualified_at?: string
+          rule_version?: string | null
+        }
+        Update: {
+          created_at?: string
+          credit_count?: number
+          player_id?: string
+          published_sp?: number
+          qualified_at?: string
+          rule_version?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'placement_qualifications_player_id_fkey'
+            columns: ['player_id']
+            isOneToOne: true
+            referencedRelation: 'players'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       players: {
         Row: {
           created_at: string
@@ -353,6 +444,7 @@ export type Database = {
           joined_on: string
           player_code: string
           profile_id: string | null
+          rating_status: string
           status: string
           updated_at: string
         }
@@ -364,6 +456,7 @@ export type Database = {
           id?: string
           joined_on?: string
           profile_id?: string | null
+          rating_status?: string
           status?: string
           updated_at?: string
         }
@@ -374,6 +467,7 @@ export type Database = {
           id?: string
           joined_on?: string
           profile_id?: string | null
+          rating_status?: string
           status?: string
           updated_at?: string
         }
@@ -1371,6 +1465,7 @@ export type Database = {
           opponent_id: string
           responded_at: string | null
           responded_by: string | null
+          result_kind: string
           status: string
           submitted_at: string | null
           submitted_by: string | null
@@ -1390,6 +1485,7 @@ export type Database = {
           opponent_id: string
           responded_at?: string | null
           responded_by?: string | null
+          result_kind?: string
           status?: string
           submitted_at?: string | null
           submitted_by?: string | null
@@ -1409,6 +1505,7 @@ export type Database = {
           opponent_id?: string
           responded_at?: string | null
           responded_by?: string | null
+          result_kind?: string
           status?: string
           submitted_at?: string | null
           submitted_by?: string | null
@@ -2200,7 +2297,65 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      placement_audit: {
+        Row: {
+          credits: number
+          current_sp: number
+          full_name: string
+          player_id: string
+          published_sp: number | null
+          qualification_rule_version: string | null
+          qualified_at: string | null
+          rating_status: string
+          required: number
+        }
+        Relationships: []
+      }
+      placement_progress: {
+        Row: {
+          credits: number
+          player_id: string
+          qualified_at: string | null
+          rating_status: string
+          required: number
+        }
+        Relationships: []
+      }
+      published_sp_balances: {
+        Row: {
+          current_sp: number
+          player_id: string
+          updated_at: string
+        }
+        Relationships: []
+      }
+      published_sp_leaderboard: {
+        Row: {
+          current_sp: number
+          full_name: string
+          player_id: string
+          rating_status: string
+          status: string
+          updated_at: string
+        }
+        Relationships: []
+      }
+      published_sp_transactions: {
+        Row: {
+          created_at: string
+          id: string
+          metadata: NonNullable<Json>
+          player_id: string
+          reference_id: string | null
+          reference_type: string | null
+          rule_version: string | null
+          sp_after: number
+          sp_before: number
+          sp_delta: number
+          transaction_type: string
+        }
+        Relationships: []
+      }
     }
     Functions: {
       apply_match_result: {
@@ -2279,6 +2434,15 @@ export type Database = {
       }
       mark_all_notifications_read: {
         Args: Record<string, never>
+        Returns: Json
+      }
+      mark_match_unplayed: {
+        Args: {
+          p_match_id: string
+          p_reason: string
+          p_result_kind: string
+          p_winner_entry_id: string
+        }
         Returns: Json
       }
       mark_notification_read: {

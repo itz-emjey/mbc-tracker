@@ -7,17 +7,24 @@
 
 export type PlayerStatus = 'active' | 'inactive' | 'suspended'
 export type PlayerGender = 'male' | 'female'
+export type PlayerRatingStatus = 'unrated' | 'rated'
 
 /** Roles allowed to add and correct player records, mirroring the SQL grants. */
 export const PLAYER_STAFF_ROLES = ['super_admin', 'tournament_manager', 'trainer'] as const
 
 export const PLAYER_STATUSES: readonly PlayerStatus[] = ['active', 'inactive', 'suspended']
 export const PLAYER_GENDERS: readonly PlayerGender[] = ['male', 'female']
+export const PLAYER_RATING_STATUSES: readonly PlayerRatingStatus[] = ['unrated', 'rated']
 
 export const PLAYER_STATUS_LABELS: Record<PlayerStatus, string> = {
   active: 'Active',
   inactive: 'Inactive',
   suspended: 'Suspended',
+}
+
+export const PLAYER_RATING_STATUS_LABELS: Record<PlayerRatingStatus, string> = {
+  unrated: 'Unrated',
+  rated: 'Rated',
 }
 
 export const PLAYER_GENDER_LABELS: Record<PlayerGender, string> = {
@@ -32,6 +39,7 @@ export interface PlayerRecord {
   full_name: string
   gender: PlayerGender | null
   status: PlayerStatus
+  rating_status: PlayerRatingStatus
   joined_on: string
 }
 

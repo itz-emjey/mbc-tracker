@@ -2,6 +2,8 @@ import { errorMessage } from '@/features/auth/api'
 import { getSupabaseClient } from '@/lib/supabase'
 
 import type {
+  PlacementAuditRecord,
+  PlacementProgressRecord,
   ReconciliationResult,
   SeasonDeductionBatchRecord,
   SeasonOperationResult,
@@ -44,34 +46,36 @@ export async function getCurrentRuleVersion(): Promise<SpRuleVersionRecord | nul
 
 export async function listSpLeaderboard(): Promise<SpLeaderboardEntry[]> {
   const { data, error } = await getSupabaseClient()
-    .from('sp_accounts')
-    .select('current_sp, player:players!sp_accounts_player_id_fkey(id, full_name, status)')
+    .from('published_sp_leaderboard')
+    .select('player_id, full_name, status, rating_status, current_sp')
     .order('current_sp', { ascending: false })
 
   if (error) throw new Error(errorMessage(error))
 
   type Row = {
     current_sp: number
-    player: { id: string; full_name: string; status: SpLeaderboardEntry['status'] } | null
+    full_name: string
+    player_id: string
+    rating_status: 'unrated' | 'rated'
+    status: SpLeaderboardEntry['status']
   }
 
-  return ((data ?? []) as unknown as Row[])
-    .filter((row) => row.player !== null)
-    .map((row) => ({
-      playerId: row.player!.id,
-      fullName: row.player!.full_name,
-      status: row.player!.status,
-      sp: row.current_sp,
-    }))
+  return ((data ?? []) as unknown as Row[]).map((row) => ({
+    playerId: row.player_id,
+    fullName: row.full_name,
+    status: row.status,
+    ratingStatus: row.rating_status,
+    sp: row.current_sp,
+  }))
 }
 
-/** One player's ledger, newest first. RLS limits this to the caller's own rows. */
+/** One player's published ledger, newest first (D17). */
 export async function listPlayerSpHistory(
   playerId: string,
   limit = 25,
 ): Promise<SpTransactionRecord[]> {
   const { data, error } = await getSupabaseClient()
-    .from('sp_transactions')
+    .from('published_sp_transactions')
     .select(
       'id, player_id, transaction_type, sp_before, sp_delta, sp_after, reference_type, reference_id, rule_version, created_at',
     )
@@ -82,6 +86,37 @@ export async function listPlayerSpHistory(
   if (error) throw new Error(errorMessage(error))
 
   return (data ?? []) as unknown as SpTransactionRecord[]
+}
+
+/** D15/D17: visible progress, never the provisional SP value. */
+export async function getPlacementProgress(
+  playerId: string,
+): Promise<PlacementProgressRecord | null> {
+  const { data, error } = await getSupabaseClient()
+    .from('placement_progress')
+    .select('player_id, rating_status, credits, required, qualified_at')
+    .eq('player_id', playerId)
+    .maybeSingle()
+
+  if (error) throw new Error(errorMessage(error))
+
+  return (data as PlacementProgressRecord | null) ?? null
+}
+
+/** D17: Super Admin-only audit of provisional balances and qualifications. */
+export async function listPlacementAudit(): Promise<PlacementAuditRecord[]> {
+  const { data, error } = await getSupabaseClient()
+    .from('placement_audit')
+    .select(
+      `player_id, full_name, rating_status, current_sp, credits, required,
+       qualified_at, published_sp, qualification_rule_version`,
+    )
+    .order('rating_status', { ascending: true })
+    .order('full_name', { ascending: true })
+
+  if (error) throw new Error(errorMessage(error))
+
+  return (data ?? []) as unknown as PlacementAuditRecord[]
 }
 
 /** Super Admin only; the RPC re-checks authority and never writes a repair. */

@@ -46,13 +46,15 @@ backend/
 31. `migrations/017_tournament_sp_award.sql`
 32. `migrations/018_seasonal_implementation.sql`
 33. `policies/018_seasons.sql`
+34. `migrations/019_placement_and_unplayed_sp.sql`
+35. `policies/019_placement.sql`
 
 The migrations are **not** idempotent: re-running one fails at the first
 `CREATE`, by design. Never add `IF NOT EXISTS` or `DROP` to a migration.
 
 ### Applying to the hosted Supabase project
 
-Open **Supabase Dashboard → SQL Editor** and run the thirty-three files above, in
+Open **Supabase Dashboard → SQL Editor** and run the thirty-five files above, in
 order, as the project owner. No dashboard schema edits are required, and no
 service-role key or database password is involved. Confirm afterwards that
 `public` contains every expected table and every one has RLS enabled, that the six
@@ -110,6 +112,20 @@ bounded retries, and a Super Admin notification. It also supersedes
 `award_friendly_sp` and `award_tournament_sp` so both resolve the season from the
 immutable finalization time and enforce the S6/S7 guards. Step 33 adds policy 018,
 which keeps `season_transitions` Super Admin-only.
+Step 34 (`019_placement_and_unplayed_sp.sql`) implements placement and
+unplayed-match SP (D15–D19): `players.rating_status` with existing rows backfilled
+`rated`, `result_kind` on `matches` and `friendly_matches`, `placement_credits`
+(unique per source/match/player, void-not-delete), immutable
+`placement_qualifications`, and `sp.placement.match_requirement = 10`. It
+supersedes `award_friendly_sp` and `award_tournament_sp` so a placement match moves
+only an Unrated participant and an unplayed result moves nothing, adds
+`record_placement_credit(...)`, `void_placement_credits(...)`, and
+`mark_match_unplayed(...)`, and supersedes `correct_match_result` for result-kind
+resets. It also adds the `published_sp_balances`, `published_sp_leaderboard`,
+`published_sp_transactions`, `placement_progress`, and Super Admin-only
+`placement_audit` views. Step 35 adds policy 019, which revokes direct
+`sp_accounts`/`sp_transactions` reads and grants the published views to
+`authenticated`.
 
 **Status:** files 1–20 are applied to the hosted `mbc-arena` project.
 Files 1–5 went in on 2026-10-30 and files 6–8 on 2026-10-31; files 9–12
@@ -129,13 +145,16 @@ applied migrations 011–017 to the hosted project, so the friendly award, the
 seasonal schema, player IDs and the social graph, tournament registration,
 payment receipts, the approved rule version, and the tournament award with F4
 reversals are live there. Migration 016 is what turns the friendly award on, and
-migration 017 turns the tournament award on. **Still to apply: migration 018
-(the seasonal implementation) and policy 018.** Migration 018 activates the
-seasonal ranking, transition, and leaderboard; a deduction still moves no SP
-until a Super Admin closes the season and approves the generated batch.
-Remaining product work is placement and unplayed-match SP. The repository
-intentionally stores no credentials that would let an agent apply migrations
-automatically.
+migration 017 turns the tournament award on. **Still to apply: migration 018,
+policy 018, migration 019, and policy 019, in that order.** Migration 018
+activates the seasonal ranking, transition, and leaderboard; a deduction still
+moves no SP until a Super Admin closes the season and approves the generated
+batch. Migration 019 adds placement and unplayed-match SP: `players.rating_status`,
+`result_kind`, `placement_credits`, immutable `placement_qualifications`, the
+placement-aware award functions, `mark_match_unplayed(...)`, and the published
+read views; policy 019 replaces the direct `sp_accounts`/`sp_transactions` client
+reads. The repository intentionally stores no credentials that would let an agent
+apply migrations automatically.
 
 ## Seeds
 
@@ -219,8 +238,8 @@ npm run test:db
 `backend/tests/run.mjs` runs a real PostgreSQL engine compiled to WebAssembly
 (PGlite), stubs `auth.users` and `auth.uid()` with the same shape Supabase
 provides (the token, bool, and integer columns GoTrue reads are declared
-nullable so the seed's repair pass is exercised), applies all eighteen migrations
-and all fifteen policy files, and asserts (185 checks):
+nullable so the seed's repair pass is exercised), applies all nineteen migrations
+and all sixteen policy files, and asserts (195 checks):
 
 - every expected table exists and has RLS enabled;
 - the migrations fail loudly on a second run;
@@ -318,6 +337,18 @@ and all fifteen policy files, and asserts (185 checks):
   transition checkpoints with retry and recovery, and the `seasonal_standings`
   leaderboard; a zero-match player with no previous ranking stays unranked and
   undeducted, and a replay of start or close reports `already_processed`;
+- placement and unplayed SP (D15–D19, migration 019): a new player starts
+  `unrated`, existing fixtures are backfilled `rated`, an Unrated player accrues
+  hidden provisional SP and publishes it unchanged at the 10th eligible credit,
+  qualification is permanent and idempotent, a Rated participant in a placement
+  match gets no ledger row (including a Rated doubles partner), a walkover,
+  no-show, forfeit, withdrawal, or disqualification writes no row and earns no
+  credit, a retirement counts only as `result_kind = 'retirement'`, a correction
+  neither duplicates a credit nor re-qualifies a player, `anon` and ordinary
+  members cannot read `sp_accounts`, `sp_transactions`, or the placement tables
+  directly, an Unrated player sees progress but not their balance or ledger, a
+  Super Admin can read `placement_audit`, and the public leaderboard excludes
+  Unrated players;
 - player IDs and social graph (migration 013): every player receives a stable,
   unique, readable `MBC-XXXXXXXX` code, a request needs an active linked target
   and can be accepted once, a declined request creates no friendship and can be
@@ -342,7 +373,7 @@ supabase gen types typescript --project-id <project-ref> --schema public \
 ```
 
 The committed `frontend/src/types/database.ts` covers migrations 001–010 and
-013–018: the
+013–019: the
 `players` table and its profile relationship, the four auth-lifecycle RPCs, the
 three Group K RPCs (`set_profile_roles`, `link_player_account`,
 `unlink_player_account`), the tournament tables and RPCs, the
@@ -354,7 +385,10 @@ friendship and notification tables plus their six RPCs, and the tournament
 payment, invitation, poster, fee, self-entry, and withdrawal RPCs, and the
 seasonal tables (`seasons`, `season_balances`, `season_player_results`,
 `season_deduction_batches`, `season_deduction_entries`, `season_transitions`,
-`season_transition_steps`) plus the seasonal RPCs and `matches.finalized_at`. The Supabase
+`season_transition_steps`) plus the seasonal RPCs and `matches.finalized_at`, and
+the placement additions (`players.rating_status`, `result_kind` on `matches` and
+`friendly_matches`, `placement_credits`, `placement_qualifications`, the
+placement RPCs, and the five published views). The Supabase
 CLI was unavailable in the development environment, so those
 signatures were checked against `migrations/004_players.sql`,
 `migrations/005_tournaments.sql`, `migrations/006_shuttlepower_rules.sql`,
@@ -363,7 +397,7 @@ signatures were checked against `migrations/004_players.sql`,
 `migrations/013_players_friends_notifications.sql`, and
 `migrations/014_tournament_registration.sql` and
 added to the committed file; application builds treat it as authoritative.
-Regenerate it against the hosted project after step 33 and after every later
+Regenerate it against the hosted project after step 35 and after every later
 migration. Never edit regenerated output by hand.
 
 ## Security notes

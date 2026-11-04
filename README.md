@@ -103,6 +103,8 @@ backend/migrations/016_approved_sp_rule.sql
 backend/migrations/017_tournament_sp_award.sql
 backend/migrations/018_seasonal_implementation.sql
 backend/policies/018_seasons.sql
+backend/migrations/019_placement_and_unplayed_sp.sql
+backend/policies/019_placement.sql
 ```
 
 The migrations are **not** idempotent: re-running one fails at the first `CREATE` by design. There
@@ -182,35 +184,40 @@ Open the printed URL (Vite defaults to `http://localhost:5173`), sign in, and Su
 `/admin` for approvals and access changes. Every approved member can open **Players** for the club
 directory, and the account menu's **My profile** opens the signed-in member's linked player record.
 Tournament staff get **Tournaments** to run events and results. **ShuttlePower** shows the current-SP
-leaderboard with rank titles and per-rank positions, your own ledger history, and the live rule version;
-a Super Admin also gets a balance check that compares every cached balance with its ledger sum. **Training** and **Payments** are
+leaderboard with rank titles and per-rank positions, your own ledger history, the live rule version, the
+seasonal standings, and placement progress for an Unrated player; a Super Admin also gets a balance check that
+compares every cached balance with its ledger sum and a placement audit of provisional values. **Training** and **Payments** are
 visible to every approved member: staff schedule sessions and record fees, while players see their own
 attendance, their period balance, and their payment history.
 
 ## Tests and checks
 
 ```bash
-npm run test:db                       # 185 SQL checks on real Postgres (PGlite), no Docker
+npm run test:db                       # 195 SQL checks on real Postgres (PGlite), no Docker
 npm --prefix frontend test            # 228 frontend unit tests (Vitest)
 npm --prefix frontend run typecheck
 npm --prefix frontend run lint
 npm --prefix frontend run build
 ```
 
-`npm run test:db` applies all eighteen migrations and all fifteen policy files to a real PostgreSQL
+`npm run test:db` applies all nineteen migrations and all sixteen policy files to a real PostgreSQL
 engine, stubs Supabase Auth (`auth.users`, `auth.uid()`), and covers schema, RLS, column privileges,
 ownership/privacy negatives, approval idempotency, starting SP, player role/link RPCs, tournament
 visibility, D10 entry rules, draw validation, result advancement, correction order, the SP rule-version
 guardrails, balance reconciliation, training sessions and attendance, partial-payment and soft-void rules,
 player IDs, friend request/accept, notifications, per-player tournament fees, guest partners, partner
 invitations, self-entry, draw eligibility, the friendly and tournament SP awards with reversals, the seasonal
-ranking, snapshot, deduction, and transition rules, and the development seed and bootstrap scripts.
+ranking, snapshot, deduction, and transition rules, placement credits and qualification, unplayed-result
+handling, the published read views, and the development seed and bootstrap scripts.
 
 ## Security notes
 
 - The browser only ever holds the anon/publishable key; RLS and RPC guards authorize every read and
   write. The service-role key is never used by the frontend.
 - `sp_transactions` is append-only; clients cannot write SP, roles, or audit logs.
+- Clients read SP only through the published views; direct `sp_accounts`/`sp_transactions` access is
+  revoked. An Unrated player sees placement progress, never the provisional balance or ledger; only a
+  Super Admin can read provisional values.
 - Players read only their own profile and private records.
 - Seed data is fictional. Never add real member data, email addresses, or phone numbers.
 - Email confirmation is disabled for development. Production must enable it.
@@ -254,21 +261,24 @@ files were applied.
 Phase 5 adds friendly matches: singles challenges between two active players with linked accounts, the
 winner submits the result, and the losing side confirms or disputes it within 24 hours (a scheduled job
 auto-approves after that). A disputed result stays disputed — no resolution process is invented while the
-club rule is open. **A confirmed friendly and a completed tournament match now award ShuttlePower** under the
-approved `approved-2026-11` rule (D13, 2026-11-03); the awards are idempotent and write one immutable ledger row
-per player. Migration 017 adds the tournament award and F4's compensating reversals (D14): a winner-flip correction
+club rule is open. **A confirmed friendly, a completed tournament match, and an eligible placement match now award
+ShuttlePower** under the approved `approved-2026-11` rule (D13, 2026-11-03); the awards are idempotent and write one
+immutable ledger row per player (none for a Rated participant in a placement match). Migration 017 adds the tournament
+award and F4's compensating reversals (D14): a winner-flip correction
 reverses the prior rows and re-awards under the original rule version, while a score-only correction writes nothing.
-Migrations 010, 016, and 017 are verified locally and applied to the hosted project; migration 018 and policy 018
-still need applying.
+Migrations 010, 016, and 017 are verified locally and applied to the hosted project; migrations 018 and 019 and
+policies 018 and 019 still need applying, in that order.
 
 Phase 4's formula is approved and live for friendlies and tournaments. Migration 006 adds versioned SP rule
 configuration with a provisional, disabled proposal and a reconciliation function; migration 016 records the
 club-approved formula as the enabled `approved-2026-11` version, and migration 017 implements the tournament award
 and corrections. The pure engine in `domain/sp.ts` uses the approved order (clamp → round → multiply), the approved
 2× tournament impact, and the even doubles split. `/shuttlepower` shows the leaderboard with rank titles and per-rank
-positions, your own ledger history, the live rule version, and the seasonal standings panel. Phase 8 is implemented
-locally in migration 018: it computes the seasonal ranking from eligible finalized tournament matches, freezes the
-immutable snapshot and deduction batch on close, runs the idempotent January transition with retries and Super Admin
-recovery, and adds `/admin/seasons` for season and deduction management. Placement and unplayed-match SP remain
-unbuilt; the open decisions are tracked in `PLAN.md` §7 and §9. Migration 018 and policy 018 are local only and still
-need applying to the hosted project.
+positions, your own ledger history, the live rule version, the placement progress panel, and the seasonal standings
+panel. Phase 8 is implemented locally in migration 018: it computes the seasonal ranking from eligible finalized
+tournament matches, freezes the immutable snapshot and deduction batch on close, runs the idempotent January
+transition with retries and Super Admin recovery, and adds `/admin/seasons` for season and deduction management.
+Migration 019 implements placement and unplayed-match SP (D15-D19): new players stay publicly Unrated for 10
+eligible finalized matches while provisional SP is hidden, publish unchanged at qualification, and move no SP for
+walkovers, no-shows, forfeits, withdrawals, or disqualifications. Migration 019 and policy 019 are local only and
+still need applying to the hosted project after 018.

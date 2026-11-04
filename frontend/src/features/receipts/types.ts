@@ -32,10 +32,7 @@ export const RECEIPT_REVIEW_ROLES: Record<ReceiptPurpose, readonly Role[]> = {
   jersey: ['super_admin', 'trainer'],
 }
 
-export function canReviewReceipt(
-  roles: readonly Role[],
-  purpose: ReceiptPurpose,
-): boolean {
+export function canReviewReceipt(roles: readonly Role[], purpose: ReceiptPurpose): boolean {
   return RECEIPT_REVIEW_ROLES[purpose].some((role) => roles.includes(role))
 }
 

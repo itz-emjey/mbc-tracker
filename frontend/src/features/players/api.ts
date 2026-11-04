@@ -13,7 +13,8 @@ import type { LinkedProfile, PlayerInput, PlayerRecord } from './types'
  * changes cross audited RPCs instead.
  */
 
-const PLAYER_COLUMNS = 'id, player_code, profile_id, full_name, gender, status, joined_on'
+const PLAYER_COLUMNS =
+  'id, player_code, profile_id, full_name, gender, status, rating_status, joined_on'
 
 export async function listPlayers(): Promise<PlayerRecord[]> {
   const { data, error } = await getSupabaseClient()
@@ -57,13 +58,14 @@ export async function getPlayerByProfile(profileId: string): Promise<PlayerRecor
 }
 
 /**
- * The cached SP balance for one player, or `null` when no row is visible.
- * `sp_accounts` is readable by club members, but a player record without an
- * account has no balance row; the UI hides the card in both cases.
+ * The published SP balance for one player, or `null` when no row is visible.
+ * An Unrated player's provisional balance is intentionally absent (D17), and a
+ * player record without an account has no balance row; the UI hides the card in
+ * both cases.
  */
 export async function getPlayerSp(playerId: string): Promise<number | null> {
   const { data, error } = await getSupabaseClient()
-    .from('sp_accounts')
+    .from('published_sp_balances')
     .select('current_sp')
     .eq('player_id', playerId)
     .maybeSingle()

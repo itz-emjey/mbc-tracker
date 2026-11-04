@@ -23,6 +23,7 @@ export interface SpLeaderboardEntry {
   playerId: string
   fullName: string
   status: PlayerStatus
+  ratingStatus: 'unrated' | 'rated'
   sp: number
 }
 
@@ -49,6 +50,23 @@ export interface ReconciliationResult {
   checked: number
   mismatches: ReconciliationMismatch[]
   consistent: boolean
+}
+
+/** D15/D17: placement progress never carries the provisional SP value. */
+export interface PlacementProgressRecord {
+  player_id: string
+  rating_status: 'unrated' | 'rated'
+  credits: number
+  required: number
+  qualified_at: string | null
+}
+
+/** D17: Super Admin-only audit row, including the provisional balance. */
+export interface PlacementAuditRecord extends PlacementProgressRecord {
+  full_name: string
+  current_sp: number
+  published_sp: number | null
+  qualification_rule_version: string | null
 }
 
 export type SeasonStatus = 'scheduled' | 'active' | 'closed'

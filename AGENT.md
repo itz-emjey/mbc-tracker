@@ -300,6 +300,14 @@ Confirmed rules:
     in migration 016. Confirmed friendlies and completed tournament matches
     now award SP, and F4 (D14, migration 017) adds compensating reversals so a
     corrected tournament result re-awards under the original rule version.
+    **Placement and unplayed-match SP are approved (D15–D19, 2026-11-04) and
+    implemented locally in migration 019:** a new player stays publicly Unrated
+    for 10 eligible finalized matches while provisional SP (starting at 1,000)
+    stays hidden and is published unchanged at qualification; only a Super Admin
+    may read a provisional value; walkover, no-show, forfeit before play,
+    withdrawal before play, and disqualification move no SP; a retirement counts
+    only with an official final result; and an Unrated doubles partner receives
+    their own share only.
 
 > **Reconciliation (2026-11-02).** These bullets now reflect the approved
 > decisions S1–S23 in `PLAN.md` §7.3. Superseded drafts: three-month seasons
@@ -311,22 +319,20 @@ Confirmed rules:
 
 The match-SP formula is **approved** (D13, `PLAN.md` §7.1,
 `docs/sp-formula-signoff.md` F1–F3) and the enabled `approved-2026-11` rule
-awards confirmed friendlies and completed tournament matches. F4 (D14,
-migration 017) adds the compensating reversals. Do not change its values
-without a new recorded approval and a new rule version; never edit the applied
+awards confirmed friendlies, completed tournament matches, and placement
+matches. F4 (D14, migration 017) adds the compensating reversals, and D18
+(migration 019) excludes unplayed results. Do not change its values without a
+new recorded approval and a new rule version; never edit the applied
 `provisional-2026-11` or `approved-2026-11` rows.
 
 Still open:
 
-1.  **Walkover, withdrawal, disqualification, and forfeit SP treatment.**
-    Placement eligibility is approved (D12), but unplayed-match SP is
-    unapproved.
-2.  **The near-zero doubles floor interaction.** If one partner is clamped at
+1.  **The near-zero doubles floor interaction.** If one partner is clamped at
     0, whether the other partner's share is reduced is still open
     (`PLAN.md` §7.1.5 #18).
-3.  **Placement implementation.** The 10-match system, initial provisional
-    value, visibility, qualification, and the D11 Unrated-share question are
-    still unapproved.
+2.  **Dispute resolution.** A resolved dispute is eligible in principle (D12),
+    but the workflow that produces the resolution is still undecided
+    (`PLAN.md` §7 rule 8).
 
 Decided and no longer open: the friendly and tournament formula and curve
 (D13), the per-match minimum and maximum (D13), whether SP can go below zero
@@ -334,9 +340,12 @@ Decided and no longer open: the friendly and tournament formula and curve
 by fixed position), the seasonal rank basis (S8, S10–S12), the deduction target
 (S1 and S8: current SP only), the doubles split and rounding (D13: even split,
 lower-id odd point, half-up before the multiplier), corrected/invalidated
-results (D14: compensating rows only, re-award under the original version), and
-the seasonal implementation (S1–S23, migration 018: ranking, snapshot, deduction
-batch, transition job, recovery, and leaderboard built locally).
+results (D14: compensating rows only, re-award under the original version),
+unplayed-match SP (D18: no movement, no placement credit), placement (D15–D19:
+10 matches, hidden 1,000 starting SP, Super Admin-only visibility, permanent
+qualification, own-share doubles), and the seasonal implementation (S1–S23,
+migration 018: ranking, snapshot, deduction batch, transition job, recovery, and
+leaderboard built locally).
 
 Recommended separation of values:
 
@@ -913,12 +922,14 @@ in one giant code-generation pass.
 -   Achievement archive and historical leaderboard, read from the snapshots
     (S19).
 
-> **Implemented locally (2026-11-04, migration 018).** The seasonal ranking,
-> immutable snapshot, fixed-tier deduction batch, transition job with retries
-> and Super Admin recovery, and the seasonal leaderboard are built, with policy
-> 018 and the `/admin/seasons` screen. Migration 018 is not yet applied to the
-> hosted project. Placement matches (§7.2) and SP for unplayed matches remain
-> unbuilt and unapproved.
+> **Implemented locally (2026-11-04, migrations 018 and 019).** The seasonal
+> ranking, immutable snapshot, fixed-tier deduction batch, transition job with
+> retries and Super Admin recovery, and the seasonal leaderboard are built, with
+> policy 018 and the `/admin/seasons` screen. Placement matches and SP for
+> unplayed matches are implemented in migration 019 and policy 019, with
+> placement progress, hidden provisional balances, and a Super Admin audit panel
+> on `/shuttlepower`. Migrations 018 and 019 and policies 018 and 019 are not yet
+> applied to the hosted project; apply them in that order.
 
 ### Phase 9 --- Quality and deployment
 
@@ -1010,8 +1021,9 @@ must not be silently decided by the coding agent.
 > `approved-2026-11` rule awards confirmed friendlies and completed tournament
 > matches. **F4 was approved the same day (D14)** and is implemented in
 > migration 017 (`docs/sp-formula-signoff.md`). **The seasonal rules (S1–S23) are
-> implemented locally in migration 018**; placement and unplayed-match SP remain
-> open.
+> implemented locally in migration 018**; **placement and unplayed-match SP are
+> approved as D15–D19 and implemented locally in migration 019 and policy 019**,
+> pending hosted apply after 018.
 
   -----------------------------------------------------------------------
   Topic                   Current understanding   Still needs
@@ -1047,9 +1059,11 @@ must not be silently decided by the coding agent.
                                                   pairing/eligibility
                                                   rule
 
-  Walkovers/forfeits      Tournament matches      Whether and how they
-                          supported               affect SP (unplayed-match
-                                                  SP, still open)
+  Walkovers/forfeits      Tournament matches      **Decided — D18: no SP
+                          supported               movement and no placement
+                                                  credit for unplayed results;
+                                                  retirement counts only with
+                                                  an official final result**
 
   SP lower bound          Not specified           **Decided — D13: floor
                                                   0**

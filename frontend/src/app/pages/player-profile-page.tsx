@@ -29,10 +29,13 @@ import { PlayerFormDialog } from '@/features/players/player-form-dialog'
 import { FriendsCard } from '@/features/players/friends-card'
 import {
   PLAYER_GENDER_LABELS,
+  PLAYER_RATING_STATUS_LABELS,
   PLAYER_STAFF_ROLES,
   type LinkedProfile,
   type PlayerRecord,
 } from '@/features/players/types'
+import { getPlacementProgress } from '@/features/shuttlepower/api'
+import type { PlacementProgressRecord } from '@/features/shuttlepower/types'
 import { formatDate } from '@/lib/format'
 
 interface PlayerProfilePageProps {
@@ -45,6 +48,7 @@ export function PlayerProfilePage({ self = false }: PlayerProfilePageProps) {
   const { id } = useParams<{ id: string }>()
   const [player, setPlayer] = React.useState<PlayerRecord | null>(null)
   const [sp, setSp] = React.useState<number | null>(null)
+  const [placement, setPlacement] = React.useState<PlacementProgressRecord | null>(null)
   const [linkedProfile, setLinkedProfile] = React.useState<LinkedProfile | null>(null)
   const [roles, setRoles] = React.useState<Role[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -63,6 +67,7 @@ export function PlayerProfilePage({ self = false }: PlayerProfilePageProps) {
       setError(null)
       setPlayer(null)
       setSp(null)
+      setPlacement(null)
       setLinkedProfile(null)
       setRoles([])
 
@@ -79,8 +84,9 @@ export function PlayerProfilePage({ self = false }: PlayerProfilePageProps) {
           return
         }
 
-        const [balance, profile] = await Promise.all([
+        const [balance, placementProgress, profile] = await Promise.all([
           getPlayerSp(record.id),
+          getPlacementProgress(record.id),
           record.profile_id ? getLinkedProfile(record.profile_id) : Promise.resolve(null),
         ])
 
@@ -89,6 +95,7 @@ export function PlayerProfilePage({ self = false }: PlayerProfilePageProps) {
         if (!active) return
 
         setSp(balance)
+        setPlacement(placementProgress)
         setLinkedProfile(profile)
         setRoles(profileRoles)
       } catch (loadError) {
@@ -165,6 +172,11 @@ export function PlayerProfilePage({ self = false }: PlayerProfilePageProps) {
   }
 
   const progress = sp === null ? null : tierFor(sp)
+  const unrated = player.rating_status === 'unrated'
+  const placementCredits = placement?.credits ?? 0
+  const placementRequired = placement?.required ?? 10
+  const placementRatio =
+    placementRequired > 0 ? Math.min(1, placementCredits / placementRequired) : 0
 
   return (
     <>
@@ -212,6 +224,7 @@ export function PlayerProfilePage({ self = false }: PlayerProfilePageProps) {
               </p>
               <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                 {progress ? <RankBadge tier={progress.tier} /> : null}
+                {unrated ? <Badge tone="warning">Unrated</Badge> : null}
                 <StatusBadge status={player.status} />
               </div>
               <p className="mt-1.5 text-[11px] text-text-muted">
@@ -221,7 +234,25 @@ export function PlayerProfilePage({ self = false }: PlayerProfilePageProps) {
             </div>
           </div>
 
-          {sp !== null && progress ? (
+          {unrated ? (
+            <div className="sm:min-w-56">
+              <p className="text-[10px] uppercase tracking-[0.14em] text-text-faint">
+                ShuttlePower
+              </p>
+              <p className="mt-1 font-mono text-3xl font-semibold leading-none tabular-nums text-text-muted">
+                Hidden
+              </p>
+              <PowerMeter
+                className="mt-2"
+                progress={placementRatio}
+                label={`${placementCredits} of ${placementRequired} placement matches`}
+              />
+              <p className="mt-1 text-[11px] text-text-muted">
+                {placementCredits}/{placementRequired} placement matches · published unchanged at
+                qualification
+              </p>
+            </div>
+          ) : sp !== null && progress ? (
             <div className="sm:min-w-56">
               <p className="text-[10px] uppercase tracking-[0.14em] text-text-faint">
                 ShuttlePower
@@ -275,6 +306,19 @@ export function PlayerProfilePage({ self = false }: PlayerProfilePageProps) {
                 </dd>
               </div>
               <div>
+                <dt className="text-xs uppercase tracking-[0.06em] text-text-faint">Rating</dt>
+                <dd className="mt-1">
+                  <Badge tone={unrated ? 'warning' : 'neutral'}>
+                    {PLAYER_RATING_STATUS_LABELS[player.rating_status]}
+                  </Badge>
+                  {unrated ? (
+                    <span className="ml-2 text-xs text-text-muted">
+                      {placementCredits}/{placementRequired} placement matches
+                    </span>
+                  ) : null}
+                </dd>
+              </div>
+              <div>
                 <dt className="text-xs uppercase tracking-[0.06em] text-text-faint">Roles</dt>
                 <dd className="mt-1">
                   {player.profile_id === null ? (
@@ -316,6 +360,23 @@ export function PlayerProfilePage({ self = false }: PlayerProfilePageProps) {
                 <p className="text-2xl font-semibold tabular-nums text-text">
                   {sp.toLocaleString()}
                   <span className="ml-1 text-sm font-normal text-text-muted">SP</span>
+                </p>
+              </CardContent>
+            </Card>
+          ) : unrated ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Zap className="size-4 text-text-faint" aria-hidden="true" />
+                  ShuttlePower
+                </CardTitle>
+                <CardDescription>Provisional balance, hidden during placement.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-semibold tabular-nums text-text-muted">Hidden</p>
+                <p className="mt-1 text-sm text-text-muted">
+                  {placementCredits}/{placementRequired} eligible matches. Your balance is published
+                  unchanged when placement ends.
                 </p>
               </CardContent>
             </Card>

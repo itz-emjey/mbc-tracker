@@ -16,6 +16,7 @@ function player(
     full_name,
     gender: null,
     status,
+    rating_status: 'rated',
     joined_on,
   }
 }

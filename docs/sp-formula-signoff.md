@@ -10,7 +10,8 @@
 **Status:** F1–F3 **approved 2026-11-03 by the club owner** and recorded in `PLAN.md` §7 as decision **D13**. F4
 (corrected and invalidated results) was **approved the same day as D14** and implemented in migration 017. Migration
 016 inserts and enables the `approved-2026-11` rule version, so confirmed friendlies and completed tournament matches
-now award SP, and a corrected tournament result reverses and re-awards under the original rule version.
+now award SP, and a corrected tournament result reverses and re-awards under the original rule version. **Placement
+and unplayed-match SP were approved 2026-11-04 as D15–D19** and implemented locally in migration 019 and policy 019.
 
 **Read time:** about 5 minutes. Every number has a one-line reason, and every example is computed from the formula
 on this page.
@@ -23,8 +24,9 @@ The app records matches. **F1–F3 were approved on 2026-11-03 and confirmed fri
 now award SP. F4 was approved the same day**, so a corrected or invalidated played result now has an approved SP
 treatment. That is deliberate: the numbers are the club's decision, never a developer's guess.
 
-This page asked for the three formula decisions that switch SP on, and nothing else. It deliberately leaves out the
-placement system for new players, the treatment of unplayed matches, and disputes — each is a separate gate.
+This page asked for the three formula decisions that switch SP on, and nothing else. The placement system for new
+players, the treatment of unplayed matches, and the doubles share were approved later as **D15–D19** (2026-11-04) and
+implemented in migration 019; dispute resolution remains a separate open workflow.
 
 ## Already decided — do not re-decide these
 
@@ -131,9 +133,10 @@ of the team adjustment. The recommended treatment is to leave the other partner'
 records that interaction as still open (which matters only for players near 0 SP). Approving F2 and F3 did not
 settle it.
 
-**Not covered here.** A doubles pair where one partner is still in placement is affected by the already-approved D11
-rule (the rated partner does not move), which makes the newcomer move at half rate. That is a placement question, not
-a formula question, and it only matters if placement is approved.
+**Placement doubles (approved later).** A doubles pair where one partner is still in placement is governed by D11 and
+D19: the Rated partner does not move, and the Unrated partner receives their own share only — the Rated partner's
+share is not applied, and the odd point follows the lower-player-id split and may be discarded. That is a placement
+rule, not a change to the formula, and migration 019 implements it.
 
 ## Decision F4 — what happens when a result is corrected or invalidated
 
@@ -206,26 +209,25 @@ compensating `reversal` rows, re-award under the original rule version, and one 
 
 ## What is still missing
 
-F1–F4 are approved and both the friendly and tournament awards are live. These items remain open:
+F1–F4 are approved and the friendly, tournament, and placement awards are live locally. Nothing in this sign-off
+remains open. Migration 019 and policy 019 add the later approved scope:
 
-| # | What | Why it matters |
+| # | What | Status |
 | --- | --- | --- |
-| 1 | **Placement** | New-player placement (§7 rules 16, 20–25) is a separate gate and is not implemented. |
-| 2 | **Unplayed-match SP** | Walkovers, no-shows, forfeits, disqualifications, and withdrawals have no approved SP rule. |
+| 1 | **Placement** | **Approved as D15–D17 and implemented in migration 019.** 10 eligible matches, hidden 1,000 starting SP, Super Admin-only visibility, publish unchanged at qualification. |
+| 2 | **Unplayed-match SP** | **Approved as D18 and implemented in migration 019.** Walkover, no-show, forfeit before play, withdrawal before play, and disqualification move no SP; retirement counts only with an official final result. |
+| 3 | **Doubles share during placement** | **Approved as D19 and implemented in migration 019.** The Unrated partner receives their own share only; the Rated partner's share is not applied. |
 
 The seasonal rules (S1–S23) are outside this formula sign-off and are implemented locally in migration 018 (ranking,
-snapshot, deduction batch, transition job, recovery, and leaderboard); migration 018 and policy 018 still need
-applying to the hosted project.
+snapshot, deduction batch, transition job, recovery, and leaderboard). Migrations 018 and 019 and policies 018 and 019
+still need applying to the hosted project, in that order.
 
 ## What this page does not approve
 
-- **Placement for new players** (§7 rules 16, 20–25) — a separate gate.
-- **SP for unplayed matches** — walkovers, no-shows, forfeits before play, disqualifications, and withdrawals
-  (§7 rule 9; still open after F4).
-- **Dispute resolution** (§7 rule 8).
-- **Seasons and deductions** — the rules are approved (S1–S23) and implemented locally in migration 018; migration 018
-  and policy 018 still need applying to the hosted project.
-- **Any further code, migration, or rule change.** F1–F4 are in force; F4 created no version.
+- **Dispute resolution** (§7 rule 8) — the only placement-related workflow still open.
+- **The near-zero doubles floor interaction** — an implementation detail in `PLAN.md` §7.1.5 #18, not a formula change.
+- **Any further code, migration, or rule change.** F1–F4 are in force; F4 created no version. D15–D19 added no new
+  formula version because placement reuses `approved-2026-11`.
 
 ---
 
