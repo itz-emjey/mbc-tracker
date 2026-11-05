@@ -48,13 +48,15 @@ backend/
 33. `policies/018_seasons.sql`
 34. `migrations/019_placement_and_unplayed_sp.sql`
 35. `policies/019_placement.sql`
+36. `migrations/020_friendly_doubles.sql`
+37. `policies/020_friendly_doubles.sql`
 
 The migrations are **not** idempotent: re-running one fails at the first
 `CREATE`, by design. Never add `IF NOT EXISTS` or `DROP` to a migration.
 
 ### Applying to the hosted Supabase project
 
-Open **Supabase Dashboard → SQL Editor** and run the thirty-five files above, in
+Open **Supabase Dashboard → SQL Editor** and run the thirty-seven files above, in
 order, as the project owner. No dashboard schema edits are required, and no
 service-role key or database password is involved. Confirm afterwards that
 `public` contains every expected table and every one has RLS enabled, that the six
@@ -125,7 +127,19 @@ resets. It also adds the `published_sp_balances`, `published_sp_leaderboard`,
 `published_sp_transactions`, `placement_progress`, and Super Admin-only
 `placement_audit` views. Step 35 adds policy 019, which revokes direct
 `sp_accounts`/`sp_transactions` reads and grants the published views to
-`authenticated`.
+`authenticated`. Step 36 (`020_friendly_doubles.sql`) implements D20: a friendly
+may be singles or doubles, the challenger names a partner at creation and the
+challenged captain names theirs on acceptance, either winning partner submits
+once, both losing partners approve or either disputes, and the result confirms
+when both approve or at the 24-hour deadline if neither disputes. It adds the
+`match_type`, partner, and per-partner approval columns, the `friendly_team()`
+helper, `create_doubles_friendly_challenge(...)`, and
+`respond_doubles_friendly_challenge(...)`, and supersedes the shared submit,
+approve, dispute, and award functions. Doubles uses the D13 team average, an
+even split with the odd point to the lower player id, and the D19 own-share rule
+in placement matches; any pairing is allowed and D10 stays tournament-only.
+Step 37 adds policy 020, which lets both partners read a match while direct
+writes stay denied.
 
 **Status:** files 1–20 are applied to the hosted `mbc-arena` project.
 Files 1–5 went in on 2026-10-30 and files 6–8 on 2026-10-31; files 9–12
@@ -146,15 +160,19 @@ seasonal schema, player IDs and the social graph, tournament registration,
 payment receipts, the approved rule version, and the tournament award with F4
 reversals are live there. Migration 016 is what turns the friendly award on, and
 migration 017 turns the tournament award on. **Still to apply: migration 018,
-policy 018, migration 019, and policy 019, in that order.** Migration 018
+policy 018, migration 019, policy 019, migration 020, and policy 020, in that
+order.** Migration 018
 activates the seasonal ranking, transition, and leaderboard; a deduction still
 moves no SP until a Super Admin closes the season and approves the generated
 batch. Migration 019 adds placement and unplayed-match SP: `players.rating_status`,
 `result_kind`, `placement_credits`, immutable `placement_qualifications`, the
 placement-aware award functions, `mark_match_unplayed(...)`, and the published
 read views; policy 019 replaces the direct `sp_accounts`/`sp_transactions` client
-reads. The repository intentionally stores no credentials that would let an agent
-apply migrations automatically.
+reads. Migration 020 adds friendly doubles (D20): the `match_type` and partner
+columns, per-partner approval timestamps, the doubles create/respond RPCs, and
+doubles-aware submit, approve, dispute, and award behaviour; policy 020 lets both
+partners read the match. The repository intentionally stores no credentials that
+would let an agent apply migrations automatically.
 
 ## Seeds
 
@@ -238,8 +256,8 @@ npm run test:db
 `backend/tests/run.mjs` runs a real PostgreSQL engine compiled to WebAssembly
 (PGlite), stubs `auth.users` and `auth.uid()` with the same shape Supabase
 provides (the token, bool, and integer columns GoTrue reads are declared
-nullable so the seed's repair pass is exercised), applies all nineteen migrations
-and all sixteen policy files, and asserts (195 checks):
+nullable so the seed's repair pass is exercised), applies all twenty migrations
+and all seventeen policy files, and asserts (205 checks):
 
 - every expected table exists and has RLS enabled;
 - the migrations fail loudly on a second run;
@@ -315,6 +333,15 @@ and all sixteen policy files, and asserts (195 checks):
   with a replay awarding nothing and reconciliation still exact, participants
   and Super Admins see a match while an unrelated member sees none, `anon` is
   denied, and the internal award helper is callable by nobody but the finalizers;
+- friendly doubles (D20, migration 020): a doubles challenge needs a complete,
+  distinct team and the challenged captain names the opposing partner on
+  acceptance, either winning partner submits once, both losing partners may
+  approve and the result confirms only when both do, either losing partner can
+  dispute and freeze the whole result, an odd team adjustment goes to the lower
+  player id on each side, a doubles placement moves only the Unrated partner's
+  own share, the 24-hour job confirms with one approval when the other partner
+  stays silent, both partners can read the match while an outsider cannot, and
+  `anon` is denied;
 - tournament SP award and reversals (Phase 4, migration 017): a completed match
   awards both sides from the approved rule, a replay writes nothing, a doubles
   team splits evenly, a winner-flip correction reverses every prior row and
@@ -373,14 +400,15 @@ supabase gen types typescript --project-id <project-ref> --schema public \
 ```
 
 The committed `frontend/src/types/database.ts` covers migrations 001–010 and
-013–019: the
+013–020: the
 `players` table and its profile relationship, the four auth-lifecycle RPCs, the
 three Group K RPCs (`set_profile_roles`, `link_player_account`,
 `unlink_player_account`), the tournament tables and RPCs, the
 `sp_rule_versions` table plus `reconcile_sp_balances()`, the four training
 tables plus their six RPCs, the eight club activity tables plus their twelve
 RPCs, `jersey_designs.image_path` plus `set_jersey_design_image(uuid,text)`, and
-the `friendly_matches` table plus its seven RPCs, `players.player_code`, the
+the `friendly_matches` table plus its nine RPCs (including the D20 doubles create
+and respond functions and the partner/approval columns), `players.player_code`, the
 friendship and notification tables plus their six RPCs, and the tournament
 payment, invitation, poster, fee, self-entry, and withdrawal RPCs, and the
 seasonal tables (`seasons`, `season_balances`, `season_player_results`,
@@ -394,10 +422,11 @@ signatures were checked against `migrations/004_players.sql`,
 `migrations/005_tournaments.sql`, `migrations/006_shuttlepower_rules.sql`,
 `migrations/007_training.sql`, `migrations/008_club_activities.sql`,
 `migrations/009_jersey_images.sql`, `migrations/010_friendly_matches.sql`,
-`migrations/013_players_friends_notifications.sql`, and
-`migrations/014_tournament_registration.sql` and
+`migrations/013_players_friends_notifications.sql`,
+`migrations/014_tournament_registration.sql`, and
+`migrations/020_friendly_doubles.sql`, and were
 added to the committed file; application builds treat it as authoritative.
-Regenerate it against the hosted project after step 35 and after every later
+Regenerate it against the hosted project after step 37 and after every later
 migration. Never edit regenerated output by hand.
 
 ## Security notes

@@ -27,14 +27,25 @@ function MobileLink({ module }: { module: AppModule }) {
       end={module.path === '/'}
       className={({ isActive }) =>
         cn(
-          'flex h-full flex-col items-center justify-center gap-1 px-1 text-[10px] transition-colors duration-fast',
+          'relative flex h-full flex-col items-center justify-center gap-1 px-1 text-[10px] transition-colors duration-fast',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring focus-visible:ring-inset',
           isActive ? 'text-accent' : 'text-text-muted hover:text-text',
         )
       }
     >
-      <Icon className="size-5" aria-hidden="true" />
-      <span className="truncate">{module.shortLabel}</span>
+      {({ isActive }) => (
+        <>
+          <span
+            aria-hidden="true"
+            className={cn(
+              'absolute inset-x-4 top-0 h-0.5 rounded-b-pill bg-accent transition-transform duration-base ease-arena',
+              isActive ? 'scale-x-100' : 'scale-x-0',
+            )}
+          />
+          <Icon className="size-5" aria-hidden="true" />
+          <span className="truncate">{module.shortLabel}</span>
+        </>
+      )}
     </NavLink>
   )
 }
@@ -57,7 +68,7 @@ export function MobileNav() {
     <>
       <nav
         aria-label="Primary"
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface-1 pb-[env(safe-area-inset-bottom)] lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface-1 pb-[env(safe-area-inset-bottom)] shadow-elevated lg:hidden"
       >
         <ul className="grid h-14 grid-cols-5">
           {primary.map((module) => (
@@ -95,8 +106,8 @@ export function MobileNav() {
             </DialogDescription>
           </DialogHeader>
 
-          <p className="mt-4 px-2.5 text-[10px] uppercase tracking-[0.12em] text-text-faint">
-            Club
+          <p className="mt-4 px-2.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-text-faint">
+            Court
           </p>
           <ul className="mt-1 flex flex-col gap-0.5">
             {mainModules.map((module) => (
@@ -110,7 +121,7 @@ export function MobileNav() {
                       'flex items-center gap-2.5 rounded-sm px-2.5 py-2 text-sm transition-colors duration-fast',
                       'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring',
                       isActive
-                        ? 'bg-accent-soft font-medium text-accent'
+                        ? 'bg-surface-2 font-medium text-accent'
                         : 'text-text-muted hover:bg-surface-2 hover:text-text',
                     )
                   }
@@ -129,8 +140,8 @@ export function MobileNav() {
 
           {adminModules.length > 0 ? (
             <>
-              <p className="mt-4 px-2.5 text-[10px] uppercase tracking-[0.12em] text-text-faint">
-                Administration
+              <p className="mt-4 px-2.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-text-faint">
+                Control room
               </p>
               <ul className="mt-1 flex flex-col gap-0.5">
                 {adminModules.map((module) => (
@@ -143,7 +154,7 @@ export function MobileNav() {
                           'flex items-center gap-2.5 rounded-sm px-2.5 py-2 text-sm transition-colors duration-fast',
                           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring',
                           isActive
-                            ? 'bg-accent-soft font-medium text-accent'
+                            ? 'bg-surface-2 font-medium text-accent'
                             : 'text-text-muted hover:bg-surface-2 hover:text-text',
                         )
                       }

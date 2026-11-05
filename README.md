@@ -105,6 +105,8 @@ backend/migrations/018_seasonal_implementation.sql
 backend/policies/018_seasons.sql
 backend/migrations/019_placement_and_unplayed_sp.sql
 backend/policies/019_placement.sql
+backend/migrations/020_friendly_doubles.sql
+backend/policies/020_friendly_doubles.sql
 ```
 
 The migrations are **not** idempotent: re-running one fails at the first `CREATE` by design. There
@@ -200,15 +202,15 @@ npm --prefix frontend run lint
 npm --prefix frontend run build
 ```
 
-`npm run test:db` applies all nineteen migrations and all sixteen policy files to a real PostgreSQL
+`npm run test:db` applies all twenty migrations and all seventeen policy files to a real PostgreSQL
 engine, stubs Supabase Auth (`auth.users`, `auth.uid()`), and covers schema, RLS, column privileges,
 ownership/privacy negatives, approval idempotency, starting SP, player role/link RPCs, tournament
 visibility, D10 entry rules, draw validation, result advancement, correction order, the SP rule-version
 guardrails, balance reconciliation, training sessions and attendance, partial-payment and soft-void rules,
 player IDs, friend request/accept, notifications, per-player tournament fees, guest partners, partner
-invitations, self-entry, draw eligibility, the friendly and tournament SP awards with reversals, the seasonal
-ranking, snapshot, deduction, and transition rules, placement credits and qualification, unplayed-result
-handling, the published read views, and the development seed and bootstrap scripts.
+invitations, self-entry, draw eligibility, the friendly, doubles, and tournament SP awards with reversals,
+the seasonal ranking, snapshot, deduction, and transition rules, placement credits and qualification,
+unplayed-result handling, the published read views, and the development seed and bootstrap scripts.
 
 ## Security notes
 
@@ -258,16 +260,19 @@ update their own order before the deadline. Migration 009 adds design mockups: t
 object. Migrations 008–009 and their screens are applied to the hosted project; the bucket was created when the
 files were applied.
 
-Phase 5 adds friendly matches: singles challenges between two active players with linked accounts, the
-winner submits the result, and the losing side confirms or disputes it within 24 hours (a scheduled job
-auto-approves after that). A disputed result stays disputed — no resolution process is invented while the
-club rule is open. **A confirmed friendly, a completed tournament match, and an eligible placement match now award
-ShuttlePower** under the approved `approved-2026-11` rule (D13, 2026-11-03); the awards are idempotent and write one
-immutable ledger row per player (none for a Rated participant in a placement match). Migration 017 adds the tournament
-award and F4's compensating reversals (D14): a winner-flip correction
-reverses the prior rows and re-awards under the original rule version, while a score-only correction writes nothing.
-Migrations 010, 016, and 017 are verified locally and applied to the hosted project; migrations 018 and 019 and
-policies 018 and 019 still need applying, in that order.
+Phase 5 adds friendly matches: singles or doubles challenges between active players with linked accounts,
+the winning side submits the result, and the losing side confirms or disputes it within 24 hours (a scheduled
+job auto-approves after that). In doubles, the challenger names a partner at creation, the challenged captain
+names theirs on acceptance, either winning partner submits once, both losing partners must approve, and a
+dispute by either freezes the whole result. Any pairing is allowed; D10 stays tournament-only. A disputed
+result stays disputed — no resolution process is invented while the club rule is open. **A confirmed
+friendly, a completed tournament match, and an eligible placement match now award ShuttlePower** under the
+approved `approved-2026-11` rule (D13, 2026-11-03); the awards are idempotent and write one immutable ledger
+row per player (none for a Rated participant in a placement match). Migration 017 adds the tournament
+award and F4's compensating reversals (D14): a winner-flip correction reverses the prior rows and re-awards
+under the original rule version, while a score-only correction writes nothing. Migrations 010, 016, and 017
+are verified locally and applied to the hosted project; migrations 018, 019, and 020 and policies 018, 019,
+and 020 still need applying, in that order.
 
 Phase 4's formula is approved and live for friendlies and tournaments. Migration 006 adds versioned SP rule
 configuration with a provisional, disabled proposal and a reconciliation function; migration 016 records the
@@ -280,5 +285,7 @@ tournament matches, freezes the immutable snapshot and deduction batch on close,
 transition with retries and Super Admin recovery, and adds `/admin/seasons` for season and deduction management.
 Migration 019 implements placement and unplayed-match SP (D15-D19): new players stay publicly Unrated for 10
 eligible finalized matches while provisional SP is hidden, publish unchanged at qualification, and move no SP for
-walkovers, no-shows, forfeits, withdrawals, or disqualifications. Migration 019 and policy 019 are local only and
-still need applying to the hosted project after 018.
+walkovers, no-shows, forfeits, withdrawals, or disqualifications. Migration 020 implements friendly doubles
+(D20, approved 2026-11-04): the match type, partner, and per-partner approval columns, the doubles create and
+respond RPCs, and doubles-aware submit, approve, dispute, and award behaviour. Migrations 018, 019, and 020 and
+policies 018, 019, and 020 are local only and still need applying to the hosted project, in that order.

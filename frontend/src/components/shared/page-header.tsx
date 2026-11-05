@@ -9,40 +9,77 @@ export interface PageHeaderProps {
   kicker?: string
   /** Buttons or filters aligned to the right on desktop. */
   actions?: React.ReactNode
+  /** Optional scoreboard numbers pinned under the hero. */
+  stats?: readonly { label: string; value: string }[]
+  /** Extra content between the title block and the actions. */
+  children?: React.ReactNode
   className?: string
 }
 
 /**
  * The one page header for the whole product.
- * Kicker + large title + rule: the arena's top-of-page banner without adding a
- * second navigation layer.
+ * A hero band with court lines, a small caps kicker, and one oversized title.
+ * It sits above the page's sections so no page starts as a stack of cards.
  */
-export function PageHeader({ title, description, kicker, actions, className }: PageHeaderProps) {
+export function PageHeader({
+  title,
+  description,
+  kicker,
+  actions,
+  stats,
+  children,
+  className,
+}: PageHeaderProps) {
   return (
     <header
       className={cn(
-        'flex flex-col gap-3 border-b border-border pb-5 sm:flex-row sm:items-end sm:justify-between',
+        'arena-hero relative overflow-hidden rounded-lg border border-border shadow-panel',
         className,
       )}
     >
-      <div className="min-w-0">
-        {kicker ? (
-          <p className="mb-1.5 flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.18em] text-accent">
-            <span aria-hidden="true" className="h-px w-6 bg-accent" />
-            {kicker}
-          </p>
-        ) : null}
+      <div className="relative z-10 px-4 py-5 sm:px-6 sm:py-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0">
+            {kicker ? (
+              <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-accent">
+                <span aria-hidden="true" className="h-px w-5 bg-accent" />
+                {kicker}
+              </p>
+            ) : null}
 
-        <h1 className="truncate text-2xl font-semibold tracking-tight text-text">{title}</h1>
+            <h1 className="mt-2 text-[26px] font-semibold leading-[1.08] tracking-tight text-text sm:text-3xl">
+              {title}
+            </h1>
 
-        {description ? (
-          <p className="mt-1.5 max-w-prose text-sm leading-relaxed text-text-muted">
-            {description}
-          </p>
+            {description ? (
+              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-muted">
+                {description}
+              </p>
+            ) : null}
+          </div>
+
+          {actions ? (
+            <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>
+          ) : null}
+        </div>
+
+        {children ? <div className="mt-4">{children}</div> : null}
+
+        {stats && stats.length > 0 ? (
+          <dl className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-border pt-3">
+            {stats.map((stat) => (
+              <div key={stat.label} className="flex items-baseline gap-2">
+                <dt className="text-[10px] uppercase tracking-[0.12em] text-text-faint">
+                  {stat.label}
+                </dt>
+                <dd className="font-mono text-sm font-semibold tabular-nums text-text">
+                  {stat.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
         ) : null}
       </div>
-
-      {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
     </header>
   )
 }

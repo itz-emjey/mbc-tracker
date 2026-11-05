@@ -146,14 +146,27 @@ function sortRoles(roles: readonly Role[]): Role[] {
 export async function loadSessionUser(authUser: User): Promise<SessionUser | null> {
   const supabase = getSupabaseClient()
 
-  let profileResponse = await supabase
-    .from('profiles')
-    .select('id, full_name, status')
-    .eq('id', authUser.id)
-    .maybeSingle()
+  // Profile, role assignments, and the (four-row) role table are independent,
+  // so they go out together: one round trip instead of three before the shell
+  // can render.
+  const [loadedProfile, loadedAssignments, loadedRoles] = await Promise.all([
+    supabase.from('profiles').select('id, full_name, status').eq('id', authUser.id).maybeSingle(),
+    supabase.from('user_roles').select('role_id').eq('profile_id', authUser.id),
+    supabase.from('roles').select('id, key'),
+  ])
+
+  let profileResponse = loadedProfile
 
   if (profileResponse.error) {
     throw new Error(errorMessage(profileResponse.error))
+  }
+
+  if (loadedAssignments.error) {
+    throw new Error(errorMessage(loadedAssignments.error))
+  }
+
+  if (loadedRoles.error) {
+    throw new Error(errorMessage(loadedRoles.error))
   }
 
   if (!profileResponse.data) {
@@ -185,29 +198,17 @@ export async function loadSessionUser(authUser: User): Promise<SessionUser | nul
     return null
   }
 
-  const assignments = await supabase
-    .from('user_roles')
-    .select('role_id')
-    .eq('profile_id', authUser.id)
+  const roleKeyById = new Map(
+    (loadedRoles.data ?? [])
+      .filter((role): role is { id: string; key: Role } => isRole(role.key))
+      .map((role) => [role.id, role.key]),
+  )
 
-  if (assignments.error) {
-    throw new Error(errorMessage(assignments.error))
-  }
-
-  const roleIds = (assignments.data ?? []).map((assignment) => assignment.role_id)
-  let roles: Role[] = []
-
-  if (roleIds.length > 0) {
-    const roleRows = await supabase.from('roles').select('id, key').in('id', roleIds)
-
-    if (roleRows.error) {
-      throw new Error(errorMessage(roleRows.error))
-    }
-
-    roles = sortRoles(
-      (roleRows.data ?? []).map((role) => role.key).filter((key): key is Role => isRole(key)),
-    )
-  }
+  const roles = sortRoles(
+    (loadedAssignments.data ?? [])
+      .map((assignment) => roleKeyById.get(assignment.role_id))
+      .filter((key): key is Role => key !== undefined),
+  )
 
   return {
     id: profile.id,

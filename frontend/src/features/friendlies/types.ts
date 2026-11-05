@@ -1,8 +1,9 @@
 /**
  * Friendly match types.
  *
- * These mirror migration 010. A confirmed match currently records the result
- * only: no ShuttlePower moves until the win/loss formula is approved.
+ * These mirror migrations 010, 017, and 020. A confirmed match awards
+ * ShuttlePower under the enabled approved rule. Doubles has two players per
+ * team and per-partner approval state.
  */
 
 export type FriendlyStatus =
@@ -14,6 +15,8 @@ export type FriendlyStatus =
   | 'confirmed'
   | 'auto_approved'
   | 'disputed'
+
+export type FriendlyMatchType = 'singles' | 'doubles'
 
 export const FRIENDLY_STATUS_LABELS: Record<FriendlyStatus, string> = {
   pending: 'Awaiting reply',
@@ -31,8 +34,11 @@ export const FRIENDLY_APPROVAL_HOURS = 24
 
 export interface FriendlyMatchRecord {
   id: string
+  match_type: FriendlyMatchType
   challenger_id: string
+  challenger_partner_id: string | null
   opponent_id: string
+  opponent_partner_id: string | null
   note: string | null
   status: FriendlyStatus
   winner_id: string | null
@@ -42,6 +48,10 @@ export interface FriendlyMatchRecord {
   responded_by: string | null
   responded_at: string | null
   confirmed_at: string | null
+  challenger_approved_at: string | null
+  challenger_partner_approved_at: string | null
+  opponent_approved_at: string | null
+  opponent_partner_approved_at: string | null
   dispute_reason: string | null
   disputed_at: string | null
   created_at: string

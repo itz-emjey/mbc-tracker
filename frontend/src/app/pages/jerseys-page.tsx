@@ -2,7 +2,7 @@ import { Download, ImagePlus, Plus, Receipt, Shirt, Trash2 } from 'lucide-react'
 import * as React from 'react'
 import { toast } from 'sonner'
 
-import { ArenaStatStrip } from '@/components/arena/arena-ui'
+import { SectionHeading } from '@/components/arena/arena-ui'
 import { EmptyState } from '@/components/shared/empty-state'
 import { ErrorState } from '@/components/shared/error-state'
 import { LoadingState } from '@/components/shared/loading-state'
@@ -87,6 +87,7 @@ import {
   PAYMENT_METHOD_LABELS,
   type PaymentMethod,
 } from '@/features/training/types'
+import { cn } from '@/lib/cn'
 import { formatDateTime } from '@/lib/format'
 
 function formatPrice(value: string | null): string {
@@ -133,6 +134,8 @@ export function JerseysPage() {
     payment: JerseyOrderPaymentRecord
     projectName: string
   } | null>(null)
+  /** Which project the detail surface shows; falls back to the first project. */
+  const [selectedProjectId, setSelectedProjectId] = React.useState<string | null>(null)
 
   React.useEffect(() => {
     let active = true
@@ -209,6 +212,8 @@ export function JerseysPage() {
   const myOrders = ownPlayer
     ? orders.filter((order) => order.player_id === ownPlayer.id && order.status === 'submitted')
     : []
+  const selectedProject =
+    projects.find((project) => project.id === selectedProjectId) ?? projects[0] ?? null
 
   async function moveStatus(project: JerseyProjectRecord, status: JerseyProjectStatus) {
     try {
@@ -282,6 +287,12 @@ export function JerseysPage() {
         kicker="Club kit"
         title="Jerseys"
         description="Designs, sizes, and the order list. One active order per player and project."
+        stats={[
+          { label: 'Projects', value: String(projects.length) },
+          { label: 'Open', value: String(openProjects) },
+          { label: 'Designs', value: String(designs.length) },
+          { label: 'Your orders', value: String(myOrders.length) },
+        ]}
         actions={
           isStaff ? (
             <Button onClick={() => setProjectOpen(true)}>
@@ -292,346 +303,378 @@ export function JerseysPage() {
         }
       />
 
-      <ArenaStatStrip
-        className="mt-5"
-        stats={[
-          { label: 'Projects', value: String(projects.length), detail: 'All kit projects' },
-          { label: 'Open', value: String(openProjects), detail: 'Accepting orders' },
-          { label: 'Designs', value: String(designs.length), detail: 'Mockups on file' },
-          {
-            label: 'Your orders',
-            value: String(myOrders.length),
-            detail: myOrders.length > 0 ? 'Submitted' : 'Nothing ordered yet',
-          },
-        ]}
-      />
+      <div className="mt-6">
+        <SectionHeading
+          index="01"
+          title="Kit projects"
+          description="Mockups, sizes, and the order list for each project."
+        />
+      </div>
 
       {projects.length === 0 ? (
-        <Card className="mt-4">
-          <CardContent className="p-5">
-            <EmptyState
-              icon={Shirt}
-              title="No jersey projects yet"
-              description={
-                isStaff
-                  ? 'Create a project, add designs and sizes, then open it for orders.'
-                  : 'Club staff have not opened a jersey project yet.'
-              }
-              action={
-                isStaff ? (
-                  <Button onClick={() => setProjectOpen(true)}>
-                    <Plus aria-hidden="true" />
-                    New project
-                  </Button>
-                ) : null
-              }
-            />
-          </CardContent>
-        </Card>
+        <EmptyState
+          className="mt-4"
+          icon={Shirt}
+          title="No jersey projects yet"
+          description={
+            isStaff
+              ? 'Create a project, add designs and sizes, then open it for orders.'
+              : 'Club staff have not opened a jersey project yet.'
+          }
+          action={
+            isStaff ? (
+              <Button onClick={() => setProjectOpen(true)}>
+                <Plus aria-hidden="true" />
+                New project
+              </Button>
+            ) : null
+          }
+        />
       ) : (
-        <div className="mt-4 grid gap-4 xl:grid-cols-2">
-          {projects.map((project) => {
-            const projectDesigns = designs.filter((design) => design.project_id === project.id)
-            const projectSizes = sizes.filter((size) => size.project_id === project.id)
-            const projectOrders = orders.filter(
-              (order) => order.project_id === project.id && order.status === 'submitted',
-            )
-            const myOrder = projectOrders.find((order) => order.player_id === ownPlayer?.id)
-            const myPayment = myOrder ? paymentByOrder.get(myOrder.id) : undefined
-            const myPendingReceipt = myPayment
-              ? pendingReceiptByPayment.get(myPayment.id)
-              : undefined
-            const projectPayments = projectOrders
-              .map((order) => paymentByOrder.get(order.id))
-              .filter((payment): payment is JerseyOrderPaymentRecord => payment !== undefined)
-            const paymentSummary = summarizeJerseyPayments(projectPayments)
-            const deadlinePassed =
-              project.order_deadline !== null &&
-              new Date(project.order_deadline).getTime() < loadedAt
-            const canOrder = project.status === 'open' && !deadlinePassed
+        <div className="mt-4 flex flex-col gap-4">
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Kit projects">
+            {projects.map((project) => {
+              const active = project.id === selectedProject?.id
+              const orderCount = orders.filter(
+                (order) => order.project_id === project.id && order.status === 'submitted',
+              ).length
 
-            return (
-              <Card key={project.id}>
-                <CardHeader>
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <CardTitle>{project.name}</CardTitle>
-                    <Badge tone={statusTone(project.status)}>
-                      {JERSEY_STATUS_LABELS[project.status]}
-                    </Badge>
-                  </div>
-                  <CardDescription>
-                    {project.description ?? 'No description.'} Price {formatPrice(project.price)} ·{' '}
-                    {project.order_deadline
-                      ? `orders due ${formatDateTime(project.order_deadline)}`
-                      : 'no order deadline'}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-4">
-                  <div className="flex flex-wrap items-start gap-2">
-                    {projectDesigns.length === 0 ? (
-                      <span className="text-xs text-text-faint">No designs yet.</span>
-                    ) : (
-                      projectDesigns.map((design) => {
-                        const image = jerseyDesignImageUrl(design.image_path)
+              return (
+                <button
+                  key={project.id}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setSelectedProjectId(project.id)}
+                  className={cn(
+                    'flex flex-col items-start gap-0.5 rounded-md border px-3 py-2 text-left transition-colors duration-fast',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring',
+                    active
+                      ? 'border-accent bg-accent-soft'
+                      : 'border-border bg-surface-1 hover:border-border-strong hover:bg-surface-2',
+                  )}
+                >
+                  <span className={cn('text-sm font-medium', active ? 'text-accent' : 'text-text')}>
+                    {project.name}
+                  </span>
+                  <span className="text-[10px] uppercase tracking-[0.08em] text-text-faint">
+                    {JERSEY_STATUS_LABELS[project.status]} · {orderCount} order
+                    {orderCount === 1 ? '' : 's'}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+          {projects
+            .filter((project) => project.id === selectedProject?.id)
+            .map((project) => {
+              const projectDesigns = designs.filter((design) => design.project_id === project.id)
+              const projectSizes = sizes.filter((size) => size.project_id === project.id)
+              const projectOrders = orders.filter(
+                (order) => order.project_id === project.id && order.status === 'submitted',
+              )
+              const myOrder = projectOrders.find((order) => order.player_id === ownPlayer?.id)
+              const myPayment = myOrder ? paymentByOrder.get(myOrder.id) : undefined
+              const myPendingReceipt = myPayment
+                ? pendingReceiptByPayment.get(myPayment.id)
+                : undefined
+              const projectPayments = projectOrders
+                .map((order) => paymentByOrder.get(order.id))
+                .filter((payment): payment is JerseyOrderPaymentRecord => payment !== undefined)
+              const paymentSummary = summarizeJerseyPayments(projectPayments)
+              const deadlinePassed =
+                project.order_deadline !== null &&
+                new Date(project.order_deadline).getTime() < loadedAt
+              const canOrder = project.status === 'open' && !deadlinePassed
 
-                        return (
-                          <div
-                            key={design.id}
-                            className="flex items-center gap-2 rounded-sm border border-border p-2"
-                          >
-                            {image ? (
-                              <img
-                                src={image}
-                                alt={`${design.name} mockup`}
-                                loading="lazy"
-                                className="h-12 w-12 rounded-sm border border-border object-cover"
-                              />
-                            ) : (
-                              <span className="flex h-12 w-12 items-center justify-center rounded-sm border border-border text-center text-[10px] leading-tight text-text-faint">
-                                No image
-                              </span>
-                            )}
-                            <div className="flex flex-col items-start gap-1">
-                              <span className="text-xs font-medium text-text">{design.name}</span>
-                              {isStaff ? (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => setImageTarget(design)}
-                                >
-                                  <ImagePlus aria-hidden="true" />
-                                  {design.image_path ? 'Replace image' : 'Add image'}
-                                </Button>
-                              ) : null}
-                            </div>
-                          </div>
-                        )
-                      })
-                    )}
-                    {projectSizes.map((size) => (
-                      <Badge key={size.id} tone="info">
-                        {size.label}
+              return (
+                <Card key={project.id}>
+                  <CardHeader>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <CardTitle>{project.name}</CardTitle>
+                      <Badge tone={statusTone(project.status)}>
+                        {JERSEY_STATUS_LABELS[project.status]}
                       </Badge>
-                    ))}
-                  </div>
+                    </div>
+                    <CardDescription>
+                      {project.description ?? 'No description.'} Price {formatPrice(project.price)}{' '}
+                      ·{' '}
+                      {project.order_deadline
+                        ? `orders due ${formatDateTime(project.order_deadline)}`
+                        : 'no order deadline'}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex flex-col gap-4">
+                    <div className="flex flex-wrap items-start gap-2">
+                      {projectDesigns.length === 0 ? (
+                        <span className="text-xs text-text-faint">No designs yet.</span>
+                      ) : (
+                        projectDesigns.map((design) => {
+                          const image = jerseyDesignImageUrl(design.image_path)
 
-                  {isStaff ? (
-                    <>
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => setAssetTarget({ project, kind: 'design' })}
-                        >
-                          <Plus aria-hidden="true" />
-                          Design
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => setAssetTarget({ project, kind: 'size' })}
-                        >
-                          <Plus aria-hidden="true" />
-                          Size
-                        </Button>
-                        {project.status === 'draft' ? (
-                          <Button size="sm" onClick={() => void moveStatus(project, 'open')}>
-                            Open orders
-                          </Button>
-                        ) : null}
-                        {project.status === 'open' ? (
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => void moveStatus(project, 'closed')}
-                          >
-                            Close orders
-                          </Button>
-                        ) : null}
-                        {project.status === 'closed' ? (
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => void moveStatus(project, 'completed')}
-                          >
-                            Mark completed
-                          </Button>
-                        ) : null}
-                      </div>
-
-                      <div>
-                        <div className="mb-2 flex items-center justify-between gap-2">
-                          <h3 className="text-xs font-medium uppercase tracking-[0.06em] text-text-faint">
-                            Orders ({projectOrders.length})
-                          </h3>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            disabled={projectOrders.length === 0}
-                            onClick={() => exportOrders(project)}
-                          >
-                            <Download aria-hidden="true" />
-                            Export CSV
-                          </Button>
-                        </div>
-
-                        {projectOrders.length > 0 ? (
-                          <p className="mb-2 text-xs text-text-muted">
-                            {paymentSummary.settled} of {projectOrders.length} fees settled
-                            {paymentSummary.outstandingAmount > 0
-                              ? ` · ${formatMoney(paymentSummary.outstandingAmount)} outstanding`
-                              : ''}
-                          </p>
-                        ) : null}
-
-                        {projectOrders.length === 0 ? (
-                          <p className="text-sm text-text-muted">No orders yet.</p>
-                        ) : (
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead>Player</TableHead>
-                                <TableHead>Design</TableHead>
-                                <TableHead>Size</TableHead>
-                                <TableHead className="text-right">Qty</TableHead>
-                                <TableHead className="text-right">Fee</TableHead>
-                                <TableHead>Payment</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {projectOrders.map((order) => {
-                                const payment = paymentByOrder.get(order.id)
-                                const playerName =
-                                  playersById.get(order.player_id)?.full_name ?? 'Unknown'
-
-                                return (
-                                  <TableRow key={order.id}>
-                                    <TableCell className="text-text">{playerName}</TableCell>
-                                    <TableCell className="text-text-muted">
-                                      {designs.find((design) => design.id === order.design_id)
-                                        ?.name ?? '—'}
-                                    </TableCell>
-                                    <TableCell className="text-text-muted">
-                                      {sizes.find((size) => size.id === order.size_id)?.label ??
-                                        '—'}
-                                    </TableCell>
-                                    <TableCell className="text-right tabular-nums">
-                                      {order.quantity}
-                                    </TableCell>
-                                    <TableCell className="text-right tabular-nums text-text-muted">
-                                      {payment ? formatMoney(payment.amount) : '—'}
-                                    </TableCell>
-                                    <TableCell>
-                                      {payment ? (
-                                        <div className="flex items-center gap-2">
-                                          <StatusBadge status={payment.status} />
-                                          <Select
-                                            value={payment.status}
-                                            onValueChange={(value) =>
-                                              void markPayment(
-                                                payment,
-                                                value as JerseyPaymentStatus,
-                                              )
-                                            }
-                                            disabled={busyPaymentId === payment.id}
-                                          >
-                                            <SelectTrigger
-                                              className="w-28"
-                                              aria-label={`Payment for ${playerName}`}
-                                            >
-                                              <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                              {JERSEY_PAYMENT_STATUSES.map((status) => (
-                                                <SelectItem key={status} value={status}>
-                                                  {JERSEY_PAYMENT_STATUS_LABELS[status]}
-                                                </SelectItem>
-                                              ))}
-                                            </SelectContent>
-                                          </Select>
-                                        </div>
-                                      ) : (
-                                        '—'
-                                      )}
-                                    </TableCell>
-                                  </TableRow>
-                                )
-                              })}
-                            </TableBody>
-                          </Table>
-                        )}
-                      </div>
-                    </>
-                  ) : (
-                    <div className="flex flex-col gap-3 rounded-sm border border-border p-3">
-                      {myOrder ? (
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="flex flex-col gap-1">
-                            <p className="text-sm text-text">
-                              Your order:{' '}
-                              {projectDesigns.find((d) => d.id === myOrder.design_id)?.name ?? '—'}{' '}
-                              · {projectSizes.find((s) => s.id === myOrder.size_id)?.label ?? '—'} ·
-                              qty {myOrder.quantity}
-                            </p>
-                            {myPayment ? (
-                              <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted">
-                                <StatusBadge status={myPayment.status} />
-                                {formatMoney(myPayment.amount)}
-                                {myPayment.status === 'unpaid' ? (
-                                  myPendingReceipt ? (
-                                    <Badge tone="warning">Receipt pending review</Badge>
-                                  ) : (
-                                    <Button
-                                      variant="secondary"
-                                      size="sm"
-                                      onClick={() =>
-                                        setReceiptTarget({
-                                          payment: myPayment,
-                                          projectName: project.name,
-                                        })
-                                      }
-                                    >
-                                      <Receipt aria-hidden="true" />
-                                      Upload receipt
-                                    </Button>
-                                  )
+                          return (
+                            <div
+                              key={design.id}
+                              className="flex items-center gap-2 rounded-sm border border-border p-2"
+                            >
+                              {image ? (
+                                <img
+                                  src={image}
+                                  alt={`${design.name} mockup`}
+                                  loading="lazy"
+                                  className="h-12 w-12 rounded-sm border border-border object-cover"
+                                />
+                              ) : (
+                                <span className="flex h-12 w-12 items-center justify-center rounded-sm border border-border text-center text-[10px] leading-tight text-text-faint">
+                                  No image
+                                </span>
+                              )}
+                              <div className="flex flex-col items-start gap-1">
+                                <span className="text-xs font-medium text-text">{design.name}</span>
+                                {isStaff ? (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setImageTarget(design)}
+                                  >
+                                    <ImagePlus aria-hidden="true" />
+                                    {design.image_path ? 'Replace image' : 'Add image'}
+                                  </Button>
                                 ) : null}
                               </div>
+                            </div>
+                          )
+                        })
+                      )}
+                      {projectSizes.map((size) => (
+                        <Badge key={size.id} tone="info">
+                          {size.label}
+                        </Badge>
+                      ))}
+                    </div>
+
+                    {isStaff ? (
+                      <>
+                        <details>
+                          <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-sm border border-border bg-surface-2 px-2.5 py-1.5 text-[11px] font-medium text-text-muted transition-colors duration-fast hover:border-border-strong hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring [&::-webkit-details-marker]:hidden">
+                            Manage project
+                          </summary>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => setAssetTarget({ project, kind: 'design' })}
+                            >
+                              <Plus aria-hidden="true" />
+                              Design
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => setAssetTarget({ project, kind: 'size' })}
+                            >
+                              <Plus aria-hidden="true" />
+                              Size
+                            </Button>
+                            {project.status === 'draft' ? (
+                              <Button size="sm" onClick={() => void moveStatus(project, 'open')}>
+                                Open orders
+                              </Button>
+                            ) : null}
+                            {project.status === 'open' ? (
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => void moveStatus(project, 'closed')}
+                              >
+                                Close orders
+                              </Button>
+                            ) : null}
+                            {project.status === 'closed' ? (
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => void moveStatus(project, 'completed')}
+                              >
+                                Mark completed
+                              </Button>
                             ) : null}
                           </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => void cancelOrder(myOrder.id)}
-                          >
-                            Cancel
-                          </Button>
-                        </div>
-                      ) : (
-                        <p className="text-sm text-text-muted">You have not ordered yet.</p>
-                      )}
+                        </details>
 
-                      {canOrder ? (
-                        <OrderForm
-                          project={project}
-                          designs={projectDesigns}
-                          sizes={projectSizes}
-                          existing={myOrder}
-                          onSaved={reload}
-                        />
-                      ) : (
-                        <p className="text-xs text-text-muted">
-                          {deadlinePassed
-                            ? 'The order deadline has passed.'
-                            : 'Orders are not open for this project.'}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )
-          })}
+                        <div>
+                          <div className="mb-2 flex items-center justify-between gap-2">
+                            <h3 className="text-xs font-medium uppercase tracking-[0.06em] text-text-faint">
+                              Orders ({projectOrders.length})
+                            </h3>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={projectOrders.length === 0}
+                              onClick={() => exportOrders(project)}
+                            >
+                              <Download aria-hidden="true" />
+                              Export CSV
+                            </Button>
+                          </div>
+
+                          {projectOrders.length > 0 ? (
+                            <p className="mb-2 text-xs text-text-muted">
+                              {paymentSummary.settled} of {projectOrders.length} fees settled
+                              {paymentSummary.outstandingAmount > 0
+                                ? ` · ${formatMoney(paymentSummary.outstandingAmount)} outstanding`
+                                : ''}
+                            </p>
+                          ) : null}
+
+                          {projectOrders.length === 0 ? (
+                            <p className="text-sm text-text-muted">No orders yet.</p>
+                          ) : (
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Player</TableHead>
+                                  <TableHead>Design</TableHead>
+                                  <TableHead>Size</TableHead>
+                                  <TableHead className="text-right">Qty</TableHead>
+                                  <TableHead className="text-right">Fee</TableHead>
+                                  <TableHead>Payment</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {projectOrders.map((order) => {
+                                  const payment = paymentByOrder.get(order.id)
+                                  const playerName =
+                                    playersById.get(order.player_id)?.full_name ?? 'Unknown'
+
+                                  return (
+                                    <TableRow key={order.id}>
+                                      <TableCell className="text-text">{playerName}</TableCell>
+                                      <TableCell className="text-text-muted">
+                                        {designs.find((design) => design.id === order.design_id)
+                                          ?.name ?? '—'}
+                                      </TableCell>
+                                      <TableCell className="text-text-muted">
+                                        {sizes.find((size) => size.id === order.size_id)?.label ??
+                                          '—'}
+                                      </TableCell>
+                                      <TableCell className="text-right tabular-nums">
+                                        {order.quantity}
+                                      </TableCell>
+                                      <TableCell className="text-right tabular-nums text-text-muted">
+                                        {payment ? formatMoney(payment.amount) : '—'}
+                                      </TableCell>
+                                      <TableCell>
+                                        {payment ? (
+                                          <div className="flex items-center gap-2">
+                                            <StatusBadge status={payment.status} />
+                                            <Select
+                                              value={payment.status}
+                                              onValueChange={(value) =>
+                                                void markPayment(
+                                                  payment,
+                                                  value as JerseyPaymentStatus,
+                                                )
+                                              }
+                                              disabled={busyPaymentId === payment.id}
+                                            >
+                                              <SelectTrigger
+                                                className="w-28"
+                                                aria-label={`Payment for ${playerName}`}
+                                              >
+                                                <SelectValue />
+                                              </SelectTrigger>
+                                              <SelectContent>
+                                                {JERSEY_PAYMENT_STATUSES.map((status) => (
+                                                  <SelectItem key={status} value={status}>
+                                                    {JERSEY_PAYMENT_STATUS_LABELS[status]}
+                                                  </SelectItem>
+                                                ))}
+                                              </SelectContent>
+                                            </Select>
+                                          </div>
+                                        ) : (
+                                          '—'
+                                        )}
+                                      </TableCell>
+                                    </TableRow>
+                                  )
+                                })}
+                              </TableBody>
+                            </Table>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex flex-col gap-3 rounded-sm border border-border p-3">
+                        {myOrder ? (
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex flex-col gap-1">
+                              <p className="text-sm text-text">
+                                Your order:{' '}
+                                {projectDesigns.find((d) => d.id === myOrder.design_id)?.name ??
+                                  '—'}{' '}
+                                · {projectSizes.find((s) => s.id === myOrder.size_id)?.label ?? '—'}{' '}
+                                · qty {myOrder.quantity}
+                              </p>
+                              {myPayment ? (
+                                <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted">
+                                  <StatusBadge status={myPayment.status} />
+                                  {formatMoney(myPayment.amount)}
+                                  {myPayment.status === 'unpaid' ? (
+                                    myPendingReceipt ? (
+                                      <Badge tone="warning">Receipt pending review</Badge>
+                                    ) : (
+                                      <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        onClick={() =>
+                                          setReceiptTarget({
+                                            payment: myPayment,
+                                            projectName: project.name,
+                                          })
+                                        }
+                                      >
+                                        <Receipt aria-hidden="true" />
+                                        Upload receipt
+                                      </Button>
+                                    )
+                                  ) : null}
+                                </div>
+                              ) : null}
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => void cancelOrder(myOrder.id)}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-text-muted">You have not ordered yet.</p>
+                        )}
+
+                        {canOrder ? (
+                          <OrderForm
+                            project={project}
+                            designs={projectDesigns}
+                            sizes={projectSizes}
+                            existing={myOrder}
+                            onSaved={reload}
+                          />
+                        ) : (
+                          <p className="text-xs text-text-muted">
+                            {deadlinePassed
+                              ? 'The order deadline has passed.'
+                              : 'Orders are not open for this project.'}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )
+            })}
         </div>
       )}
 

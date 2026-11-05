@@ -2,7 +2,6 @@ import { ArrowLeft, Trophy } from 'lucide-react'
 import * as React from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 
-import { ArenaStatStrip } from '@/components/arena/arena-ui'
 import { EmptyState } from '@/components/shared/empty-state'
 import { ErrorState } from '@/components/shared/error-state'
 import { LoadingState } from '@/components/shared/loading-state'
@@ -216,6 +215,12 @@ export function TournamentDrawsPage() {
         description={`${formatDateRange(tournament.starts_on, tournament.ends_on)}${
           tournament.venue ? ` · ${tournament.venue}` : ''
         } · Pick an event to follow its bracket or schedule.`}
+        stats={[
+          { label: 'Events', value: String(events.length) },
+          { label: 'Registered', value: String(registeredCount) },
+          { label: 'Draws', value: `${drawnEvents} / ${events.length}` },
+          { label: 'Played', value: `${playedCount} / ${detail.matches.length}` },
+        ]}
         actions={<StatusBadge status={tournament.status} />}
       />
 
@@ -227,24 +232,6 @@ export function TournamentDrawsPage() {
           onRetry={reload}
         />
       ) : null}
-
-      <ArenaStatStrip
-        className="mt-5"
-        stats={[
-          { label: 'Events', value: String(events.length), detail: 'One per discipline' },
-          { label: 'Registered', value: String(registeredCount), detail: 'Paid or waived entries' },
-          {
-            label: 'Draws generated',
-            value: `${drawnEvents} / ${events.length}`,
-            detail: events.length === 0 ? 'No events yet' : 'Locked entry lists',
-          },
-          {
-            label: 'Matches played',
-            value: `${playedCount} / ${detail.matches.length}`,
-            detail: 'Official results recorded',
-          },
-        ]}
-      />
 
       {events.length === 0 ? (
         <EmptyState

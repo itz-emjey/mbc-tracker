@@ -2,7 +2,7 @@ import { CalendarCheck, Plus, UserCheck } from 'lucide-react'
 import * as React from 'react'
 import { toast } from 'sonner'
 
-import { ArenaPanel, ArenaStatStrip } from '@/components/arena/arena-ui'
+import { SectionHeading } from '@/components/arena/arena-ui'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { EmptyState } from '@/components/shared/empty-state'
 import { ErrorState } from '@/components/shared/error-state'
@@ -182,6 +182,15 @@ export function TrainingPage() {
         kicker="Training floor"
         title="Training"
         description="Session schedule, attendance, and the record of who showed up."
+        stats={[
+          { label: 'Sessions', value: String(sessions.length) },
+          { label: 'Scheduled', value: String(scheduled) },
+          { label: 'Completed', value: String(completed) },
+          {
+            label: isStaff ? 'Marked rows' : 'Your attendance',
+            value: String(isStaff ? attendance.length : myAttendance),
+          },
+        ]}
         actions={
           isStaff ? (
             <Button onClick={() => setFormOpen(true)}>
@@ -192,148 +201,141 @@ export function TrainingPage() {
         }
       />
 
-      <ArenaStatStrip
-        className="mt-5"
-        stats={[
-          { label: 'Sessions', value: String(sessions.length), detail: 'On the club record' },
-          { label: 'Scheduled', value: String(scheduled), detail: 'Still open to mark' },
-          { label: 'Completed', value: String(completed), detail: 'Closed to marking' },
-          {
-            label: isStaff ? 'Marked rows' : 'Your attendance',
-            value: String(isStaff ? attendance.length : myAttendance),
-            detail: isStaff ? 'Audited entries' : 'Present or late',
-          },
-        ]}
-      />
+      <div className="mt-6">
+        <SectionHeading
+          index="01"
+          title="Sessions"
+          description={
+            isStaff
+              ? 'Marking attendance is audited. A completed or cancelled session is closed to further marking.'
+              : 'Your own attendance appears beside each session.'
+          }
+        />
 
-      <ArenaPanel
-        kicker="Schedule"
-        title="Sessions"
-        description={
-          isStaff
-            ? 'Marking attendance is audited. A completed or cancelled session is closed to further marking.'
-            : 'Your own attendance appears beside each session.'
-        }
-        className="mt-4"
-      >
-        {sessions.length === 0 ? (
-          <EmptyState
-            icon={CalendarCheck}
-            title="No sessions yet"
-            description={
-              isStaff
-                ? 'Create the first session, then mark attendance.'
-                : 'Training staff have not scheduled a session yet.'
-            }
-            action={
-              isStaff ? (
-                <Button onClick={() => setFormOpen(true)}>
-                  <Plus aria-hidden="true" />
-                  New session
-                </Button>
-              ) : null
-            }
-          />
-        ) : (
-          <Table containerClassName="rounded-none border-0">
-            <TableHeader>
-              <TableRow>
-                <TableHead>Session</TableHead>
-                <TableHead className="hidden md:table-cell">When</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Attendance</TableHead>
-                {isStaff ? <TableHead className="text-right">Actions</TableHead> : null}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sessions.map((session) => {
-                const rows = attendance.filter((row) => row.session_id === session.id)
-                const counts = countAttendance(rows)
-                const mine = statusFor(attendance, session.id, ownPlayer?.id ?? null)
+        <div className="mt-4">
+          {sessions.length === 0 ? (
+            <EmptyState
+              icon={CalendarCheck}
+              title="No sessions yet"
+              description={
+                isStaff
+                  ? 'Create the first session, then mark attendance.'
+                  : 'Training staff have not scheduled a session yet.'
+              }
+              action={
+                isStaff ? (
+                  <Button onClick={() => setFormOpen(true)}>
+                    <Plus aria-hidden="true" />
+                    New session
+                  </Button>
+                ) : null
+              }
+            />
+          ) : (
+            <Table containerClassName="border-border">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Session</TableHead>
+                  <TableHead className="hidden md:table-cell">When</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Attendance</TableHead>
+                  {isStaff ? <TableHead className="text-right">Actions</TableHead> : null}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sessions.map((session) => {
+                  const rows = attendance.filter((row) => row.session_id === session.id)
+                  const counts = countAttendance(rows)
+                  const mine = statusFor(attendance, session.id, ownPlayer?.id ?? null)
 
-                return (
-                  <TableRow key={session.id}>
-                    <TableCell className="max-w-64">
-                      <p className="truncate font-medium text-text">{session.title}</p>
-                      <p className="truncate text-xs text-text-muted">
-                        {session.venue ?? 'Venue not set'}
-                      </p>
-                    </TableCell>
-                    <TableCell className="hidden whitespace-nowrap text-text-muted md:table-cell">
-                      {formatDateTime(session.starts_at)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge tone={statusTone(session.status)}>
-                        {SESSION_STATUS_LABELS[session.status] ?? statusLabel(session.status)}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right text-xs text-text-muted">
-                      {isStaff ? (
-                        <span className="tabular-nums">
-                          {attendedCount(counts)} of {counts.total} marked
-                        </span>
-                      ) : mine ? (
-                        <Badge
-                          tone={
-                            mine === 'present' ? 'accent' : mine === 'absent' ? 'danger' : 'warning'
-                          }
-                        >
-                          {ATTENDANCE_STATUS_LABELS[mine]}
-                        </Badge>
-                      ) : (
-                        <span className="text-text-faint">Not marked</span>
-                      )}
-                    </TableCell>
-                    {isStaff ? (
-                      <TableCell className="text-right">
-                        <div className="flex flex-wrap justify-end gap-1.5">
-                          {session.status === 'scheduled' ? (
-                            <>
-                              <Button
-                                variant="secondary"
-                                size="sm"
-                                onClick={() => setAttendanceSession(session)}
-                              >
-                                <UserCheck aria-hidden="true" />
-                                Attendance
-                              </Button>
-                              <ConfirmDialog
-                                trigger={
-                                  <Button variant="ghost" size="sm">
-                                    Complete
-                                  </Button>
-                                }
-                                title={`Complete ${session.title}?`}
-                                description="Completed sessions stay in history and closed to further attendance marking."
-                                confirmLabel="Complete session"
-                                onConfirm={() => changeStatus(session, 'completed')}
-                              />
-                              <ConfirmDialog
-                                trigger={
-                                  <Button variant="ghost" size="sm">
-                                    Cancel
-                                  </Button>
-                                }
-                                title={`Cancel ${session.title}?`}
-                                description="The session stays in history. Attendance cannot be marked afterwards."
-                                confirmLabel="Cancel session"
-                                tone="danger"
-                                onConfirm={() => changeStatus(session, 'cancelled')}
-                              />
-                            </>
-                          ) : (
-                            <span className="text-xs text-text-faint">—</span>
-                          )}
-                        </div>
+                  return (
+                    <TableRow key={session.id}>
+                      <TableCell className="max-w-64">
+                        <p className="truncate font-medium text-text">{session.title}</p>
+                        <p className="truncate text-xs text-text-muted">
+                          {session.venue ?? 'Venue not set'}
+                        </p>
                       </TableCell>
-                    ) : null}
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-        )}
-      </ArenaPanel>
+                      <TableCell className="hidden whitespace-nowrap text-text-muted md:table-cell">
+                        {formatDateTime(session.starts_at)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge tone={statusTone(session.status)}>
+                          {SESSION_STATUS_LABELS[session.status] ?? statusLabel(session.status)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right text-xs text-text-muted">
+                        {isStaff ? (
+                          <span className="tabular-nums">
+                            {attendedCount(counts)} of {counts.total} marked
+                          </span>
+                        ) : mine ? (
+                          <Badge
+                            tone={
+                              mine === 'present'
+                                ? 'accent'
+                                : mine === 'absent'
+                                  ? 'danger'
+                                  : 'warning'
+                            }
+                          >
+                            {ATTENDANCE_STATUS_LABELS[mine]}
+                          </Badge>
+                        ) : (
+                          <span className="text-text-faint">Not marked</span>
+                        )}
+                      </TableCell>
+                      {isStaff ? (
+                        <TableCell className="text-right">
+                          <div className="flex flex-wrap justify-end gap-1.5">
+                            {session.status === 'scheduled' ? (
+                              <>
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  onClick={() => setAttendanceSession(session)}
+                                >
+                                  <UserCheck aria-hidden="true" />
+                                  Attendance
+                                </Button>
+                                <ConfirmDialog
+                                  trigger={
+                                    <Button variant="ghost" size="sm">
+                                      Complete
+                                    </Button>
+                                  }
+                                  title={`Complete ${session.title}?`}
+                                  description="Completed sessions stay in history and closed to further attendance marking."
+                                  confirmLabel="Complete session"
+                                  onConfirm={() => changeStatus(session, 'completed')}
+                                />
+                                <ConfirmDialog
+                                  trigger={
+                                    <Button variant="ghost" size="sm">
+                                      Cancel
+                                    </Button>
+                                  }
+                                  title={`Cancel ${session.title}?`}
+                                  description="The session stays in history. Attendance cannot be marked afterwards."
+                                  confirmLabel="Cancel session"
+                                  tone="danger"
+                                  onConfirm={() => changeStatus(session, 'cancelled')}
+                                />
+                              </>
+                            ) : (
+                              <span className="text-xs text-text-faint">—</span>
+                            )}
+                          </div>
+                        </TableCell>
+                      ) : null}
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </div>
+      </div>
 
       {formOpen ? (
         <SessionFormDialog

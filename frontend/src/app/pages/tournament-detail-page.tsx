@@ -2,14 +2,13 @@ import { ArrowLeft, CalendarDays, MapPin, Plus, Swords, Trophy } from 'lucide-re
 import * as React from 'react'
 import { Link, useParams } from 'react-router-dom'
 
-import { ArenaStatStrip } from '@/components/arena/arena-ui'
+import { SectionHeading } from '@/components/arena/arena-ui'
 import { EmptyState } from '@/components/shared/empty-state'
 import { ErrorState } from '@/components/shared/error-state'
 import { LoadingState } from '@/components/shared/loading-state'
 import { PageHeader } from '@/components/shared/page-header'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { errorMessage } from '@/features/auth/api'
 import { useSession } from '@/features/auth/session-context'
@@ -171,6 +170,8 @@ function TournamentDetailView({ id }: { id: string | undefined }) {
   const canEditEvents =
     canManage && (tournament.status === 'draft' || tournament.status === 'published')
   const openEventSlots = 4 - events.length
+  const drawnEvents = events.filter((event) => event.draw_generated_at !== null).length
+  const completedMatches = detail.matches.filter((match) => match.status === 'completed').length
 
   const registeredByEvent = new Map<string, number>()
 
@@ -190,38 +191,28 @@ function TournamentDetailView({ id }: { id: string | undefined }) {
       </Link>
 
       <PageHeader
-        kicker="Draw room"
+        kicker="Tournament"
         title={tournament.name}
         description={tournament.description ?? 'Tournament record and official results.'}
-        actions={
-          events.length > 0 ? (
-            <Button asChild variant="secondary" size="sm">
-              <Link to={`/tournaments/${tournament.id}/draws`}>
-                <Swords aria-hidden="true" />
-                Open draw room
-              </Link>
-            </Button>
-          ) : null
-        }
-      />
-
-      <ArenaStatStrip
-        className="mt-4"
         stats={[
-          { label: 'Events', value: String(events.length), detail: 'One per discipline' },
-          { label: 'Entries', value: String(detail.entries.length), detail: 'Players and teams' },
-          {
-            label: 'Matches',
-            value: String(detail.matches.length),
-            detail: 'Scheduled and played',
-          },
-          {
-            label: 'Entry fee',
-            value:
-              Number(tournament.entrance_fee) === 0 ? 'Free' : formatMoney(tournament.entrance_fee),
-            detail: 'Per player',
-          },
+          { label: 'Events', value: String(events.length) },
+          { label: 'Entries', value: String(detail.entries.length) },
+          { label: 'Draws', value: `${drawnEvents} / ${events.length}` },
+          { label: 'Played', value: `${completedMatches} / ${detail.matches.length}` },
         ]}
+        actions={
+          <>
+            <StatusBadge status={tournament.status} />
+            {events.length > 0 ? (
+              <Button asChild variant="secondary" size="sm">
+                <Link to={`/tournaments/${tournament.id}/draws`}>
+                  <Swords aria-hidden="true" />
+                  Draw room
+                </Link>
+              </Button>
+            ) : null}
+          </>
+        }
       />
 
       {error ? (
@@ -233,24 +224,18 @@ function TournamentDetailView({ id }: { id: string | undefined }) {
         />
       ) : null}
 
-      <div className="mt-5 flex flex-col gap-4 lg:flex-row lg:items-start">
-        {posterUrl ? (
-          <Card className="overflow-hidden lg:w-72 lg:shrink-0">
+      <section className="mt-5 overflow-hidden rounded-md border border-border bg-surface-1 shadow-panel">
+        <div className="flex flex-col sm:flex-row">
+          {posterUrl ? (
             <img
               src={posterUrl}
               alt={`${tournament.name} poster`}
-              className="max-h-96 w-full bg-surface-2 object-contain"
+              className="h-44 w-full border-b border-border bg-surface-2 object-cover sm:h-auto sm:w-48 sm:border-b-0 sm:border-r"
             />
-          </Card>
-        ) : null}
+          ) : null}
 
-        <Card className="flex-1">
-          <CardContent className="flex flex-col gap-5 p-5">
-            <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <MetaItem label="Status">
-                <StatusBadge status={tournament.status} />
-              </MetaItem>
-
+          <div className="flex min-w-0 flex-1 flex-col">
+            <dl className="grid flex-1 content-start gap-4 p-4 sm:grid-cols-2 lg:grid-cols-4">
               <MetaItem label="Dates">
                 <span className="inline-flex items-center gap-1.5">
                   <CalendarDays className="size-3.5 text-text-faint" aria-hidden="true" />
@@ -283,13 +268,13 @@ function TournamentDetailView({ id }: { id: string | undefined }) {
             </dl>
 
             {canManage ? (
-              <div className="border-t border-border pt-4">
+              <div className="border-t border-border px-4 py-3">
                 <LifecycleActions tournament={tournament} events={events} onChanged={reload} />
               </div>
             ) : null}
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </div>
+      </section>
 
       {canManage ? (
         <div className="mt-4">
@@ -297,44 +282,26 @@ function TournamentDetailView({ id }: { id: string | undefined }) {
         </div>
       ) : null}
 
-      <section className="mt-6" aria-labelledby="tournament-events-heading">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.18em] text-accent">
-              <span aria-hidden="true" className="h-px w-6 bg-accent" />
-              Draw room
-            </p>
-            <h2
-              id="tournament-events-heading"
-              className="mt-1 text-lg font-semibold tracking-tight text-text"
-            >
-              Events
-            </h2>
-            <p className="mt-0.5 text-sm text-text-muted">
-              {events.length === 0
-                ? 'The disciplines this tournament runs.'
-                : `${events.length} event${events.length === 1 ? '' : 's'} · entries and fees here, brackets in the draw room.`}
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-2 self-start">
-            {events.length > 0 ? (
-              <Button asChild variant="secondary" size="sm">
-                <Link to={`/tournaments/${tournament.id}/draws`}>
-                  <Swords aria-hidden="true" />
-                  Open draw room
-                </Link>
-              </Button>
-            ) : null}
-
-            {canEditEvents && openEventSlots > 0 ? (
+      <section className="mt-8" aria-label="Events">
+        <SectionHeading
+          index="01"
+          title="Events"
+          description={
+            events.length === 0
+              ? 'Add the disciplines this tournament runs, then bring in entries.'
+              : `${events.length} event${
+                  events.length === 1 ? '' : 's'
+                } · each one runs Entries, Draw, then Results in place.`
+          }
+          action={
+            canEditEvents && openEventSlots > 0 ? (
               <Button variant="secondary" size="sm" onClick={() => setEventOpen(true)}>
                 <Plus aria-hidden="true" />
                 Add event
               </Button>
-            ) : null}
-          </div>
-        </div>
+            ) : null
+          }
+        />
 
         {canEditEvents && openEventSlots === 0 ? (
           <p className="mt-2 text-xs text-text-muted">
@@ -384,6 +351,7 @@ function TournamentDetailView({ id }: { id: string | undefined }) {
                     payments={detail.payments}
                     invitations={detail.invitations}
                     matches={detail.matches}
+                    games={detail.games}
                     players={players}
                     friends={friends}
                     currentPlayer={currentPlayer}

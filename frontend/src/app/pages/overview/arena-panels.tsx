@@ -5,7 +5,6 @@ import {
   CalendarCheck,
   CheckCircle2,
   Clock,
-  Flame,
   MapPin,
   Megaphone,
   Shirt,
@@ -18,7 +17,17 @@ import {
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
-import { ArenaAvatar, ArenaPanel, PowerMeter, RankBadge } from '@/components/arena/arena-ui'
+import {
+  ArenaAvatar,
+  ArenaPanel,
+  FormStrip,
+  LevelRing,
+  PowerMeter,
+  RankBadge,
+  RankSigil,
+  SectionHeading,
+  StreakTag,
+} from '@/components/arena/arena-ui'
 import { EmptyState } from '@/components/shared/empty-state'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { Badge } from '@/components/ui/badge'
@@ -29,7 +38,7 @@ import {
   type AccountStatus,
   type Role,
 } from '@/features/auth/types'
-import { PLAYER_STATUS_LABELS, type PlayerRecord } from '@/features/players/types'
+import type { PlayerRecord } from '@/features/players/types'
 import type { LeaderboardRow } from '@/features/shuttlepower/leaderboard'
 import { formatMoney } from '@/features/training/money'
 import type { TrainingSessionRecord } from '@/features/training/types'
@@ -49,11 +58,12 @@ import { formatDateRange, formatDateTime } from '@/lib/format'
 
 import type { AttentionItem, FeeSummary } from './derive'
 
-const ROW_LINK =
-  'group flex items-center gap-3 px-4 py-2.5 transition-colors duration-fast hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring focus-visible:ring-inset'
+/** An open row on the page background — no card per item. */
+const ROW =
+  'row-action group flex items-center gap-3 rounded-sm px-3 py-3 transition-colors duration-fast hover:bg-surface-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring focus-visible:ring-inset'
 
 const ARROW =
-  'size-3.5 shrink-0 text-text-faint transition-transform duration-fast group-hover:translate-x-0.5'
+  'size-3.5 shrink-0 text-text-faint transition-transform duration-fast group-hover:translate-x-0.5 group-hover:text-accent'
 
 const TIER_TEXT_CLASSES: Record<ArenaTierTone, string> = {
   neutral: 'text-text-faint',
@@ -64,10 +74,11 @@ const TIER_TEXT_CLASSES: Record<ArenaTierTone, string> = {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Your fighter                                                               */
+/* Hero: who you are, where you stand                                         */
 /* -------------------------------------------------------------------------- */
 
-export interface FighterCardProps {
+export interface ArenaHeroProps {
+  firstName: string
   player: PlayerRecord | null
   sp: number | null
   position: number | null
@@ -77,10 +88,11 @@ export interface FighterCardProps {
   progress: TierProgress | null
   roles: readonly Role[]
   status: AccountStatus
-  className?: string
+  waiting: number
 }
 
-export function FighterCard({
+export function ArenaHero({
+  firstName,
   player,
   sp,
   position,
@@ -90,216 +102,179 @@ export function FighterCard({
   progress,
   roles,
   status,
-  className,
-}: FighterCardProps) {
+  waiting,
+}: ArenaHeroProps) {
   return (
-    <ArenaPanel
-      kicker="Clash card"
-      title="Your fighter"
-      action={{ href: '/shuttlepower', label: 'Ladder' }}
-      className={cn('border-t-2 border-t-accent', className)}
-    >
-      {!player ? (
-        <div className="p-4">
-          <EmptyState
-            icon={Zap}
-            title="No player record linked"
-            description="An admin links your account to a player record. Your clash card appears after that."
-          />
-        </div>
-      ) : (
-        <div className="p-4">
-          <div className="flex items-center gap-3">
-            <ArenaAvatar
-              name={player.full_name}
-              size="xl"
-              tone={progress?.tier.tone ?? 'neutral'}
-              ring
-            />
-
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-base font-semibold leading-tight text-text">
-                {player.full_name}
-              </p>
-              <p className="mt-0.5 font-mono text-[11px] text-text-faint">{player.player_code}</p>
-              <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                {progress ? <RankBadge tier={progress.tier} /> : null}
-                {progress && divisionPosition !== null ? (
-                  <span className="text-[10px] uppercase tracking-[0.08em] text-text-faint">
-                    #{divisionPosition} in rank
-                  </span>
-                ) : null}
-                <Badge tone="outline">{PLAYER_STATUS_LABELS[player.status]}</Badge>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-4 flex items-end justify-between gap-3">
-            <div>
-              <p className="text-[10px] uppercase tracking-[0.14em] text-text-faint">
-                ShuttlePower
-              </p>
-              <p className="mt-1 font-mono text-4xl font-semibold leading-none tabular-nums text-text">
-                {sp === null ? '—' : sp.toLocaleString()}
-              </p>
-            </div>
-
-            <div className="text-right">
-              <p className="text-[10px] uppercase tracking-[0.14em] text-text-faint">Club rank</p>
-              <p className="mt-1 font-mono text-2xl font-semibold leading-none tabular-nums text-text">
-                {position === null ? '—' : `#${position}`}
-              </p>
-              <p className="mt-0.5 text-[11px] text-text-muted">of {totalPlayers}</p>
-            </div>
-          </div>
-
-          {progress ? (
-            <div className="mt-4">
-              <PowerMeter
-                progress={progress.progress}
-                label={`${progress.tier.rankTitle} rank progress`}
-              />
-              <div className="mt-1.5 flex items-baseline justify-between gap-2 text-[11px]">
-                <span className="text-text-muted">
-                  {progress.next
-                    ? `${progress.spIntoTier} / ${progress.tierSpan} SP in ${progress.tier.rankTitle}`
-                    : `${progress.tier.rankTitle} — the top rank`}
-                </span>
-                <span className="shrink-0 font-mono tabular-nums text-text-faint">
-                  {progress.next ? `${progress.spToNext} to ${progress.next.rankTitle}` : 'Max'}
-                </span>
-              </div>
-            </div>
-          ) : null}
-
-          <dl className="mt-4 grid grid-cols-3 gap-2 border-t border-border pt-3">
-            <Stat label="Played" value={String(record.played)} />
-            <Stat label="Wins" value={String(record.wins)} />
-            <Stat
-              label="Win rate"
-              value={record.winRate === null ? '—' : `${Math.round(record.winRate * 100)}%`}
-            />
-          </dl>
-
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-1">
-              {record.form.length === 0 ? (
-                <span className="text-[11px] text-text-faint">No decided matches yet</span>
-              ) : (
-                record.form.map((result, index) => (
-                  <span
-                    key={`${result}-${index}`}
-                    title={result === 'win' ? 'Win' : 'Loss'}
-                    className={cn(
-                      'grid size-5 place-items-center rounded-sm text-[10px] font-semibold',
-                      result === 'win'
-                        ? 'bg-accent-soft text-accent'
-                        : 'bg-danger-soft text-danger',
-                    )}
-                  >
-                    {result === 'win' ? 'W' : 'L'}
-                  </span>
-                ))
-              )}
-            </div>
-
-            {record.streak ? (
-              <Badge tone={record.streak.kind === 'win' ? 'accent' : 'danger'}>
-                <Flame className="size-3" aria-hidden="true" />
-                {record.streak.length} {record.streak.kind === 'win' ? 'win' : 'loss'} run
-              </Badge>
-            ) : null}
-          </div>
-
-          <div className="mt-4 grid grid-cols-2 gap-2">
-            <Button asChild size="sm">
-              <Link to="/matches">
-                <Swords aria-hidden="true" />
-                Challenge
-              </Link>
-            </Button>
-            <Button asChild size="sm" variant="secondary">
-              <Link to="/shuttlepower">
-                <Zap aria-hidden="true" />
-                Ladder
-              </Link>
-            </Button>
-          </div>
-
-          {sp === null ? (
-            <p className="mt-3 text-[11px] leading-snug text-text-muted">
-              No SP account yet. Starting SP is awarded when an approved account is linked to a
-              player record.
+    <section className="arena-hero relative overflow-hidden rounded-lg border border-border shadow-panel">
+      <div className="relative z-10 p-5 sm:p-6">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-accent">
+              <span aria-hidden="true" className="h-px w-5 bg-accent" />
+              Arena · {waiting > 0 ? `${waiting} waiting on you` : 'court is clear'}
             </p>
-          ) : null}
 
-          <div className="mt-3 flex flex-wrap items-center gap-1 border-t border-border pt-3">
-            <Badge
-              tone={status === 'approved' ? 'accent' : status === 'pending' ? 'warning' : 'danger'}
-            >
-              {ACCOUNT_STATUS_LABELS[status]}
-            </Badge>
-            {roles.map((role) => (
-              <Badge key={role} tone="outline">
-                {ROLE_LABELS[role]}
-              </Badge>
-            ))}
+            <h1 className="mt-2 text-[26px] font-semibold leading-[1.08] tracking-tight text-text sm:text-3xl">
+              Back on court, {firstName}.
+            </h1>
+
+            {player ? (
+              <div className="mt-4 flex items-center gap-3">
+                <LevelRing
+                  progress={progress?.progress ?? 0}
+                  tone={progress?.tier.tone ?? 'neutral'}
+                  size={56}
+                >
+                  <ArenaAvatar name={player.full_name} size="md" tone={progress?.tier.tone} />
+                </LevelRing>
+
+                <div className="min-w-0">
+                  <p className="truncate text-base font-semibold leading-tight text-text">
+                    {player.full_name}
+                  </p>
+                  <p className="mt-0.5 font-mono text-[11px] text-text-faint">
+                    {player.player_code}
+                  </p>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                    {progress ? <RankBadge tier={progress.tier} /> : null}
+                    <Badge
+                      tone={
+                        status === 'approved'
+                          ? 'accent'
+                          : status === 'pending'
+                            ? 'warning'
+                            : 'danger'
+                      }
+                    >
+                      {ACCOUNT_STATUS_LABELS[status]}
+                    </Badge>
+                    {roles.map((role) => (
+                      <Badge key={role} tone="outline">
+                        {ROLE_LABELS[role]}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="mt-3 max-w-md text-sm leading-relaxed text-text-muted">
+                Your account is not linked to a player record yet. An admin links it, and your clash
+                card appears here.
+              </p>
+            )}
           </div>
+
+          {player ? (
+            <div className="flex shrink-0 items-stretch gap-4 rounded-md border border-border bg-surface-2 px-4 py-3 backdrop-blur-sm">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.14em] text-text-faint">
+                  ShuttlePower
+                </p>
+                <p className="mt-1 animate-score-pop font-mono text-[34px] font-semibold leading-none tabular-nums text-text">
+                  {sp === null ? '—' : sp.toLocaleString()}
+                </p>
+                <p className="mt-1.5 text-[11px] text-text-muted">
+                  {progress ? progress.tier.blurb : 'Awaiting an SP account'}
+                </p>
+              </div>
+
+              <div className="w-px self-stretch bg-border" aria-hidden="true" />
+
+              <div className="text-right">
+                <p className="text-[10px] uppercase tracking-[0.14em] text-text-faint">Club rank</p>
+                <p className="mt-1 animate-score-pop font-mono text-[34px] font-semibold leading-none tabular-nums text-accent">
+                  {position === null ? '—' : `#${position}`}
+                </p>
+                <p className="mt-1.5 text-[11px] text-text-muted">
+                  of {totalPlayers} ranked
+                  {divisionPosition !== null ? ` · #${divisionPosition} in division` : ''}
+                </p>
+              </div>
+            </div>
+          ) : null}
         </div>
-      )}
-    </ArenaPanel>
-  )
-}
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt className="text-[10px] uppercase tracking-[0.12em] text-text-faint">{label}</dt>
-      <dd className="mt-0.5 font-mono text-base font-semibold tabular-nums text-text">{value}</dd>
-    </div>
-  )
-}
+        {player && progress ? (
+          <div className="mt-5 border-t border-border pt-4">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <RankSigil tier={progress.tier} />
 
-/* -------------------------------------------------------------------------- */
-/* Quick actions                                                              */
-/* -------------------------------------------------------------------------- */
+              <p className="font-mono text-[11px] tabular-nums text-text-faint">
+                {progress.next ? (
+                  <>
+                    <span className="text-text">{progress.spToNext}</span> SP to{' '}
+                    {progress.next.rankTitle}
+                  </>
+                ) : (
+                  'Top division · every point defends the spot'
+                )}
+              </p>
+            </div>
 
-const QUICK_ACTIONS = [
-  { href: '/matches', label: 'Find a match', hint: 'Challenge a player', icon: Swords },
-  { href: '/shuttlepower', label: 'Ladder', hint: 'Ranks and SP', icon: Zap },
-  { href: '/tournaments', label: 'Events', hint: 'Join a bracket', icon: Trophy },
-  { href: '/training', label: 'Training', hint: 'Next session', icon: CalendarCheck },
-] as const
+            <PowerMeter
+              className="mt-2.5"
+              progress={progress.progress}
+              label={`${progress.tier.rankTitle} division progress`}
+            />
 
-export function QuickActions({ className }: { className?: string }) {
-  return (
-    <ArenaPanel kicker="Arena floor" title="Jump in" className={className}>
-      <div className="grid grid-cols-2 gap-2 p-3">
-        {QUICK_ACTIONS.map((action) => {
-          const Icon = action.icon
+            <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-3">
+              <dl className="flex items-center gap-5">
+                <div>
+                  <dt className="text-[10px] uppercase tracking-[0.12em] text-text-faint">
+                    Played
+                  </dt>
+                  <dd className="font-mono text-base font-semibold tabular-nums text-text">
+                    {record.played}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-[10px] uppercase tracking-[0.12em] text-text-faint">Wins</dt>
+                  <dd className="font-mono text-base font-semibold tabular-nums text-text">
+                    {record.wins}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-[10px] uppercase tracking-[0.12em] text-text-faint">
+                    Win rate
+                  </dt>
+                  <dd className="font-mono text-base font-semibold tabular-nums text-text">
+                    {record.winRate === null ? '—' : `${Math.round(record.winRate * 100)}%`}
+                  </dd>
+                </div>
+              </dl>
 
-          return (
-            <Link
-              key={action.href}
-              to={action.href}
-              className="group flex flex-col gap-2 rounded-md border border-border bg-surface-2 p-3 transition-colors duration-fast hover:border-accent-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring"
-            >
-              <span className="grid size-8 place-items-center rounded-sm bg-accent-soft text-accent">
-                <Icon className="size-4" aria-hidden="true" />
-              </span>
-              <span className="min-w-0">
-                <span className="block truncate text-[13px] font-medium text-text">
-                  {action.label}
+              <span aria-hidden="true" className="hidden h-8 w-px bg-border sm:block" />
+
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] uppercase tracking-[0.12em] text-text-faint">
+                  Form
                 </span>
-                <span className="mt-0.5 block text-[11px] leading-snug text-text-muted">
-                  {action.hint}
-                </span>
-              </span>
-            </Link>
-          )
-        })}
+                <FormStrip form={record.form} />
+              </div>
+
+              {record.streak ? (
+                <StreakTag kind={record.streak.kind} length={record.streak.length} />
+              ) : null}
+
+              <div className="ml-auto flex flex-wrap items-center gap-2">
+                <Button asChild size="sm">
+                  <Link to="/matches">
+                    <Swords aria-hidden="true" />
+                    Challenge
+                  </Link>
+                </Button>
+                <Button asChild size="sm" variant="secondary">
+                  <Link to="/shuttlepower">
+                    <Zap aria-hidden="true" />
+                    Ladder
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
-    </ArenaPanel>
+    </section>
   )
 }
 
@@ -327,39 +302,46 @@ export interface YourMovePanelProps {
   className?: string
 }
 
+/** The quest log: personal actions first, then near-term club deadlines. */
 export function YourMovePanel({ items, className }: YourMovePanelProps) {
   const visible = items.slice(0, 5)
 
   return (
-    <ArenaPanel
-      kicker="Your move"
-      title="Waiting on you"
-      description="Personal actions first, then near-term club deadlines."
-      className={className}
-    >
+    <section className={cn('', className)}>
+      <SectionHeading
+        index="01"
+        title="Waiting on you"
+        description="Everything that needs a move from you, in the order it costs you."
+        action={
+          items.length > 0 ? (
+            <span className="font-mono text-[11px] tabular-nums text-text-faint">
+              {items.length} open
+            </span>
+          ) : null
+        }
+      />
+
       {visible.length === 0 ? (
-        <div className="p-4">
-          <EmptyState
-            icon={CheckCircle2}
-            title="Nothing is waiting"
-            description="Every challenge, fee, and club form is up to date."
-          />
-        </div>
+        <EmptyState
+          className="mt-4"
+          icon={CheckCircle2}
+          title="Court is clear"
+          description="Every challenge, fee, and club form is up to date."
+        />
       ) : (
-        <ul className="divide-y divide-border">
+        <ul className="mt-1 divide-y divide-border">
           {visible.map((item, index) => {
             const Icon = ATTENTION_ICONS[item.kind]
 
             return (
               <li key={item.id}>
-                <Link to={item.href} className={ROW_LINK}>
-                  <span className="grid size-5 shrink-0 place-items-center rounded-sm bg-surface-2 font-mono text-[10px] text-text-faint">
-                    {index + 1}
+                <Link to={item.href} className={ROW}>
+                  <span className="w-6 shrink-0 font-mono text-[11px] tabular-nums text-text-faint">
+                    {String(index + 1).padStart(2, '0')}
                   </span>
-                  <Icon
-                    className={cn('size-4 shrink-0', ATTENTION_TONES[item.tone])}
-                    aria-hidden="true"
-                  />
+                  <span className="grid size-8 shrink-0 place-items-center rounded-sm border border-border bg-surface-1">
+                    <Icon className={cn('size-4', ATTENTION_TONES[item.tone])} aria-hidden="true" />
+                  </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium text-text">
                       {item.title}
@@ -377,11 +359,11 @@ export function YourMovePanel({ items, className }: YourMovePanelProps) {
       )}
 
       {items.length > visible.length ? (
-        <p className="border-t border-border px-4 py-2 text-[11px] text-text-faint">
+        <p className="px-3 pt-2 text-[11px] text-text-faint">
           +{items.length - visible.length} more in the related modules.
         </p>
       ) : null}
-    </ArenaPanel>
+    </section>
   )
 }
 
@@ -424,22 +406,33 @@ export interface MatchCentrePanelProps {
 
 export function MatchCentrePanel({ rows, names, className }: MatchCentrePanelProps) {
   return (
-    <ArenaPanel
-      kicker="Head to head"
-      title="Match centre"
-      action={{ href: '/matches', label: 'All matches' }}
-      className={className}
-    >
+    <section className={className}>
+      <SectionHeading
+        index="02"
+        title="Match centre"
+        action={
+          <Link
+            to="/matches"
+            className="group inline-flex items-center gap-1 text-[11px] font-medium text-text-muted transition-colors duration-fast hover:text-accent"
+          >
+            All matches
+            <ArrowRight
+              className="size-3 transition-transform duration-fast group-hover:translate-x-0.5"
+              aria-hidden="true"
+            />
+          </Link>
+        }
+      />
+
       {rows.length === 0 ? (
-        <div className="p-4">
-          <EmptyState
-            icon={Swords}
-            title="No matches yet"
-            description="Challenge a club player and your first clash appears here."
-          />
-        </div>
+        <EmptyState
+          className="mt-4"
+          icon={Swords}
+          title="No matches yet"
+          description="Challenge a club player and your first clash appears here."
+        />
       ) : (
-        <ul className="divide-y divide-border">
+        <ul className="mt-1 divide-y divide-border">
           {rows.map((row) => {
             const opponent = names.get(row.opponentId) ?? 'Club player'
             const meta = matchMeta(row)
@@ -447,8 +440,12 @@ export function MatchCentrePanel({ rows, names, className }: MatchCentrePanelPro
 
             return (
               <li key={row.id}>
-                <Link to="/matches" className={ROW_LINK}>
-                  <ArenaAvatar name={opponent} size="sm" />
+                <Link to="/matches" className={ROW}>
+                  <ArenaAvatar
+                    name={opponent}
+                    size="sm"
+                    tone={row.result === 'win' ? 'accent' : 'neutral'}
+                  />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium text-text">{opponent}</span>
                     <span className="block truncate text-[11px] text-text-muted">
@@ -471,7 +468,7 @@ export function MatchCentrePanel({ rows, names, className }: MatchCentrePanelPro
           })}
         </ul>
       )}
-    </ArenaPanel>
+    </section>
   )
 }
 
@@ -499,22 +496,34 @@ export interface TournamentBoardProps {
 
 export function TournamentBoard({ tournaments, today, className }: TournamentBoardProps) {
   return (
-    <ArenaPanel
-      kicker="Draws"
-      title="Tournament board"
-      action={{ href: '/tournaments', label: 'All events' }}
-      className={className}
-    >
+    <section className={className}>
+      <SectionHeading
+        index="03"
+        title="Draws ahead"
+        description="Published events and what the bracket is waiting for."
+        action={
+          <Link
+            to="/tournaments"
+            className="group inline-flex items-center gap-1 text-[11px] font-medium text-text-muted transition-colors duration-fast hover:text-accent"
+          >
+            All events
+            <ArrowRight
+              className="size-3 transition-transform duration-fast group-hover:translate-x-0.5"
+              aria-hidden="true"
+            />
+          </Link>
+        }
+      />
+
       {tournaments.length === 0 ? (
-        <div className="p-4">
-          <EmptyState
-            icon={Trophy}
-            title="No upcoming tournaments"
-            description="Published events appear here when tournament staff schedule them."
-          />
-        </div>
+        <EmptyState
+          className="mt-4"
+          icon={Trophy}
+          title="No upcoming tournaments"
+          description="Published events appear here when tournament staff schedule them."
+        />
       ) : (
-        <ul className="divide-y divide-border">
+        <ul className="mt-1 divide-y divide-border">
           {tournaments.slice(0, 3).map((tournament) => {
             const day = dateBadge(tournament.starts_on)
             const days = daysBetween(today, tournament.starts_on)
@@ -531,8 +540,8 @@ export function TournamentBoard({ tournaments, today, className }: TournamentBoa
 
             return (
               <li key={tournament.id}>
-                <Link to={`/tournaments/${tournament.id}`} className={ROW_LINK}>
-                  <span className="grid w-11 shrink-0 place-items-center rounded-sm border border-border bg-surface-2 py-1">
+                <Link to={`/tournaments/${tournament.id}`} className={ROW}>
+                  <span className="grid w-12 shrink-0 place-items-center rounded-sm border border-border bg-surface-2 py-1">
                     <span className="text-[9px] uppercase tracking-[0.1em] text-text-faint">
                       {day.month}
                     </span>
@@ -545,7 +554,7 @@ export function TournamentBoard({ tournaments, today, className }: TournamentBoa
                     <span className="block truncate text-sm font-medium text-text">
                       {tournament.name}
                     </span>
-                    <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-text-muted">
+                    <span className="mt-0.5 flex flex-wrap items-center gap-x-3 text-[11px] text-text-muted">
                       <span>{formatDateRange(tournament.starts_on, tournament.ends_on)}</span>
                       {tournament.venue ? (
                         <span className="inline-flex items-center gap-1">
@@ -575,7 +584,7 @@ export function TournamentBoard({ tournaments, today, className }: TournamentBoa
           })}
         </ul>
       )}
-    </ArenaPanel>
+    </section>
   )
 }
 
@@ -613,29 +622,39 @@ export interface ClubFeedPanelProps {
 
 export function ClubFeedPanel({ items, className }: ClubFeedPanelProps) {
   return (
-    <ArenaPanel
-      kicker="Club pulse"
-      title="Around the arena"
-      action={{ href: '/announcements', label: 'All news' }}
-      className={className}
-    >
+    <section className={className}>
+      <SectionHeading
+        title="Around the arena"
+        action={
+          <Link
+            to="/announcements"
+            className="group inline-flex items-center gap-1 text-[11px] font-medium text-text-muted transition-colors duration-fast hover:text-accent"
+          >
+            All news
+            <ArrowRight
+              className="size-3 transition-transform duration-fast group-hover:translate-x-0.5"
+              aria-hidden="true"
+            />
+          </Link>
+        }
+      />
+
       {items.length === 0 ? (
-        <div className="p-4">
-          <EmptyState
-            icon={Megaphone}
-            title="Nothing new"
-            description="Published club news, open votes, and jersey projects appear here."
-          />
-        </div>
+        <EmptyState
+          className="mt-4"
+          icon={Megaphone}
+          title="Nothing new"
+          description="Published club news, open votes, and jersey projects appear here."
+        />
       ) : (
-        <ul className="divide-y divide-border">
+        <ul className="mt-1 divide-y divide-border">
           {items.map((item) => {
             const Icon = FEED_ICONS[item.kind]
 
             return (
               <li key={item.id}>
-                <Link to={item.href} className={cn(ROW_LINK, 'items-start')}>
-                  <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-sm bg-surface-2 text-text-muted">
+                <Link to={item.href} className={cn(ROW, 'items-start')}>
+                  <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-sm border border-border bg-surface-1 text-text-muted">
                     <Icon className="size-4" aria-hidden="true" />
                   </span>
 
@@ -645,7 +664,7 @@ export function ClubFeedPanel({ items, className }: ClubFeedPanelProps) {
                         {FEED_LABELS[item.kind]}
                       </span>
                       {item.meta ? (
-                        <span className="text-[10px] text-text-faint">{item.meta}</span>
+                        <span className="truncate text-[10px] text-text-faint">{item.meta}</span>
                       ) : null}
                     </span>
                     <span className="mt-0.5 block text-sm font-medium text-text">{item.title}</span>
@@ -653,15 +672,13 @@ export function ClubFeedPanel({ items, className }: ClubFeedPanelProps) {
                       {item.description}
                     </span>
                   </span>
-
-                  <ArrowRight className={cn(ARROW, 'mt-1')} aria-hidden="true" />
                 </Link>
               </li>
             )
           })}
         </ul>
       )}
-    </ArenaPanel>
+    </section>
   )
 }
 
@@ -669,23 +686,27 @@ export function ClubFeedPanel({ items, className }: ClubFeedPanelProps) {
 /* Ladder                                                                     */
 /* -------------------------------------------------------------------------- */
 
+const PODIUM_TONES = ['gold', 'silver', 'bronze'] as const
+const PODIUM_TEXT = ['text-gold', 'text-silver', 'text-bronze'] as const
+
 function LadderRow({ row, own }: { row: LeaderboardRow; own: boolean }) {
   const tier = tierFor(row.sp).tier
+  const medal = row.position <= 3 ? PODIUM_TONES[row.position - 1] : null
 
   return (
     <li
       className={cn(
-        'flex items-center gap-2.5 px-4 py-2',
+        'flex items-center gap-2.5 px-4 py-2.5 transition-colors duration-fast hover:bg-surface-2',
         own && 'border-l-2 border-l-accent bg-accent-soft',
       )}
     >
       <span
         className={cn(
-          'w-5 shrink-0 font-mono text-[11px] tabular-nums',
-          row.position === 1 ? 'text-accent' : 'text-text-faint',
+          'w-6 shrink-0 font-mono text-[11px] tabular-nums',
+          medal ? PODIUM_TEXT[row.position - 1] : 'text-text-faint',
         )}
       >
-        {row.position}
+        {String(row.position).padStart(2, '0')}
       </span>
 
       <ArenaAvatar name={row.fullName} size="sm" tone={tier.tone} ring={row.position <= 3} />
@@ -723,6 +744,7 @@ export interface LadderBoardProps {
   className?: string
 }
 
+/** The only boxed panel on the home page: the club scoreboard. */
 export function LadderBoard({ rows, ownPlayerId, limit = 6, className }: LadderBoardProps) {
   const top = rows.slice(0, limit)
   const own = ownPlayerId ? rows.find((row) => row.playerId === ownPlayerId) : undefined
@@ -730,6 +752,7 @@ export function LadderBoard({ rows, ownPlayerId, limit = 6, className }: LadderB
 
   return (
     <ArenaPanel
+      accent
       kicker="Club ladder"
       title="Ranks"
       action={{ href: '/shuttlepower', label: 'Full ladder' }}
@@ -771,24 +794,20 @@ export interface RivalsPanelProps {
 
 export function RivalsPanel({ rivals, className }: RivalsPanelProps) {
   return (
-    <ArenaPanel
-      kicker="In reach"
-      title="Rivals"
-      description="The nearest balances and your next step up."
-      className={className}
-    >
+    <section className={className}>
+      <SectionHeading title="In reach" description="The nearest balances and your next step up." />
+
       {rivals.length === 0 ? (
-        <div className="p-4">
-          <EmptyState
-            icon={Target}
-            title="No rivals to chase"
-            description="Once more players have SP, the closest ratings appear here."
-          />
-        </div>
+        <EmptyState
+          className="mt-4"
+          icon={Target}
+          title="No rivals to chase"
+          description="Once more players have SP, the closest ratings appear here."
+        />
       ) : (
-        <ul className="divide-y divide-border">
+        <ul className="mt-1 divide-y divide-border">
           {rivals.map((rival) => (
-            <li key={rival.playerId} className="flex items-center gap-2.5 px-4 py-2.5">
+            <li key={rival.playerId} className="flex items-center gap-2.5 px-3 py-2.5">
               <ArenaAvatar name={rival.fullName} size="sm" tone={tierFor(rival.sp).tier.tone} />
 
               <span className="min-w-0 flex-1">
@@ -811,7 +830,7 @@ export function RivalsPanel({ rivals, className }: RivalsPanelProps) {
           ))}
         </ul>
       )}
-    </ArenaPanel>
+    </section>
   )
 }
 
@@ -840,20 +859,36 @@ export function ClubDutyPanel({
   fee,
   className,
 }: ClubDutyPanelProps) {
+  const attendanceRatio = recorded > 0 ? attended / recorded : 0
+
   return (
-    <ArenaPanel
-      kicker="Club duties"
-      title="Training and dues"
-      action={{ href: '/training', label: 'Open' }}
-      className={className}
-    >
-      <div className="divide-y divide-border">
-        <div className="px-4 py-3">
-          <p className="text-[10px] uppercase tracking-[0.12em] text-text-faint">Next session</p>
+    <section className={className}>
+      <SectionHeading
+        title="Club duties"
+        action={
+          <Link
+            to="/training"
+            className="group inline-flex items-center gap-1 text-[11px] font-medium text-text-muted transition-colors duration-fast hover:text-accent"
+          >
+            Open
+            <ArrowRight
+              className="size-3 transition-transform duration-fast group-hover:translate-x-0.5"
+              aria-hidden="true"
+            />
+          </Link>
+        }
+      />
+
+      <div className="mt-1 divide-y divide-border">
+        <div className="px-3 py-3">
+          <p className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.12em] text-text-faint">
+            <CalendarCheck className="size-3 text-accent" aria-hidden="true" />
+            Next session
+          </p>
 
           {session ? (
             <>
-              <p className="mt-1 text-sm font-medium text-text">{session.title}</p>
+              <p className="mt-1.5 text-sm font-medium text-text">{session.title}</p>
               <p className="mt-1 flex items-center gap-1.5 text-[11px] text-text-muted">
                 <Clock className="size-3 shrink-0" aria-hidden="true" />
                 {formatDateTime(session.starts_at)}
@@ -864,37 +899,48 @@ export function ClubDutyPanel({
                   {session.venue}
                 </p>
               ) : null}
-              <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-text-faint">
+              <p className="mt-2 flex items-center gap-1.5 text-[11px] text-text-faint">
                 <Users className="size-3 shrink-0" aria-hidden="true" />
                 {recorded === 0
                   ? 'No attendance recorded for you yet.'
-                  : `Attended ${attended} of ${recorded} recorded.`}
+                  : `Attended ${attended} of ${recorded}.`}
               </p>
+              {recorded > 0 ? (
+                <PowerMeter
+                  className="mt-2"
+                  segments={12}
+                  progress={attendanceRatio}
+                  label="Your training attendance"
+                />
+              ) : null}
             </>
           ) : (
-            <p className="mt-1 text-[11px] text-text-muted">
+            <p className="mt-1.5 text-[11px] text-text-muted">
               Training staff have not scheduled the next session yet.
             </p>
           )}
         </div>
 
-        <div className="px-4 py-3">
-          <p className="text-[10px] uppercase tracking-[0.12em] text-text-faint">Training fee</p>
+        <div className="px-3 py-3">
+          <p className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.12em] text-text-faint">
+            <Wallet className="size-3 text-accent" aria-hidden="true" />
+            Training fee
+          </p>
 
           {periodLabel === null || amount === null || fee === null ? (
-            <p className="mt-1 text-[11px] text-text-muted">
+            <p className="mt-1.5 text-[11px] text-text-muted">
               A trainer opens a fee period before payments can be recorded.
             </p>
           ) : (
             <>
-              <div className="mt-1 flex items-center justify-between gap-2">
+              <div className="mt-1.5 flex items-center justify-between gap-2">
                 <p className="truncate text-sm font-medium text-text">{periodLabel}</p>
                 <StatusBadge status={fee.state} />
               </div>
               <p className="mt-0.5 text-[11px] text-text-muted">
                 {dueOn ? `Due ${formatDateTime(dueOn)}` : 'Payments recorded by a trainer.'}
               </p>
-              <p className="mt-1 font-mono text-sm tabular-nums text-text">
+              <p className="mt-1.5 font-mono text-sm tabular-nums text-text">
                 {formatMoney(fee.paid)}
                 <span className="text-text-faint"> of {formatMoney(Number(amount))}</span>
               </p>
@@ -907,7 +953,7 @@ export function ClubDutyPanel({
           )}
         </div>
       </div>
-    </ArenaPanel>
+    </section>
   )
 }
 
@@ -930,11 +976,17 @@ export interface OperationsPanelProps {
 
 export function OperationsPanel({ rows, className }: OperationsPanelProps) {
   return (
-    <ArenaPanel kicker="Operations" title="Club work queued" className={className}>
-      <ul className="divide-y divide-border">
+    <section className={cn('', className)}>
+      <SectionHeading
+        index="04"
+        title="Control room"
+        description="Club work queued for your roles."
+      />
+
+      <ul className="mt-1 divide-y divide-border">
         {rows.map((row) => (
           <li key={row.id}>
-            <Link to={row.href} className={ROW_LINK}>
+            <Link to={row.href} className={ROW}>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[13px] font-medium text-text">
                   {row.label}
@@ -944,28 +996,41 @@ export function OperationsPanel({ rows, className }: OperationsPanelProps) {
                 </span>
               </span>
 
-              <Badge tone={row.count > 0 ? 'warning' : 'neutral'}>{row.count}</Badge>
+              <span
+                className={cn(
+                  'grid min-w-7 place-items-center rounded-sm border px-1.5 py-0.5 font-mono text-[11px] tabular-nums',
+                  row.count > 0
+                    ? 'border-warning-soft bg-warning-soft text-warning'
+                    : 'border-border bg-surface-1 text-text-faint',
+                )}
+              >
+                {row.count}
+              </span>
               <ArrowRight className={ARROW} aria-hidden="true" />
             </Link>
           </li>
         ))}
       </ul>
-    </ArenaPanel>
+    </section>
   )
 }
 
 /* -------------------------------------------------------------------------- */
-/* Pulse strip                                                                */
+/* Unused guards                                                              */
 /* -------------------------------------------------------------------------- */
 
-export interface ArenaPulseProps {
+/** Kept for pages that still want the compact pulse strip. */
+export function ArenaPulse({
+  players,
+  events,
+  waiting,
+  className,
+}: {
   players: number
   events: number
   waiting: number
   className?: string
-}
-
-export function ArenaPulse({ players, events, waiting, className }: ArenaPulseProps) {
+}) {
   const stats = [
     { icon: Users, label: `${players} fighter${players === 1 ? '' : 's'}` },
     { icon: Trophy, label: `${events} event${events === 1 ? '' : 's'} open` },
@@ -975,7 +1040,7 @@ export function ArenaPulse({ players, events, waiting, className }: ArenaPulsePr
   return (
     <div
       className={cn(
-        'flex flex-wrap items-center gap-x-5 gap-y-2 rounded-md border border-border bg-surface-1 px-4 py-2.5',
+        'flex flex-wrap items-center gap-x-5 gap-y-2 rounded-md border border-border bg-surface-1 px-4 py-2.5 shadow-panel',
         className,
       )}
     >
@@ -990,9 +1055,19 @@ export function ArenaPulse({ players, events, waiting, className }: ArenaPulsePr
       ))}
 
       <span className="ml-auto inline-flex items-center gap-1.5 text-[11px] text-text-muted">
-        <span aria-hidden="true" className="size-1.5 rounded-full bg-accent" />
+        <span aria-hidden="true" className="size-1.5 animate-edge-pulse rounded-full bg-accent" />
         Season in play · ranks display-only
       </span>
     </div>
+  )
+}
+
+/** Small accent rule used by pages that want a section marker without a heading. */
+export function ArenaRule({ className }: { className?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn('block h-px w-full bg-gradient-to-r from-accent to-transparent', className)}
+    />
   )
 }

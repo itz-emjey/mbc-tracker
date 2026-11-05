@@ -49,6 +49,8 @@ export interface EventDrawProps {
   canManage: boolean
   /** True while the tournament is in progress. */
   canRecord: boolean
+  /** Drop the panel header when the embedding stage already names the board. */
+  headerless?: boolean
   onChanged: () => void
 }
 
@@ -67,6 +69,7 @@ export function EventDraw({
   lookups,
   canManage,
   canRecord,
+  headerless = false,
   onChanged,
 }: EventDrawProps) {
   const [drawOrder, setDrawOrder] = React.useState<DrawOrder>('seeded')
@@ -134,6 +137,7 @@ export function EventDraw({
           ? 'Byes advance automatically. Results feed the bracket or the D9 standings.'
           : 'Generate the draw after the entries are final. This locks the entry list.'
       }
+      headerless={headerless}
     >
       <div className="flex flex-col gap-3 p-3">
         {drawError ? (

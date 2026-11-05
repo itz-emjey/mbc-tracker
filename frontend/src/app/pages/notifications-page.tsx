@@ -3,7 +3,7 @@ import * as React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
-import { ArenaPanel, ArenaStatStrip } from '@/components/arena/arena-ui'
+import { SectionHeading } from '@/components/arena/arena-ui'
 import { EmptyState } from '@/components/shared/empty-state'
 import { ErrorState } from '@/components/shared/error-state'
 import { LoadingState } from '@/components/shared/loading-state'
@@ -104,6 +104,12 @@ export function NotificationsPage() {
         kicker="Activity"
         title="Notifications"
         description="Tournament announcements, partner invitations, and payment confirmations land here."
+        stats={[
+          { label: 'Unread', value: String(unread) },
+          { label: 'All activity', value: String(notifications.length) },
+          { label: 'Tournaments', value: String(tournamentCount) },
+          { label: 'Read', value: String(Math.max(0, notifications.length - unread)) },
+        ]}
         actions={
           notifications.length > 0 ? (
             <Button
@@ -128,19 +134,13 @@ export function NotificationsPage() {
         />
       ) : null}
 
-      <ArenaStatStrip
-        className="mt-5"
-        stats={[
-          { label: 'Unread', value: String(unread), detail: 'Waiting for you' },
-          { label: 'All activity', value: String(notifications.length), detail: 'This account' },
-          { label: 'Tournaments', value: String(tournamentCount), detail: 'Draws and entries' },
-          {
-            label: 'Read',
-            value: String(Math.max(0, notifications.length - unread)),
-            detail: 'Already cleared',
-          },
-        ]}
-      />
+      <div className="mt-6">
+        <SectionHeading
+          index="01"
+          title="Latest activity"
+          description="Newest first. Opening a notification marks it read."
+        />
+      </div>
 
       <div className="mt-4">
         {loading ? (
@@ -152,68 +152,58 @@ export function NotificationsPage() {
             description="When a tournament is published or a partner invites you, it will show up here."
           />
         ) : (
-          <ArenaPanel
-            kicker="Feed"
-            title="Latest activity"
-            action={{ href: '/', label: 'Back to arena' }}
-          >
-            <ul className="divide-y divide-border">
-              {notifications.map((notification) => {
-                const tournament = isTournamentNotice(notification.type)
+          <ul className="mt-1 divide-y divide-border">
+            {notifications.map((notification) => {
+              const tournament = isTournamentNotice(notification.type)
 
-                return (
-                  <li key={notification.id}>
-                    <button
-                      type="button"
-                      onClick={() => void handleOpen(notification)}
+              return (
+                <li key={notification.id}>
+                  <button
+                    type="button"
+                    onClick={() => void handleOpen(notification)}
+                    className={cn(
+                      'flex w-full items-start gap-3 px-4 py-3 text-left transition-colors duration-fast hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-ring',
+                      notification.read_at === null && 'bg-accent-soft',
+                    )}
+                  >
+                    <span
                       className={cn(
-                        'flex w-full items-start gap-3 px-4 py-3 text-left transition-colors duration-fast hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-ring',
-                        notification.read_at === null && 'bg-accent-soft',
+                        'mt-0.5 grid size-8 shrink-0 place-items-center rounded-sm border border-border',
+                        tournament ? 'bg-accent-soft text-accent' : 'bg-surface-2 text-text-muted',
                       )}
                     >
-                      <span
-                        className={cn(
-                          'mt-0.5 grid size-8 shrink-0 place-items-center rounded-sm border border-border',
-                          tournament
-                            ? 'bg-accent-soft text-accent'
-                            : 'bg-surface-2 text-text-muted',
-                        )}
-                      >
-                        {tournament ? (
-                          <Trophy className="size-4" aria-hidden="true" />
-                        ) : (
-                          <Bell className="size-4" aria-hidden="true" />
-                        )}
-                      </span>
+                      {tournament ? (
+                        <Trophy className="size-4" aria-hidden="true" />
+                      ) : (
+                        <Bell className="size-4" aria-hidden="true" />
+                      )}
+                    </span>
 
-                      <span className="min-w-0 flex-1">
-                        <span className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
-                          <span className="text-sm font-medium text-text">
-                            {notification.title}
-                          </span>
-                          <span className="shrink-0 font-mono text-[10px] text-text-faint">
-                            {formatDateTime(notification.created_at)}
-                          </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+                        <span className="text-sm font-medium text-text">{notification.title}</span>
+                        <span className="shrink-0 font-mono text-[10px] text-text-faint">
+                          {formatDateTime(notification.created_at)}
                         </span>
-
-                        {notification.body ? (
-                          <span className="mt-1 block text-[13px] leading-relaxed text-text-muted">
-                            {notification.body}
-                          </span>
-                        ) : null}
                       </span>
 
-                      {notification.read_at === null ? (
-                        <span className="mt-1.5 shrink-0">
-                          <Badge tone="accent">New</Badge>
+                      {notification.body ? (
+                        <span className="mt-1 block text-[13px] leading-relaxed text-text-muted">
+                          {notification.body}
                         </span>
                       ) : null}
-                    </button>
-                  </li>
-                )
-              })}
-            </ul>
-          </ArenaPanel>
+                    </span>
+
+                    {notification.read_at === null ? (
+                      <span className="mt-1.5 shrink-0">
+                        <Badge tone="accent">New</Badge>
+                      </span>
+                    ) : null}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
         )}
       </div>
     </>

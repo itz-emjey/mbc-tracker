@@ -41,15 +41,28 @@ export function AuthLayout({ title, description, children }: AuthLayoutProps) {
   return (
     <div className="min-h-dvh bg-bg lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(420px,520px)]">
       <aside className="relative hidden flex-col justify-between overflow-hidden border-r border-border bg-surface-1 p-10 lg:flex">
-        <Brand />
+        {/* Court lines: the one textured surface on the signed-out screens. */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 opacity-40"
+          style={{
+            backgroundImage:
+              'linear-gradient(to right, var(--color-border) 1px, transparent 1px), linear-gradient(to bottom, var(--color-border) 1px, transparent 1px)',
+            backgroundSize: '64px 64px',
+            maskImage: 'radial-gradient(120% 90% at 0% 0%, black, transparent 72%)',
+            WebkitMaskImage: 'radial-gradient(120% 90% at 0% 0%, black, transparent 72%)',
+          }}
+        />
 
-        <div className="max-w-md">
-          <p className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.18em] text-accent">
+        <Brand className="relative" />
+
+        <div className="relative max-w-md">
+          <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-accent">
             <span aria-hidden="true" className="h-px w-6 bg-accent" />
             Matag-ob Badminton Club
           </p>
 
-          <h2 className="mt-3 text-3xl font-semibold leading-tight tracking-tight text-text">
+          <h2 className="mt-3 text-4xl font-semibold leading-[1.05] tracking-tight text-text">
             One club.
             <br />
             One arena.
@@ -60,10 +73,13 @@ export function AuthLayout({ title, description, children }: AuthLayoutProps) {
             built to stay accurate.
           </p>
 
-          <ul className="mt-8 flex flex-col gap-4">
-            {ARENA_POINTS.map((point) => (
-              <li key={point.title} className="flex items-start gap-3">
-                <span className="grid size-9 shrink-0 place-items-center rounded-sm border border-border bg-surface-2 text-accent">
+          <ul className="mt-8 divide-y divide-border border-y border-border">
+            {ARENA_POINTS.map((point, index) => (
+              <li key={point.title} className="flex items-start gap-3 py-3.5">
+                <span className="w-6 shrink-0 pt-0.5 font-mono text-[11px] tabular-nums text-text-faint">
+                  {String(index + 1).padStart(2, '0')}
+                </span>
+                <span className="grid size-8 shrink-0 place-items-center rounded-sm border border-border bg-surface-2 text-accent">
                   <point.icon className="size-4" aria-hidden="true" />
                 </span>
                 <span className="min-w-0">
@@ -77,7 +93,7 @@ export function AuthLayout({ title, description, children }: AuthLayoutProps) {
           </ul>
         </div>
 
-        <div className="flex items-center gap-3 border-t border-border pt-5 text-[11px] text-text-faint">
+        <div className="relative flex items-center gap-3 border-t border-border pt-5 text-[11px] text-text-faint">
           <span className="grid size-8 place-items-center rounded-sm bg-accent-soft text-accent">
             <Crosshair className="size-4" aria-hidden="true" />
           </span>

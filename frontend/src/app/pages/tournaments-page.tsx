@@ -2,7 +2,7 @@ import { CalendarDays, MapPin, Plus, SearchX, Trophy } from 'lucide-react'
 import * as React from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
-import { ArenaPanel, ArenaStatStrip } from '@/components/arena/arena-ui'
+import { ProgressTrack, SectionHeading } from '@/components/arena/arena-ui'
 import { EmptyState } from '@/components/shared/empty-state'
 import { ErrorState } from '@/components/shared/error-state'
 import { LoadingState } from '@/components/shared/loading-state'
@@ -14,12 +14,13 @@ import { errorMessage } from '@/features/auth/api'
 import { hasAnyRole } from '@/features/auth/types'
 import { useSession } from '@/features/auth/session-context'
 import { daysBetween } from '@/domain/arena'
-import { listTournaments } from '@/features/tournaments/api'
+import { listTournamentProgress, listTournaments } from '@/features/tournaments/api'
 import { TournamentFormDialog } from '@/features/tournaments/tournament-form-dialog'
 import {
   TOURNAMENT_STAFF_ROLES,
   TOURNAMENT_STATUSES,
   TOURNAMENT_STATUS_LABELS,
+  type TournamentProgress,
   type TournamentRecord,
   type TournamentStatus,
 } from '@/features/tournaments/types'
@@ -42,6 +43,17 @@ function localToday(): string {
   ].join('-')
 }
 
+/** One line that says where the board stands, in the club's own words. */
+function progressText(progress: TournamentProgress): string {
+  if (progress.events === 0) return 'No events yet'
+
+  const draws = `${progress.drawnEvents}/${progress.events} draws`
+
+  if (progress.matches === 0) return draws
+
+  return `${draws} · ${progress.playedMatches}/${progress.matches} played`
+}
+
 function dateBlock(value: string): { day: string; month: string } {
   const date = new Date(`${value}T00:00:00`)
 
@@ -57,6 +69,7 @@ export function TournamentsPage() {
   const { user } = useSession()
   const navigate = useNavigate()
   const [tournaments, setTournaments] = React.useState<TournamentRecord[]>([])
+  const [progress, setProgress] = React.useState<ReadonlyMap<string, TournamentProgress>>(new Map())
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [reloadKey, setReloadKey] = React.useState(0)
@@ -74,16 +87,25 @@ export function TournamentsPage() {
   React.useEffect(() => {
     let active = true
 
-    void listTournaments()
-      .then((nextTournaments) => {
-        if (active) setTournaments(nextTournaments)
-      })
-      .catch((loadError: unknown) => {
+    async function load() {
+      try {
+        const nextTournaments = await listTournaments()
+        const nextProgress = await listTournamentProgress(
+          nextTournaments.map((tournament) => tournament.id),
+        )
+
+        if (!active) return
+
+        setTournaments(nextTournaments)
+        setProgress(nextProgress)
+      } catch (loadError) {
         if (active) setError(errorMessage(loadError))
-      })
-      .finally(() => {
+      } finally {
         if (active) setLoading(false)
-      })
+      }
+    }
+
+    void load()
 
     return () => {
       active = false
@@ -119,6 +141,12 @@ export function TournamentsPage() {
         kicker="Competition floor"
         title="Tournaments"
         description="Every draw, every event, and the official record of who won. A completed tournament match awards double ShuttlePower impact."
+        stats={[
+          { label: 'On record', value: String(tournaments.length) },
+          { label: 'Live now', value: String(live) },
+          { label: 'Open', value: String(published) },
+          { label: 'Drafts', value: String(drafts) },
+        ]}
         actions={
           canManage ? (
             <Button onClick={() => setFormOpen(true)}>
@@ -138,21 +166,7 @@ export function TournamentsPage() {
         />
       ) : null}
 
-      <ArenaStatStrip
-        className="mt-5"
-        stats={[
-          {
-            label: 'Tournaments',
-            value: String(tournaments.length),
-            detail: 'On the club record',
-          },
-          { label: 'In play', value: String(live), detail: 'Draws running right now' },
-          { label: 'Published', value: String(published), detail: 'Open for registration' },
-          { label: 'Drafts', value: String(drafts), detail: 'Not visible to members yet' },
-        ]}
-      />
-
-      <div className="mt-5 flex flex-wrap items-center gap-1.5">
+      <div className="mt-6 flex flex-wrap items-center gap-1.5">
         {STATUS_FILTERS.map((option) => {
           const active = status === option
           const count = countFor(option)
@@ -213,16 +227,20 @@ export function TournamentsPage() {
             }
           />
         ) : (
-          <ArenaPanel
-            kicker="Draw board"
-            title={`${filtered.length} of ${tournaments.length} tournament${
-              tournaments.length === 1 ? '' : 's'
-            }`}
-          >
-            <ul className="divide-y divide-border">
+          <>
+            <SectionHeading
+              index="01"
+              title="Draw board"
+              description={`${filtered.length} of ${tournaments.length} tournament${
+                tournaments.length === 1 ? '' : 's'
+              } shown.`}
+            />
+
+            <ul className="mt-1 divide-y divide-border">
               {filtered.map((tournament) => {
                 const day = dateBlock(tournament.starts_on)
                 const days = daysBetween(today, tournament.starts_on)
+                const board = progress.get(tournament.id)
                 const countdown =
                   tournament.status === 'in_progress'
                     ? 'Live now'
@@ -240,7 +258,7 @@ export function TournamentsPage() {
                   <li key={tournament.id}>
                     <Link
                       to={`/tournaments/${tournament.id}`}
-                      className="group flex items-center gap-3 px-4 py-3 transition-colors duration-fast hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-ring"
+                      className="row-action group flex items-center gap-3 rounded-sm px-3 py-3 transition-colors duration-fast hover:bg-surface-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-ring"
                     >
                       <span className="grid w-11 shrink-0 place-items-center rounded-sm border border-border bg-surface-2 py-1">
                         <span className="text-[9px] uppercase tracking-[0.1em] text-text-faint">
@@ -277,6 +295,31 @@ export function TournamentsPage() {
                           </span>
                         </span>
 
+                        {board ? (
+                          <span className="mt-1.5 flex flex-wrap items-center gap-2">
+                            {board.events > 0 ? (
+                              <ProgressTrack
+                                value={
+                                  board.matches > 0
+                                    ? board.playedMatches / board.matches
+                                    : board.drawnEvents / board.events
+                                }
+                                label={`Draw and result progress for ${tournament.name}`}
+                                tone={
+                                  board.matches > 0 && board.playedMatches === board.matches
+                                    ? 'accent'
+                                    : 'info'
+                                }
+                                edge={false}
+                                className="w-20 shrink-0"
+                              />
+                            ) : null}
+                            <span className="font-mono text-[10px] tabular-nums text-text-faint">
+                              {progressText(board)}
+                            </span>
+                          </span>
+                        ) : null}
+
                         {tournament.registration_deadline ? (
                           <span className="mt-0.5 block text-[11px] text-text-faint">
                             Registration closes {formatDateTime(tournament.registration_deadline)}
@@ -298,10 +341,10 @@ export function TournamentsPage() {
               })}
             </ul>
 
-            <p className="border-t border-border px-4 py-2 text-[10px] leading-snug text-text-faint">
+            <p className="px-3 pt-2 text-[11px] leading-snug text-text-faint">
               Open a tournament for its poster, events, brackets, and results.
             </p>
-          </ArenaPanel>
+          </>
         )}
       </div>
 

@@ -257,8 +257,11 @@ function playerRecord(): PlayerRecord {
 function matchRecord(overrides: Partial<FriendlyMatchRecord>): FriendlyMatchRecord {
   return {
     id: 'match',
+    match_type: 'singles',
     challenger_id: 'p2',
+    challenger_partner_id: null,
     opponent_id: 'p1',
+    opponent_partner_id: null,
     note: null,
     status: 'pending',
     winner_id: null,
@@ -268,6 +271,10 @@ function matchRecord(overrides: Partial<FriendlyMatchRecord>): FriendlyMatchReco
     responded_by: null,
     responded_at: null,
     confirmed_at: null,
+    challenger_approved_at: null,
+    challenger_partner_approved_at: null,
+    opponent_approved_at: null,
+    opponent_partner_approved_at: null,
     dispute_reason: null,
     disputed_at: null,
     created_at: '2026-11-01T00:00:00Z',

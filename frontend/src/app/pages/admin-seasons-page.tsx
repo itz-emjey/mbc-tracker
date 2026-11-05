@@ -14,7 +14,7 @@ import * as React from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
-import { ArenaStatStrip, ArenaPanel } from '@/components/arena/arena-ui'
+import { ArenaPanel } from '@/components/arena/arena-ui'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { EmptyState } from '@/components/shared/empty-state'
 import { ErrorState } from '@/components/shared/error-state'
@@ -426,6 +426,15 @@ export function AdminSeasonsPage() {
         kicker="ShuttlePower"
         title="Season management"
         description="Create the calendar season, freeze its snapshot, decide deduction batches, and recover a failed January transition."
+        stats={[
+          { label: 'Active season', value: activeSeason?.label ?? 'None' },
+          {
+            label: 'Scheduled',
+            value: String(seasons.filter((season) => season.status === 'scheduled').length),
+          },
+          { label: 'Pending batches', value: String(pendingBatches.length) },
+          { label: 'Failed transitions', value: String(failedTransitions.length) },
+        ]}
         actions={
           <Button variant="secondary" asChild>
             <Link to="/shuttlepower">
@@ -445,32 +454,6 @@ export function AdminSeasonsPage() {
         />
       ) : null}
 
-      <ArenaStatStrip
-        className="mt-5"
-        stats={[
-          {
-            label: 'Active season',
-            value: activeSeason?.label ?? 'None',
-            detail: activeSeason ? 'Results accrue Seasonal SP' : 'Activate a scheduled season',
-          },
-          {
-            label: 'Scheduled',
-            value: String(seasons.filter((season) => season.status === 'scheduled').length),
-            detail: 'Ready to activate',
-          },
-          {
-            label: 'Pending batches',
-            value: String(pendingBatches.length),
-            detail: pendingBatches.length > 0 ? 'Awaiting a decision' : 'Nothing to decide',
-          },
-          {
-            label: 'Failed transitions',
-            value: String(failedTransitions.length),
-            detail: failedTransitions.length > 0 ? 'Needs a forced re-run' : 'Healthy',
-          },
-        ]}
-      />
-
       <ArenaPanel
         kicker="Calendar"
         title="Seasons"
@@ -478,8 +461,8 @@ export function AdminSeasonsPage() {
         className="mt-4"
         bodyClassName="p-0"
       >
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2.5">
-          <p className="text-[11px] text-text-faint">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2.5 sm:px-4">
+          <p className="hidden text-[11px] text-text-faint sm:block">
             Only one season may be active. Closing freezes the S19 snapshot and creates one pending
             S8 deduction batch.
           </p>
@@ -500,11 +483,14 @@ export function AdminSeasonsPage() {
             />
           </div>
         ) : (
-          <Table containerClassName="rounded-none border-0">
+          <Table
+            containerClassName="rounded-none border-0"
+            className="[&_td]:px-2 [&_td]:py-2 sm:[&_td]:px-3 sm:[&_td]:py-3"
+          >
             <TableHeader>
               <TableRow>
                 <TableHead>Season</TableHead>
-                <TableHead>Dates</TableHead>
+                <TableHead className="hidden sm:table-cell">Dates</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="hidden md:table-cell">Started</TableHead>
                 <TableHead className="hidden md:table-cell">Closed</TableHead>
@@ -514,8 +500,13 @@ export function AdminSeasonsPage() {
             <TableBody>
               {seasons.map((season) => (
                 <TableRow key={season.id}>
-                  <TableCell className="font-medium text-text">{season.label}</TableCell>
-                  <TableCell className="whitespace-nowrap text-text-muted">
+                  <TableCell className="font-medium text-text">
+                    {season.label}
+                    <span className="mt-0.5 block whitespace-nowrap text-[10px] text-text-faint sm:hidden">
+                      {formatDateRange(season.starts_on, season.ends_on)}
+                    </span>
+                  </TableCell>
+                  <TableCell className="hidden whitespace-nowrap text-text-muted sm:table-cell">
                     {formatDateRange(season.starts_on, season.ends_on)}
                   </TableCell>
                   <TableCell>
@@ -588,7 +579,7 @@ export function AdminSeasonsPage() {
         ) : (
           <div className="divide-y divide-border">
             {batches.map((batch) => (
-              <div key={batch.id} className="p-4">
+              <div key={batch.id} className="p-3 sm:p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -636,15 +627,18 @@ export function AdminSeasonsPage() {
                     This batch has no proposed entries.
                   </p>
                 ) : (
-                  <Table className="mt-3" containerClassName="rounded-md border border-border">
+                  <Table
+                    className="mt-3 [&_td]:px-2 [&_td]:py-2 sm:[&_td]:px-3 sm:[&_td]:py-3"
+                    containerClassName="rounded-md border border-border"
+                  >
                     <TableHeader>
                       <TableRow>
                         <TableHead>Player</TableHead>
                         <TableHead className="text-right">Position</TableHead>
-                        <TableHead className="text-right">Tier</TableHead>
+                        <TableHead className="hidden text-right sm:table-cell">Tier</TableHead>
                         <TableHead className="text-right">Proposed</TableHead>
                         <TableHead className="text-right">Applied</TableHead>
-                        <TableHead className="text-right">Waived</TableHead>
+                        <TableHead className="hidden text-right sm:table-cell">Waived</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -656,7 +650,7 @@ export function AdminSeasonsPage() {
                           <TableCell className="text-right font-mono text-sm tabular-nums text-text-muted">
                             {entry.position}
                           </TableCell>
-                          <TableCell className="text-right font-mono text-sm tabular-nums text-text-muted">
+                          <TableCell className="hidden text-right font-mono text-sm tabular-nums text-text-muted sm:table-cell">
                             {entry.tier}
                           </TableCell>
                           <TableCell className="text-right font-mono text-sm tabular-nums text-text">
@@ -665,7 +659,7 @@ export function AdminSeasonsPage() {
                           <TableCell className="text-right font-mono text-sm tabular-nums text-text-muted">
                             {entry.applied_amount ?? '—'}
                           </TableCell>
-                          <TableCell className="text-right font-mono text-sm tabular-nums text-text-muted">
+                          <TableCell className="hidden text-right font-mono text-sm tabular-nums text-text-muted sm:table-cell">
                             {entry.waived_amount ?? '—'}
                           </TableCell>
                         </TableRow>
@@ -686,8 +680,8 @@ export function AdminSeasonsPage() {
         className="mt-4"
         bodyClassName="p-0"
       >
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2.5">
-          <p className="text-[11px] text-text-faint">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2.5 sm:px-4">
+          <p className="hidden text-[11px] text-text-faint sm:block">
             Each attempt is checkpointed. A forced re-run resumes the same transition instead of
             creating a second one.
           </p>
@@ -717,7 +711,10 @@ export function AdminSeasonsPage() {
             />
           </div>
         ) : (
-          <Table containerClassName="rounded-none border-0">
+          <Table
+            containerClassName="rounded-none border-0"
+            className="[&_td]:px-2 [&_td]:py-2 sm:[&_td]:px-3 sm:[&_td]:py-3"
+          >
             <TableHeader>
               <TableRow>
                 <TableHead>Season</TableHead>
@@ -748,7 +745,7 @@ export function AdminSeasonsPage() {
                     {transition.completed_at ? formatDateTime(transition.completed_at) : '—'}
                   </TableCell>
                   <TableCell
-                    className="max-w-64 truncate text-xs text-danger"
+                    className="max-w-36 truncate text-xs text-danger sm:max-w-64"
                     title={transition.last_error ?? undefined}
                   >
                     {transition.last_error ?? '—'}

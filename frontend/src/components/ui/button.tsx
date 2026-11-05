@@ -7,8 +7,9 @@ import { cn } from '@/lib/cn'
 
 const buttonVariants = cva(
   [
-    'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium',
-    'transition-colors duration-fast',
+    'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-semibold',
+    'transition-[background-color,border-color,box-shadow,color,transform] duration-fast ease-arena',
+    'active:translate-y-px',
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring',
     'disabled:pointer-events-none disabled:opacity-50',
     '[&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0',
@@ -16,11 +17,12 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        primary: 'bg-accent text-accent-foreground hover:bg-accent-hover',
+        primary:
+          'bg-accent text-accent-foreground shadow-panel hover:bg-accent-hover hover:shadow-accent',
         secondary:
           'border border-border bg-surface-2 text-text hover:border-border-strong hover:bg-surface-3',
         ghost: 'text-text-muted hover:bg-surface-2 hover:text-text',
-        danger: 'bg-danger text-bg hover:bg-danger-hover',
+        danger: 'bg-danger text-bg shadow-panel hover:bg-danger-hover',
         link: 'h-auto p-0 text-accent underline-offset-4 hover:underline',
       },
       size: {

@@ -157,6 +157,17 @@ export interface PaymentRecord {
   updated_at: string
 }
 
+/**
+ * How far a tournament's board has moved, for the list view. Counts only:
+ * a draw exists per event, and a match is played once it has a result.
+ */
+export interface TournamentProgress {
+  events: number
+  drawnEvents: number
+  matches: number
+  playedMatches: number
+}
+
 /** A pending or answered doubles invitation. No entry exists until accepted. */
 export interface PartnerInvitationRecord {
   id: string

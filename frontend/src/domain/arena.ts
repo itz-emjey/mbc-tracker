@@ -122,13 +122,60 @@ export function tierFor(sp: number): TierProgress {
 /** The shape the arena needs from a friendly match record. */
 export interface ArenaMatchLike {
   id: string
+  match_type?: string
   challenger_id: string
+  challenger_partner_id?: string | null
   opponent_id: string
+  opponent_partner_id?: string | null
   status: string
   winner_id: string | null
+  challenger_approved_at?: string | null
+  challenger_partner_approved_at?: string | null
+  opponent_approved_at?: string | null
+  opponent_partner_approved_at?: string | null
   created_at: string
   confirmed_at?: string | null
   auto_approval_due_at?: string | null
+}
+
+type ArenaTeam = 'challenger' | 'opponent'
+
+/** The team a player belongs to, captains and doubles partners alike. */
+function playerTeam(match: ArenaMatchLike, playerId: string): ArenaTeam | null {
+  if (match.challenger_id === playerId || match.challenger_partner_id === playerId) {
+    return 'challenger'
+  }
+
+  if (match.opponent_id === playerId || match.opponent_partner_id === playerId) {
+    return 'opponent'
+  }
+
+  return null
+}
+
+/** `winner_id` stores the winning captain, so compare teams, not ids. */
+function winningTeam(match: ArenaMatchLike): ArenaTeam | null {
+  if (match.winner_id === null) return null
+
+  return playerTeam(match, match.winner_id)
+}
+
+function playerWon(match: ArenaMatchLike, playerId: string): boolean {
+  const winner = winningTeam(match)
+
+  return winner !== null && winner === playerTeam(match, playerId)
+}
+
+/** Whether this player already approved a submitted result. */
+function playerApproved(match: ArenaMatchLike, playerId: string): boolean {
+  if (match.challenger_id === playerId) return match.challenger_approved_at != null
+  if (match.challenger_partner_id === playerId) {
+    return match.challenger_partner_approved_at != null
+  }
+  if (match.opponent_id === playerId) return match.opponent_approved_at != null
+  if (match.opponent_partner_id === playerId) return match.opponent_partner_approved_at != null
+
+  return false
 }
 
 /** Statuses where the result is settled and countable. */
@@ -165,10 +212,10 @@ export function arenaRecord(
       (match) =>
         FINAL_STATUSES.includes(match.status) &&
         match.winner_id !== null &&
-        (match.challenger_id === playerId || match.opponent_id === playerId),
+        playerTeam(match, playerId) !== null,
     )
     .sort((left, right) => settledTime(right).localeCompare(settledTime(left)))
-    .map((match): ArenaResult => (match.winner_id === playerId ? 'win' : 'loss'))
+    .map((match): ArenaResult => (playerWon(match, playerId) ? 'win' : 'loss'))
 
   const wins = results.filter((result) => result === 'win').length
   const played = results.length
@@ -218,10 +265,14 @@ function hoursUntil(dueAt: string | null | undefined, now: number): number | nul
 }
 
 function needsPlayer(match: ArenaMatchLike, playerId: string): boolean {
-  if (match.challenger_id !== playerId && match.opponent_id !== playerId) return false
+  const team = playerTeam(match, playerId)
+
+  if (team === null) return false
   if (match.status === 'pending') return match.opponent_id === playerId
   if (match.status === 'accepted') return true
-  if (match.status === 'awaiting_approval') return match.winner_id !== playerId
+  if (match.status === 'awaiting_approval') {
+    return !playerWon(match, playerId) && !playerApproved(match, playerId)
+  }
 
   return false
 }
@@ -257,10 +308,11 @@ export function arenaMatches(
   if (!playerId) return []
 
   const rows = matches.flatMap((match): ArenaMatchRow[] => {
-    const incoming = match.challenger_id !== playerId
+    const team = playerTeam(match, playerId)
 
-    if (incoming && match.opponent_id !== playerId) return []
+    if (team === null) return []
 
+    const incoming = team === 'opponent'
     const settled = FINAL_STATUSES.includes(match.status)
 
     return [
@@ -272,7 +324,7 @@ export function arenaMatches(
         result: settled
           ? match.winner_id === null
             ? null
-            : match.winner_id === playerId
+            : playerWon(match, playerId)
               ? 'win'
               : 'loss'
           : null,

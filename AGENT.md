@@ -433,11 +433,15 @@ Important implementation details:
     invent a complex appeals policy.
 -   Prevent the winner from approving their own result.
 -   Prevent duplicate score submissions from generating duplicate SP.
--   If a match is doubles, require the losing side's designated
-    player(s) to approve according to a clearly documented rule. The
-    club has not yet specified whether one losing partner or both
-    partners must approve; make this configurable and flag it for
-    confirmation.
+-   If a match is doubles, **both losing partners** may approve or dispute
+    (D20, approved 2026-11-04). The result becomes official when both
+    approve, or when the 24-hour deadline passes with no dispute from
+    either. A dispute by either partner freezes the whole result. Either
+    member of the winning team may submit once for the team; the winning
+    side still cannot approve its own result. Friendly doubles may be any
+    pairing (men's, women's, or mixed); D10 remains a tournament-only rule.
+    The challenger names a partner, the challenged player names a partner
+    on acceptance, and there is one open friendly per team pair.
 -   Validate scores against the chosen scoring format. Do not assume a
     score is valid solely because it is numeric.
 -   If the match is disputed, keep the submitted score and audit
@@ -928,8 +932,10 @@ in one giant code-generation pass.
 > policy 018 and the `/admin/seasons` screen. Placement matches and SP for
 > unplayed matches are implemented in migration 019 and policy 019, with
 > placement progress, hidden provisional balances, and a Super Admin audit panel
-> on `/shuttlepower`. Migrations 018 and 019 and policies 018 and 019 are not yet
-> applied to the hosted project; apply them in that order.
+> on `/shuttlepower`. Friendly doubles (D20) is implemented in migration 020 and
+> policy 020, with team pairing, per-partner approval, and doubles-aware SP and
+> placement handling. Migrations 018, 019, and 020 and policies 018, 019, and 020
+> are not yet applied to the hosted project; apply them in that order.
 
 ### Phase 9 --- Quality and deployment
 
@@ -1045,9 +1051,13 @@ must not be silently decided by the coding agent.
                                                   split, lower-id odd
                                                   point, half-up**
 
-  Friendly doubles        Losing side approves    Whether one or both
-  approval                                        losing partners must
-                                                  approve
+  Friendly doubles        Losing side approves    **Decided — D20: both
+  approval                                        may approve or dispute;
+                                                  official when both
+                                                  approve or at the 24h
+                                                  deadline with no
+                                                  dispute; either dispute
+                                                  freezes it**
 
   Disputes                Losing player can       Who resolves disputes
                           dispute                 and within what process

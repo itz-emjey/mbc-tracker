@@ -1,8 +1,8 @@
-import { Search, SearchX, UserPlus, Users } from 'lucide-react'
+import { ChevronRight, Search, SearchX, UserPlus, Users } from 'lucide-react'
 import * as React from 'react'
 import { Link } from 'react-router-dom'
 
-import { ArenaAvatar, ArenaStatStrip } from '@/components/arena/arena-ui'
+import { ArenaAvatar, SectionHeading } from '@/components/arena/arena-ui'
 import { EmptyState } from '@/components/shared/empty-state'
 import { ErrorState } from '@/components/shared/error-state'
 import { LoadingState } from '@/components/shared/loading-state'
@@ -98,6 +98,12 @@ export function PlayersPage() {
         kicker="Club roster"
         title="Players"
         description="Every fighter on the club record. Approved members can browse it; staff maintain the records and link accounts."
+        stats={[
+          { label: 'On the roster', value: String(players.length) },
+          { label: 'Active', value: String(active) },
+          { label: 'Linked', value: String(linked) },
+          { label: 'No account', value: String(Math.max(0, players.length - linked)) },
+        ]}
         actions={
           canManage ? (
             <Button onClick={() => setFormOpen(true)}>
@@ -117,21 +123,7 @@ export function PlayersPage() {
         />
       ) : null}
 
-      <ArenaStatStrip
-        className="mt-5"
-        stats={[
-          { label: 'On the roster', value: String(players.length), detail: 'Player records' },
-          { label: 'Active', value: String(active), detail: 'Eligible to compete' },
-          { label: 'Linked accounts', value: String(linked), detail: 'Can sign in' },
-          {
-            label: 'No account',
-            value: String(Math.max(0, players.length - linked)),
-            detail: 'Record only',
-          },
-        ]}
-      />
-
-      <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative flex-1">
           <Search
             className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-faint"
@@ -228,11 +220,15 @@ export function PlayersPage() {
           />
         ) : (
           <>
-            <p className="mb-2 text-[11px] text-text-muted" aria-live="polite">
-              Showing {filtered.length} of {players.length} player{players.length === 1 ? '' : 's'}
-            </p>
+            <SectionHeading
+              index="01"
+              title="Roster"
+              description={`Showing ${filtered.length} of ${players.length} player${
+                players.length === 1 ? '' : 's'
+              }.`}
+            />
 
-            <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            <ul className="mt-1 divide-y divide-border" aria-live="polite">
               {filtered.map((player) => {
                 const isActive = player.status === 'active'
 
@@ -240,13 +236,12 @@ export function PlayersPage() {
                   <li key={player.id}>
                     <Link
                       to={`/players/${player.id}`}
-                      className="group flex h-full items-center gap-3 rounded-md border border-border bg-surface-1 p-3 transition-colors duration-fast hover:border-border-strong hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring"
+                      className="row-action group flex items-center gap-3 rounded-sm px-3 py-2.5 transition-colors duration-fast hover:bg-surface-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-ring"
                     >
                       <ArenaAvatar
                         name={player.full_name}
                         size="md"
                         tone={isActive ? 'accent' : 'neutral'}
-                        ring={isActive}
                       />
 
                       <span className="min-w-0 flex-1">
@@ -258,14 +253,22 @@ export function PlayersPage() {
                         </span>
                       </span>
 
-                      <span className="flex shrink-0 flex-col items-end gap-1">
+                      <span className="hidden shrink-0 sm:block">
                         <StatusBadge status={player.status} />
-                        {player.profile_id ? (
-                          <Badge tone="accent">Linked</Badge>
-                        ) : (
-                          <span className="text-[10px] text-text-faint">No account</span>
-                        )}
                       </span>
+                      {player.profile_id ? (
+                        <Badge tone="accent" className="hidden shrink-0 md:inline-flex">
+                          Linked
+                        </Badge>
+                      ) : (
+                        <span className="hidden shrink-0 text-[10px] text-text-faint md:inline">
+                          No account
+                        </span>
+                      )}
+                      <ChevronRight
+                        className="size-4 shrink-0 text-text-faint transition-transform duration-fast group-hover:translate-x-0.5 group-hover:text-accent"
+                        aria-hidden="true"
+                      />
                     </Link>
                   </li>
                 )

@@ -1,8 +1,8 @@
-import { Plus, Swords } from 'lucide-react'
+import { Plus, Swords, Zap } from 'lucide-react'
 import * as React from 'react'
 import { toast } from 'sonner'
 
-import { ArenaAvatar, ArenaPanel, ArenaStatStrip } from '@/components/arena/arena-ui'
+import { ArenaAvatar, SectionHeading } from '@/components/arena/arena-ui'
 import { EmptyState } from '@/components/shared/empty-state'
 import { ErrorState } from '@/components/shared/error-state'
 import { LoadingState } from '@/components/shared/loading-state'
@@ -45,14 +45,19 @@ import {
   canRespond,
   canReviewResult,
   canSubmitResult,
+  captainOf,
+  hasApproved,
   hoursUntilAutoApproval,
   isOpenFriendly,
   isParticipant,
+  isWinningTeam,
+  losingTeamApprovals,
   opponentOf,
 } from '@/features/friendlies/matches'
 import {
   FRIENDLY_STATUS_LABELS,
   type FriendlyMatchRecord,
+  type FriendlyMatchType,
   type FriendlyStatus,
 } from '@/features/friendlies/types'
 import { getPlayerByProfile, listPlayers } from '@/features/players/api'
@@ -69,6 +74,27 @@ function toneFor(status: FriendlyStatus): 'neutral' | 'accent' | 'warning' | 'in
   return 'neutral'
 }
 
+function teamLabel(
+  names: ReadonlyMap<string, string>,
+  captainId: string,
+  partnerId: string | null,
+): string {
+  const captain = names.get(captainId) ?? 'Unknown player'
+
+  return partnerId ? `${captain} & ${names.get(partnerId) ?? 'Unknown player'}` : captain
+}
+
+function winningTeamLabel(match: FriendlyMatchRecord, names: ReadonlyMap<string, string>): string {
+  if (!match.winner_id) return ''
+
+  const partner =
+    match.winner_id === match.challenger_id
+      ? match.challenger_partner_id
+      : match.opponent_partner_id
+
+  return teamLabel(names, match.winner_id, partner)
+}
+
 export function FriendlyMatchesPage() {
   const { user } = useSession()
   const isSuperAdmin = hasAnyRole(user?.roles ?? [], ['super_admin'])
@@ -82,6 +108,7 @@ export function FriendlyMatchesPage() {
   /** Captured with the data so the deadline copy stays out of render. */
   const [loadedAt, setLoadedAt] = React.useState(0)
   const [challengeOpen, setChallengeOpen] = React.useState(false)
+  const [respondTarget, setRespondTarget] = React.useState<FriendlyMatchRecord | null>(null)
   const [disputeTarget, setDisputeTarget] = React.useState<FriendlyMatchRecord | null>(null)
 
   React.useEffect(() => {
@@ -168,6 +195,7 @@ export function FriendlyMatchesPage() {
         names={names}
         now={loadedAt}
         onChanged={reload}
+        onAccept={setRespondTarget}
         onDispute={setDisputeTarget}
       />
     )
@@ -178,7 +206,16 @@ export function FriendlyMatchesPage() {
       <PageHeader
         kicker="Duel board"
         title="Friendly Matches"
-        description="Challenge a clubmate. The winner submits the result and the losing side has 24 hours to confirm or dispute it."
+        description="Challenge a clubmate to singles or doubles. The winning side submits the result and the losing side has 24 hours to confirm or dispute it."
+        stats={[
+          { label: 'Your duels', value: String(ownMatches.length) },
+          { label: 'Record', value: `${record.wins}–${record.losses}` },
+          {
+            label: 'Win rate',
+            value: record.winRate === null ? '—' : `${Math.round(record.winRate * 100)}%`,
+          },
+          { label: 'Waiting on you', value: String(needsAction.length) },
+        ]}
         actions={
           ownPlayer ? (
             <Button onClick={() => setChallengeOpen(true)}>
@@ -189,82 +226,47 @@ export function FriendlyMatchesPage() {
         }
       />
 
-      <ArenaStatStrip
-        className="mt-5"
-        stats={[
-          {
-            label: 'Your duels',
-            value: String(ownMatches.length),
-            detail: 'Challenges you are part of',
-          },
-          {
-            label: 'Record',
-            value: `${record.wins}–${record.losses}`,
-            detail: 'Wins and losses, decided only',
-          },
-          {
-            label: 'Win rate',
-            value: record.winRate === null ? '—' : `${Math.round(record.winRate * 100)}%`,
-            detail: 'Across confirmed results',
-          },
-          {
-            label: 'Waiting on you',
-            value: String(needsAction.length),
-            detail: 'Respond or confirm',
-          },
-        ]}
-      />
-
-      <ArenaPanel kicker="Rules" title="Confirmed friendlies award ShuttlePower" className="mt-4">
-        <p className="px-4 py-3 text-sm leading-relaxed text-text-muted">
-          When the losing side confirms a result (or the 24-hour auto-approval passes), both players
-          receive an SP change under the club-approved formula. Doubles friendlies and dispute
-          resolution are not available yet.
-        </p>
-      </ArenaPanel>
+      <p className="mt-5 flex items-start gap-2 rounded-sm border border-border bg-surface-1 px-3 py-2.5 text-[11px] leading-relaxed text-text-muted">
+        <Zap className="mt-0.5 size-3.5 shrink-0 text-accent" aria-hidden="true" />
+        <span>
+          Confirmed friendlies award ShuttlePower. In doubles, both losing partners must approve, or
+          the 24-hour window confirms the result if neither disputes. Any pairing is allowed.
+          Dispute resolution is not available yet.
+        </span>
+      </p>
 
       {!ownPlayer ? (
-        <Card className="mt-4">
-          <CardContent className="p-5">
-            <EmptyState
-              icon={Swords}
-              title="No player record linked"
-              description="Ask a club admin to link your account to a player record before challenging anyone."
-            />
-          </CardContent>
-        </Card>
+        <EmptyState
+          className="mt-4"
+          icon={Swords}
+          title="No player record linked"
+          description="Ask a club admin to link your account to a player record before challenging anyone."
+        />
       ) : ownMatches.length === 0 ? (
-        <Card className="mt-4">
-          <CardContent className="p-5">
-            <EmptyState
-              icon={Swords}
-              title="No friendly matches yet"
-              description="Challenge an active clubmate to get started."
-              action={
-                <Button onClick={() => setChallengeOpen(true)}>
-                  <Plus aria-hidden="true" />
-                  New challenge
-                </Button>
-              }
-            />
-          </CardContent>
-        </Card>
+        <EmptyState
+          className="mt-4"
+          icon={Swords}
+          title="No friendly matches yet"
+          description="Challenge an active clubmate to get started."
+          action={
+            <Button onClick={() => setChallengeOpen(true)}>
+              <Plus aria-hidden="true" />
+              New challenge
+            </Button>
+          }
+        />
       ) : (
         <div className="mt-4 flex flex-col gap-4">
           {needsAction.length > 0 ? (
             <section className="flex flex-col gap-3">
-              <h2 className="text-xs font-medium uppercase tracking-[0.06em] text-text-faint">
-                Needs your action
-              </h2>
+              <SectionHeading index="01" title="Needs your action" />
               {needsAction.map(renderMatch)}
             </section>
           ) : null}
 
           {rest.length > 0 ? (
             <section className="flex flex-col gap-3">
-              <h2 className="text-xs font-medium uppercase tracking-[0.06em] text-text-faint">
-                Your matches
-              </h2>
+              <SectionHeading index="02" title="Your matches" />
               {rest.map(renderMatch)}
             </section>
           ) : null}
@@ -273,9 +275,7 @@ export function FriendlyMatchesPage() {
 
       {clubMatches.length > 0 ? (
         <section className="mt-6 flex flex-col gap-3">
-          <h2 className="text-xs font-medium uppercase tracking-[0.06em] text-text-faint">
-            Club matches
-          </h2>
+          <SectionHeading index="03" title="Club matches" />
           <p className="text-xs text-text-muted">
             Super Admin view, including disputes from players outside your matches.
           </p>
@@ -293,6 +293,19 @@ export function FriendlyMatchesPage() {
           onOpenChange={() => setChallengeOpen(false)}
           onCreated={() => {
             setChallengeOpen(false)
+            reload()
+          }}
+        />
+      ) : null}
+
+      {respondTarget && ownPlayer ? (
+        <AcceptDoublesDialog
+          match={respondTarget}
+          players={players}
+          names={names}
+          onOpenChange={() => setRespondTarget(null)}
+          onAccepted={() => {
+            setRespondTarget(null)
             reload()
           }}
         />
@@ -319,6 +332,7 @@ function MatchCard({
   names,
   now,
   onChanged,
+  onAccept,
   onDispute,
 }: {
   match: FriendlyMatchRecord
@@ -326,14 +340,16 @@ function MatchCard({
   names: ReadonlyMap<string, string>
   now: number
   onChanged: () => void
+  onAccept: (match: FriendlyMatchRecord) => void
   onDispute: (match: FriendlyMatchRecord) => void
 }) {
   const [busy, setBusy] = React.useState(false)
-  const challenger = names.get(match.challenger_id) ?? 'Unknown player'
-  const opponent = names.get(match.opponent_id) ?? 'Unknown player'
-  const winner = match.winner_id ? (names.get(match.winner_id) ?? 'Unknown player') : null
-  const rival = names.get(opponentOf(match, playerId) ?? '') ?? 'Your opponent'
+  const challenger = teamLabel(names, match.challenger_id, match.challenger_partner_id)
+  const opponent = teamLabel(names, match.opponent_id, match.opponent_partner_id)
+  const winner = match.winner_id ? winningTeamLabel(match, names) : null
   const hours = hoursUntilAutoApproval(match, now)
+  const approvals = losingTeamApprovals(match)
+  const required = match.match_type === 'doubles' ? 2 : 1
 
   async function run(action: () => Promise<void>, message: string) {
     setBusy(true)
@@ -349,11 +365,23 @@ function MatchCard({
     }
   }
 
+  function respond(accept: boolean) {
+    if (accept && match.match_type === 'doubles') {
+      onAccept(match)
+      return
+    }
+
+    void run(
+      () => respondFriendlyChallenge(match.id, accept, null, match.match_type),
+      accept ? 'Challenge accepted.' : 'Challenge declined.',
+    )
+  }
+
   return (
     <Card>
       <CardContent className="flex flex-col gap-3 p-4">
         <div className="flex items-center gap-2">
-          <ArenaAvatar name={challenger} size="sm" />
+          <ArenaAvatar name={names.get(match.challenger_id) ?? 'Unknown player'} size="sm" />
           <span className="min-w-0 flex-1 truncate text-sm font-medium text-text">
             {challenger}
           </span>
@@ -363,12 +391,13 @@ function MatchCard({
           <span className="min-w-0 flex-1 truncate text-right text-sm font-medium text-text">
             {opponent}
           </span>
-          <ArenaAvatar name={opponent} size="sm" />
+          <ArenaAvatar name={names.get(match.opponent_id) ?? 'Unknown player'} size="sm" />
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-2.5">
           <p className="text-[11px] text-text-muted">
-            {match.note ?? 'No note.'} · challenged {formatDateTime(match.created_at)}
+            {match.match_type === 'doubles' ? 'Doubles' : 'Singles'} · {match.note ?? 'No note.'} ·
+            challenged {formatDateTime(match.created_at)}
           </p>
           <Badge tone={toneFor(match.status)}>{FRIENDLY_STATUS_LABELS[match.status]}</Badge>
         </div>
@@ -383,9 +412,11 @@ function MatchCard({
 
         {match.status === 'awaiting_approval' ? (
           <p className="text-xs text-text-muted">
-            {match.winner_id === playerId
-              ? `Waiting for ${rival} to approve.`
-              : `Confirm or dispute by ${formatDateTime(match.auto_approval_due_at ?? '')}.`}
+            {isWinningTeam(match, playerId)
+              ? `Waiting for the losing team to approve (${approvals} of ${required}).`
+              : hasApproved(match, playerId) && match.match_type === 'doubles'
+                ? `You approved. Waiting for your partner or the deadline (${approvals} of ${required}).`
+                : `Confirm or dispute by ${formatDateTime(match.auto_approval_due_at ?? '')}.`}
             {hours !== null ? ` ${hours} hour${hours === 1 ? '' : 's'} left.` : ''}
           </p>
         ) : null}
@@ -397,23 +428,10 @@ function MatchCard({
         <div className="flex flex-wrap gap-2">
           {canRespond(match, playerId) ? (
             <>
-              <Button
-                size="sm"
-                loading={busy}
-                onClick={() =>
-                  void run(() => respondFriendlyChallenge(match.id, true), 'Challenge accepted.')
-                }
-              >
+              <Button size="sm" loading={busy} onClick={() => respond(true)}>
                 Accept
               </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                loading={busy}
-                onClick={() =>
-                  void run(() => respondFriendlyChallenge(match.id, false), 'Challenge declined.')
-                }
-              >
+              <Button size="sm" variant="secondary" loading={busy} onClick={() => respond(false)}>
                 Decline
               </Button>
             </>
@@ -438,8 +456,10 @@ function MatchCard({
               loading={busy}
               onClick={() =>
                 void run(
-                  () => submitFriendlyResult(match.id, playerId),
-                  'Result submitted. Your opponent has 24 hours to confirm it.',
+                  () => submitFriendlyResult(match.id, captainOf(match, playerId) ?? playerId),
+                  match.match_type === 'doubles'
+                    ? 'Result submitted. The losing team has 24 hours to confirm it.'
+                    : 'Result submitted. Your opponent has 24 hours to confirm it.',
                 )
               }
             >
@@ -492,13 +512,14 @@ function MatchSummary({
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <CardTitle className="text-sm">
-            {names.get(match.challenger_id) ?? 'Unknown'} vs{' '}
-            {names.get(match.opponent_id) ?? 'Unknown'}
+            {teamLabel(names, match.challenger_id, match.challenger_partner_id)} vs{' '}
+            {teamLabel(names, match.opponent_id, match.opponent_partner_id)}
           </CardTitle>
           <Badge tone={toneFor(match.status)}>{FRIENDLY_STATUS_LABELS[match.status]}</Badge>
         </div>
         <CardDescription>
-          {match.winner_id ? `Winner: ${names.get(match.winner_id) ?? 'Unknown'} · ` : ''}
+          {match.winner_id ? `Winner: ${winningTeamLabel(match, names)} · ` : ''}
+          {match.match_type === 'doubles' ? 'Doubles · ' : ''}
           recorded {formatDateTime(match.created_at)}
         </CardDescription>
       </CardHeader>
@@ -524,7 +545,9 @@ function ChallengeDialog({
   onOpenChange: () => void
   onCreated: () => void
 }) {
+  const [matchType, setMatchType] = React.useState<FriendlyMatchType>('singles')
   const [opponentId, setOpponentId] = React.useState('')
+  const [partnerId, setPartnerId] = React.useState('')
   const [note, setNote] = React.useState('')
   const [error, setError] = React.useState<string | null>(null)
   const [saving, setSaving] = React.useState(false)
@@ -535,19 +558,37 @@ function ChallengeDialog({
       .map((match) => opponentOf(match, ownPlayerId))
       .filter((id): id is string => id !== null),
   )
-  const options = players.filter(
+  const available = players.filter(
     (player) =>
-      player.id !== ownPlayerId &&
-      player.status === 'active' &&
-      player.profile_id !== null &&
-      !busyOpponents.has(player.id),
+      player.id !== ownPlayerId && player.status === 'active' && player.profile_id !== null,
   )
+  const options = available.filter((player) => !busyOpponents.has(player.id))
+  const partnerOptions = available.filter(
+    (player) => player.id !== opponentId && player.id !== ownPlayerId,
+  )
+
+  function changeType(next: FriendlyMatchType) {
+    setMatchType(next)
+    setError(null)
+
+    if (next === 'singles') setPartnerId('')
+  }
 
   async function submit() {
     setError(null)
 
     if (!opponentId) {
       setError('Choose an opponent.')
+      return
+    }
+
+    if (matchType === 'doubles' && !partnerId) {
+      setError('Choose your doubles partner.')
+      return
+    }
+
+    if (matchType === 'doubles' && partnerId === opponentId) {
+      setError('Your partner must be a different player.')
       return
     }
 
@@ -559,8 +600,13 @@ function ChallengeDialog({
     setSaving(true)
 
     try {
-      await createFriendlyChallenge(opponentId, note.trim() === '' ? null : note.trim())
-      toast.success('Challenge sent.')
+      await createFriendlyChallenge(
+        opponentId,
+        note.trim() === '' ? null : note.trim(),
+        matchType,
+        matchType === 'doubles' ? partnerId : null,
+      )
+      toast.success(matchType === 'doubles' ? 'Doubles challenge sent.' : 'Challenge sent.')
       onCreated()
     } catch (createError) {
       setError(errorMessage(createError))
@@ -575,7 +621,8 @@ function ChallengeDialog({
         <DialogHeader>
           <DialogTitle>New friendly challenge</DialogTitle>
           <DialogDescription>
-            Singles only for now. One open match per pair — doubles waits on a club rule.
+            Singles or doubles. One open match per pair. In doubles, your opponent names their
+            partner when they accept.
           </DialogDescription>
         </DialogHeader>
 
@@ -587,8 +634,32 @@ function ChallengeDialog({
           ) : null}
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="challenge-opponent">Opponent</Label>
-            <Select value={opponentId} onValueChange={setOpponentId}>
+            <Label htmlFor="challenge-type">Format</Label>
+            <Select
+              value={matchType}
+              onValueChange={(value) => changeType(value as FriendlyMatchType)}
+            >
+              <SelectTrigger id="challenge-type">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="singles">Singles</SelectItem>
+                <SelectItem value="doubles">Doubles</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="challenge-opponent">
+              {matchType === 'doubles' ? 'Opposing captain' : 'Opponent'}
+            </Label>
+            <Select
+              value={opponentId}
+              onValueChange={(value) => {
+                setOpponentId(value)
+                if (value === partnerId) setPartnerId('')
+              }}
+            >
               <SelectTrigger id="challenge-opponent">
                 <SelectValue placeholder="Choose a player" />
               </SelectTrigger>
@@ -608,6 +679,30 @@ function ChallengeDialog({
             </Select>
           </div>
 
+          {matchType === 'doubles' ? (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="challenge-partner">Your partner</Label>
+              <Select value={partnerId} onValueChange={setPartnerId}>
+                <SelectTrigger id="challenge-partner">
+                  <SelectValue placeholder="Choose your partner" />
+                </SelectTrigger>
+                <SelectContent>
+                  {partnerOptions.length === 0 ? (
+                    <SelectItem value="__none__" disabled>
+                      No available partners
+                    </SelectItem>
+                  ) : (
+                    partnerOptions.map((player) => (
+                      <SelectItem key={player.id} value={player.id}>
+                        {player.full_name}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
+
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="challenge-note">Note (optional)</Label>
             <Textarea
@@ -626,6 +721,107 @@ function ChallengeDialog({
           </Button>
           <Button loading={saving} disabled={options.length === 0} onClick={() => void submit()}>
             Send challenge
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function AcceptDoublesDialog({
+  match,
+  players,
+  names,
+  onOpenChange,
+  onAccepted,
+}: {
+  match: FriendlyMatchRecord
+  players: readonly PlayerRecord[]
+  names: ReadonlyMap<string, string>
+  onOpenChange: () => void
+  onAccepted: () => void
+}) {
+  const [partnerId, setPartnerId] = React.useState('')
+  const [error, setError] = React.useState<string | null>(null)
+  const [saving, setSaving] = React.useState(false)
+
+  const options = players.filter(
+    (player) =>
+      player.status === 'active' &&
+      player.profile_id !== null &&
+      player.id !== match.opponent_id &&
+      player.id !== match.challenger_id &&
+      player.id !== match.challenger_partner_id,
+  )
+
+  async function submit() {
+    setError(null)
+
+    if (!partnerId) {
+      setError('Choose your doubles partner.')
+      return
+    }
+
+    setSaving(true)
+
+    try {
+      await respondFriendlyChallenge(match.id, true, partnerId, 'doubles')
+      toast.success('Doubles challenge accepted.')
+      onAccepted()
+    } catch (acceptError) {
+      setError(errorMessage(acceptError))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Accept doubles challenge</DialogTitle>
+          <DialogDescription>
+            {teamLabel(names, match.challenger_id, match.challenger_partner_id)} challenged you.
+            Name your partner to complete your team.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="mt-4 flex flex-col gap-4">
+          {error ? (
+            <p role="alert" className="text-sm font-medium text-danger">
+              {error}
+            </p>
+          ) : null}
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="accept-partner">Your partner</Label>
+            <Select value={partnerId} onValueChange={setPartnerId}>
+              <SelectTrigger id="accept-partner">
+                <SelectValue placeholder="Choose your partner" />
+              </SelectTrigger>
+              <SelectContent>
+                {options.length === 0 ? (
+                  <SelectItem value="__none__" disabled>
+                    No available partners
+                  </SelectItem>
+                ) : (
+                  options.map((player) => (
+                    <SelectItem key={player.id} value={player.id}>
+                      {player.full_name}
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="secondary" onClick={onOpenChange} disabled={saving}>
+            Cancel
+          </Button>
+          <Button loading={saving} disabled={options.length === 0} onClick={() => void submit()}>
+            Accept challenge
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -675,8 +871,9 @@ function DisputeDialog({
         <DialogHeader>
           <DialogTitle>Dispute this result</DialogTitle>
           <DialogDescription>
-            {names.get(match.challenger_id) ?? 'Player'} vs{' '}
-            {names.get(match.opponent_id) ?? 'Player'}. The submitted result will not be confirmed.
+            {teamLabel(names, match.challenger_id, match.challenger_partner_id)} vs{' '}
+            {teamLabel(names, match.opponent_id, match.opponent_partner_id)}. The submitted result
+            will not be confirmed.
           </DialogDescription>
         </DialogHeader>
 

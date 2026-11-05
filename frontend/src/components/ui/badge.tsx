@@ -13,6 +13,9 @@ const badgeVariants = cva(
         warning: 'border-transparent bg-warning-soft text-warning',
         danger: 'border-transparent bg-danger-soft text-danger',
         info: 'border-transparent bg-info-soft text-info',
+        gold: 'border-transparent bg-gold-soft text-gold',
+        silver: 'border-transparent bg-silver-soft text-silver',
+        bronze: 'border-transparent bg-bronze-soft text-bronze',
         outline: 'border-border-strong bg-transparent text-text-muted',
       },
       size: {

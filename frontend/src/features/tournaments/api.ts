@@ -24,6 +24,7 @@ import type {
   TournamentEventInput,
   TournamentEventRecord,
   TournamentInput,
+  TournamentProgress,
   TournamentRecord,
   TournamentStatus,
   WithdrawalOutcome,
@@ -47,6 +48,73 @@ export async function listTournaments(): Promise<TournamentRecord[]> {
   if (error) throw new Error(errorMessage(error))
 
   return (data ?? []) as unknown as TournamentRecord[]
+}
+
+/**
+ * Draw and result counts for a set of tournaments, so a list row can say where
+ * an event stands without loading every entry and match of every tournament.
+ * Tournaments with no events are present in the map with zeroed counts.
+ */
+export async function listTournamentProgress(
+  tournamentIds: readonly string[],
+): Promise<Map<string, TournamentProgress>> {
+  const progress = new Map<string, TournamentProgress>()
+
+  for (const tournamentId of tournamentIds) {
+    progress.set(tournamentId, { events: 0, drawnEvents: 0, matches: 0, playedMatches: 0 })
+  }
+
+  if (tournamentIds.length === 0) return progress
+
+  const { data: eventData, error: eventError } = await getSupabaseClient()
+    .from('tournament_events')
+    .select('id, tournament_id, draw_generated_at')
+    .in('tournament_id', [...tournamentIds])
+
+  if (eventError) throw new Error(errorMessage(eventError))
+
+  const events = (eventData ?? []) as unknown as {
+    id: string
+    tournament_id: string
+    draw_generated_at: string | null
+  }[]
+
+  const tournamentByEvent = new Map<string, string>()
+
+  for (const event of events) {
+    tournamentByEvent.set(event.id, event.tournament_id)
+
+    const row = progress.get(event.tournament_id)
+    if (!row) continue
+
+    row.events += 1
+    if (event.draw_generated_at !== null) row.drawnEvents += 1
+  }
+
+  const eventIds = events.map((event) => event.id)
+
+  if (eventIds.length > 0) {
+    const { data: matchData, error: matchError } = await getSupabaseClient()
+      .from('matches')
+      .select('event_id, status')
+      .in('event_id', eventIds)
+
+    if (matchError) throw new Error(errorMessage(matchError))
+
+    for (const match of (matchData ?? []) as unknown as {
+      event_id: string
+      status: string
+    }[]) {
+      const tournamentId = tournamentByEvent.get(match.event_id)
+      const row = tournamentId ? progress.get(tournamentId) : undefined
+      if (!row) continue
+
+      row.matches += 1
+      if (match.status === 'completed') row.playedMatches += 1
+    }
+  }
+
+  return progress
 }
 
 export async function getTournament(tournamentId: string): Promise<TournamentRecord | null> {

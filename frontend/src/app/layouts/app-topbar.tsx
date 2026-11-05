@@ -16,14 +16,20 @@ export function AppTopbar({ showContext }: AppTopbarProps) {
   const currentModule = findModule(pathname)
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-bg px-4 sm:px-6">
+    <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-bg px-4 backdrop-blur-sm sm:px-6">
       <div className="min-w-0 lg:hidden">
         <Brand showClub={false} />
       </div>
 
-      <p className={cn('hidden truncate text-sm text-text-muted', showContext && 'lg:block')}>
-        {currentModule?.label ?? 'MBC Arena'}
-      </p>
+      <div className={cn('hidden min-w-0 items-center gap-2', showContext && 'lg:flex')}>
+        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-faint">
+          MBC
+        </span>
+        <span aria-hidden="true" className="text-text-faint">
+          /
+        </span>
+        <p className="truncate text-sm text-text-muted">{currentModule?.label ?? 'Arena'}</p>
+      </div>
 
       <div className="ml-auto flex items-center gap-2">
         <NotificationBell />

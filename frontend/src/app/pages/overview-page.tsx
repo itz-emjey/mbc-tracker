@@ -37,14 +37,12 @@ import type { TournamentRecord } from '@/features/tournaments/types'
 import { formatDateTime } from '@/lib/format'
 
 import {
-  ArenaPulse,
+  ArenaHero,
   ClubDutyPanel,
   ClubFeedPanel,
-  FighterCard,
   LadderBoard,
   MatchCentrePanel,
   OperationsPanel,
-  QuickActions,
   RivalsPanel,
   TournamentBoard,
   YourMovePanel,
@@ -341,57 +339,50 @@ export function OverviewPage() {
 
   return (
     <>
-      <PageHeader
-        title="Arena"
-        description={`Welcome back, ${firstName}. Your clash card, the ladder, and everything waiting on you.`}
+      <ArenaHero
+        firstName={firstName}
+        player={data.player}
+        sp={data.sp}
+        position={ownRank?.position ?? null}
+        totalPlayers={ranked.length}
+        divisionPosition={ownRank?.divisionPosition ?? null}
+        record={record}
+        progress={progress}
+        roles={user.roles}
+        status={user.status}
+        waiting={attentionItems.length}
       />
 
-      <ArenaPulse
-        className="mt-4"
-        players={ranked.length}
-        events={upcoming.length}
-        waiting={matchRows.filter((row) => row.needsYou).length}
-      />
-
-      <div className="mt-4 grid gap-4 xl:grid-cols-12">
-        <div className="flex flex-col gap-4 xl:col-span-3">
-          <FighterCard
-            player={data.player}
-            sp={data.sp}
-            position={ownRank?.position ?? null}
-            totalPlayers={ranked.length}
-            divisionPosition={ownRank?.divisionPosition ?? null}
-            record={record}
-            progress={progress}
-            roles={user.roles}
-            status={user.status}
-          />
-
-          <QuickActions />
-        </div>
-
-        <div className="flex flex-col gap-4 xl:col-span-6">
-          <YourMovePanel items={attentionItems} />
-          <MatchCentrePanel rows={matchRows} names={names} />
-          <TournamentBoard tournaments={upcoming} today={today} />
-          <ClubFeedPanel items={feed} />
-        </div>
-
-        <div className="flex flex-col gap-4 xl:col-span-3">
-          <LadderBoard rows={ranked} ownPlayerId={data.player?.id ?? null} />
-          <RivalsPanel rivals={rivals} />
-          <ClubDutyPanel
-            session={session}
-            attended={attendance.attended}
-            recorded={attendance.recorded}
-            periodLabel={period?.label ?? null}
-            dueOn={period?.due_on ?? null}
-            amount={period?.amount ?? null}
-            fee={fee}
-          />
-          {staffRows.length > 0 ? <OperationsPanel rows={staffRows} /> : null}
-        </div>
+      <div className="mt-8">
+        <YourMovePanel items={attentionItems} />
       </div>
+
+      <div className="mt-8 grid gap-x-10 gap-y-8 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
+        <MatchCentrePanel rows={matchRows} names={names} />
+        <LadderBoard rows={ranked} ownPlayerId={data.player?.id ?? null} />
+      </div>
+
+      <div className="mt-8 grid gap-x-10 gap-y-8 border-t border-border pt-8 lg:grid-cols-2">
+        <TournamentBoard tournaments={upcoming} today={today} />
+        <ClubDutyPanel
+          session={session}
+          attended={attendance.attended}
+          recorded={attendance.recorded}
+          periodLabel={period?.label ?? null}
+          dueOn={period?.due_on ?? null}
+          amount={period?.amount ?? null}
+          fee={fee}
+        />
+      </div>
+
+      <div className="mt-8 grid gap-x-10 gap-y-8 border-t border-border pt-8 lg:grid-cols-2">
+        <RivalsPanel rivals={rivals} />
+        <ClubFeedPanel items={feed} />
+      </div>
+
+      {staffRows.length > 0 ? (
+        <OperationsPanel rows={staffRows} className="mt-8 border-t border-border pt-8" />
+      ) : null}
     </>
   )
 }

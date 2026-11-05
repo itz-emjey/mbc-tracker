@@ -2,7 +2,7 @@ import { Megaphone, Plus } from 'lucide-react'
 import * as React from 'react'
 import { toast } from 'sonner'
 
-import { ArenaStatStrip } from '@/components/arena/arena-ui'
+import { SectionHeading } from '@/components/arena/arena-ui'
 import { EmptyState } from '@/components/shared/empty-state'
 import { ErrorState } from '@/components/shared/error-state'
 import { LoadingState } from '@/components/shared/loading-state'
@@ -115,6 +115,15 @@ export function AnnouncementsPage() {
         kicker="Club news"
         title="Announcements"
         description="The club noticeboard. Members see published posts; staff also see drafts and the archive."
+        stats={[
+          { label: 'Published', value: String(published) },
+          { label: 'Drafts', value: String(drafts) },
+          { label: 'Archived', value: String(archived) },
+          {
+            label: 'Latest',
+            value: latest?.published_at ? formatDateTime(latest.published_at) : '—',
+          },
+        ]}
         actions={
           isStaff ? (
             <Button onClick={() => setCreateOpen(true)}>
@@ -125,25 +134,12 @@ export function AnnouncementsPage() {
         }
       />
 
-      <ArenaStatStrip
-        className="mt-5"
-        stats={[
-          {
-            label: 'Published',
-            value: String(published),
-            detail: 'Visible to every member',
-          },
-          { label: 'Drafts', value: String(drafts), detail: 'Staff only' },
-          { label: 'Archived', value: String(archived), detail: 'Kept for history' },
-          {
-            label: 'Latest post',
-            value: latest?.published_at ? formatDateTime(latest.published_at) : '—',
-            detail: latest?.title ?? 'Nothing published yet',
-          },
-        ]}
-      />
-
-      <div className="mt-4">
+      <div className="mt-6">
+        <SectionHeading
+          index="01"
+          title="Noticeboard"
+          description={latest?.title ? `Most recent: ${latest.title}` : 'No posts published yet.'}
+        />
         {announcements.length === 0 ? (
           <EmptyState
             icon={Megaphone}
@@ -163,17 +159,23 @@ export function AnnouncementsPage() {
             }
           />
         ) : (
-          <ul className="flex flex-col gap-3">
-            {announcements.map((announcement) => (
+          <ul className="mt-1 divide-y divide-border">
+            {announcements.map((announcement, index) => (
               <li key={announcement.id}>
-                <article className="rounded-md border border-border bg-surface-1">
-                  <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
+                <article className={index === 0 ? 'pb-6 pt-4' : 'py-5'}>
+                  <header className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="grid size-7 shrink-0 place-items-center rounded-sm bg-accent-soft text-accent">
                           <Megaphone className="size-3.5" aria-hidden="true" />
                         </span>
-                        <h2 className="truncate text-sm font-semibold text-text">
+                        <h2
+                          className={
+                            index === 0
+                              ? 'text-lg font-semibold tracking-tight text-text'
+                              : 'text-[15px] font-semibold tracking-tight text-text'
+                          }
+                        >
                           {announcement.title}
                         </h2>
                       </div>
@@ -197,13 +199,13 @@ export function AnnouncementsPage() {
                     </Badge>
                   </header>
 
-                  <div className="px-4 py-3">
+                  <div className="mt-3 sm:pl-9">
                     <p className="whitespace-pre-line text-sm leading-relaxed text-text-muted">
                       {announcement.body}
                     </p>
 
                     {isStaff ? (
-                      <div className="mt-3 flex flex-wrap gap-2 border-t border-border pt-3">
+                      <div className="mt-3 flex flex-wrap gap-2">
                         {announcement.status === 'draft' ? (
                           <Button
                             size="sm"

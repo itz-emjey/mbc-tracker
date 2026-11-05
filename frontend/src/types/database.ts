@@ -1454,15 +1454,22 @@ export type Database = {
       friendly_matches: {
         Row: {
           auto_approval_due_at: string | null
+          challenger_approved_at: string | null
           challenger_id: string
+          challenger_partner_approved_at: string | null
+          challenger_partner_id: string | null
           confirmed_at: string | null
           created_at: string
           created_by: string | null
           dispute_reason: string | null
           disputed_at: string | null
           id: string
+          match_type: string
           note: string | null
+          opponent_approved_at: string | null
           opponent_id: string
+          opponent_partner_approved_at: string | null
+          opponent_partner_id: string | null
           responded_at: string | null
           responded_by: string | null
           result_kind: string
@@ -1474,15 +1481,22 @@ export type Database = {
         }
         Insert: {
           auto_approval_due_at?: string | null
+          challenger_approved_at?: string | null
           challenger_id: string
+          challenger_partner_approved_at?: string | null
+          challenger_partner_id?: string | null
           confirmed_at?: string | null
           created_at?: string
           created_by?: string | null
           dispute_reason?: string | null
           disputed_at?: string | null
           id?: string
+          match_type?: string
           note?: string | null
+          opponent_approved_at?: string | null
           opponent_id: string
+          opponent_partner_approved_at?: string | null
+          opponent_partner_id?: string | null
           responded_at?: string | null
           responded_by?: string | null
           result_kind?: string
@@ -1494,15 +1508,22 @@ export type Database = {
         }
         Update: {
           auto_approval_due_at?: string | null
+          challenger_approved_at?: string | null
           challenger_id?: string
+          challenger_partner_approved_at?: string | null
+          challenger_partner_id?: string | null
           confirmed_at?: string | null
           created_at?: string
           created_by?: string | null
           dispute_reason?: string | null
           disputed_at?: string | null
           id?: string
+          match_type?: string
           note?: string | null
+          opponent_approved_at?: string | null
           opponent_id?: string
+          opponent_partner_approved_at?: string | null
+          opponent_partner_id?: string | null
           responded_at?: string | null
           responded_by?: string | null
           result_kind?: string
@@ -1521,8 +1542,22 @@ export type Database = {
             referencedColumns: ['id']
           },
           {
+            foreignKeyName: 'friendly_matches_challenger_partner_id_fkey'
+            columns: ['challenger_partner_id']
+            isOneToOne: false
+            referencedRelation: 'players'
+            referencedColumns: ['id']
+          },
+          {
             foreignKeyName: 'friendly_matches_opponent_id_fkey'
             columns: ['opponent_id']
+            isOneToOne: false
+            referencedRelation: 'players'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'friendly_matches_opponent_partner_id_fkey'
+            columns: ['opponent_partner_id']
             isOneToOne: false
             referencedRelation: 'players'
             referencedColumns: ['id']
@@ -2609,12 +2644,20 @@ export type Database = {
         Returns: number
       }
       cancel_friendly_challenge: { Args: { p_match_id: string }; Returns: Json }
+      create_doubles_friendly_challenge: {
+        Args: { p_note?: string | null; p_opponent_id: string; p_partner_id: string }
+        Returns: Json
+      }
       create_friendly_challenge: {
         Args: { p_note?: string | null; p_opponent_id: string }
         Returns: Json
       }
       dispute_friendly_result: {
         Args: { p_match_id: string; p_reason: string }
+        Returns: Json
+      }
+      respond_doubles_friendly_challenge: {
+        Args: { p_accept: boolean; p_match_id: string; p_partner_id?: string | null }
         Returns: Json
       }
       respond_friendly_challenge: {

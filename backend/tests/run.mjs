@@ -37,6 +37,7 @@ const [
   tournamentSpMigration,
   seasonImplementationMigration,
   placementMigration,
+  friendlyDoublesMigration,
   seasonPolicies,
   seasonImplementationPolicies,
   placementPolicies,
@@ -53,6 +54,7 @@ const [
   clubPolicies,
   jerseyImagePolicies,
   friendlyPolicies,
+  friendlyDoublesPolicies,
   seed,
   demoTournamentSeed,
   bootstrap,
@@ -76,6 +78,7 @@ const [
   readFile(join(backendDir, 'migrations', '017_tournament_sp_award.sql'), 'utf8'),
   readFile(join(backendDir, 'migrations', '018_seasonal_implementation.sql'), 'utf8'),
   readFile(join(backendDir, 'migrations', '019_placement_and_unplayed_sp.sql'), 'utf8'),
+  readFile(join(backendDir, 'migrations', '020_friendly_doubles.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '012_seasons.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '018_seasons.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '019_placement.sql'), 'utf8'),
@@ -92,6 +95,7 @@ const [
   readFile(join(backendDir, 'policies', '008_club_activities.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '009_jersey_images.sql'), 'utf8'),
   readFile(join(backendDir, 'policies', '010_friendly_matches.sql'), 'utf8'),
+  readFile(join(backendDir, 'policies', '020_friendly_doubles.sql'), 'utf8'),
   readFile(join(backendDir, 'seeds', '001_fictional_players.sql'), 'utf8'),
   readFile(join(backendDir, 'seeds', '002_tournament_demo.sql'), 'utf8'),
   readFile(join(backendDir, 'seeds', 'bootstrap_super_admin.sql'), 'utf8'),
@@ -423,6 +427,7 @@ await db.exec(approvedSpRuleMigration)
 await db.exec(tournamentSpMigration)
 await db.exec(seasonImplementationMigration)
 await db.exec(placementMigration)
+await db.exec(friendlyDoublesMigration)
 await db.exec(identityPolicies)
 await db.exec(operationPolicies)
 await db.exec(spPolicies)
@@ -433,6 +438,7 @@ await db.exec(trainingPolicies)
 await db.exec(clubPolicies)
 await db.exec(jerseyImagePolicies)
 await db.exec(friendlyPolicies)
+await db.exec(friendlyDoublesPolicies)
 await db.exec(seasonPolicies)
 await db.exec(seasonImplementationPolicies)
 await db.exec(placementPolicies)
@@ -4951,7 +4957,395 @@ await test('D18: a friendly recorded as a walkover awards nothing', async () => 
   })
 })
 
-/** Links a player to a fresh active profile for the seasonal eligibility rules. */
+// ---------------------------------------------------------------------------
+// D20: friendly doubles
+// ---------------------------------------------------------------------------
+const FD1 = '88888888-8888-4888-8888-888888888888'
+const FD2 = '99999999-9999-4999-8999-999999999999'
+
+/** Links P3/P4/P5 and gives all four doubles players a 1,000 SP account. */
+async function ensureDoublesAccounts() {
+  await actAs('postgres')
+  await linkActivePlayer(P3, FD1, 'Carlo Male')
+  await linkActivePlayer(P5, FD2, 'Eli Male')
+  await db.query(`update public.players set profile_id = '${D}' where id = '${P4}'`)
+
+  for (const playerId of [P1, P3, P4, P5]) {
+    const existing = await db.query(
+      `select current_sp from public.sp_accounts where player_id = '${playerId}'`,
+    )
+
+    if (existing.rows.length > 0) {
+      await db.query(
+        `update public.sp_accounts set current_sp = 1000 where player_id = '${playerId}'`,
+      )
+      continue
+    }
+
+    await db.query(
+      `insert into public.sp_accounts (player_id, current_sp) values ('${playerId}', 1000)`,
+    )
+    await db.query(
+      `insert into public.sp_transactions (
+         player_id, transaction_type, sp_before, sp_delta, sp_after,
+         reference_type, idempotency_key, metadata
+       ) values (
+         '${playerId}', 'initial', 0, 1000, 1000,
+         'registration', 'player:${playerId}:initial',
+         '{"source":"test fixture"}'::jsonb
+       )`,
+    )
+  }
+}
+
+/**
+ * Plays one doubles friendly: P1/P3 beat P4/P5.
+ * approve: 'both' confirms before the deadline; 'one' leaves P5 silent;
+ * 'none' leaves both silent.
+ */
+async function playDoublesFriendly({ approve = 'both' } = {}) {
+  await ensureDoublesAccounts()
+
+  await actAs('authenticated', A)
+  const created = await db.query(
+    `select public.create_doubles_friendly_challenge('${P4}', '${P3}', null) as result`,
+  )
+  const matchId = created.rows[0].result.id
+
+  await actAs('authenticated', D)
+  await db.query(
+    `select public.respond_doubles_friendly_challenge('${matchId}', true, '${P5}')`,
+  )
+
+  await actAs('authenticated', A)
+  await db.query(`select public.submit_friendly_result('${matchId}', '${P1}')`)
+
+  if (approve === 'both' || approve === 'one') {
+    await actAs('authenticated', D)
+    await db.query(`select public.approve_friendly_result('${matchId}')`)
+  }
+
+  if (approve === 'both') {
+    await actAs('authenticated', FD2)
+    await db.query(`select public.approve_friendly_result('${matchId}')`)
+  }
+
+  await actAs('postgres')
+  return matchId
+}
+
+await test('D20: doubles challenges need a complete, distinct team', async () => {
+  await inTransaction(async () => {
+    await ensureDoublesAccounts()
+
+    await actAs('authenticated', A)
+    await expectQueryError(
+      `select public.create_doubles_friendly_challenge('${P4}', null, null)`,
+      /choose a doubles partner/i,
+    )
+    await expectQueryError(
+      `select public.create_doubles_friendly_challenge('${P4}', '${P1}', null)`,
+      /cannot partner with yourself/i,
+    )
+    await expectQueryError(
+      `select public.create_doubles_friendly_challenge('${P4}', '${P4}', null)`,
+      /different player/i,
+    )
+    await expectQueryError(
+      `select public.create_doubles_friendly_challenge('${P4}', '${P2}', null)`,
+      /no linked account/i,
+    )
+    await expectQueryError(
+      `select public.create_doubles_friendly_challenge('${P4}', '${P7}', null)`,
+      /not available/i,
+    )
+
+    const created = await db.query(
+      `select public.create_doubles_friendly_challenge('${P4}', '${P3}', null) as result`,
+    )
+    assert(created.rows[0].result.status === 'pending', 'the doubles challenge starts pending')
+    assert(created.rows[0].result.match_type === 'doubles', 'the match is a doubles match')
+
+    const stored = await db.query(
+      `select match_type, challenger_partner_id, opponent_partner_id
+         from public.friendly_matches where id = '${created.rows[0].result.id}'`,
+    )
+    assert(stored.rows[0].match_type === 'doubles', 'the match type is stored')
+    assert(stored.rows[0].challenger_partner_id === P3, 'the challenger partner is stored')
+    assert(stored.rows[0].opponent_partner_id === null, 'the opponent partner waits for acceptance')
+  })
+})
+
+await test('D20: the challenged captain accepts and names the opposing partner', async () => {
+  await inTransaction(async () => {
+    await ensureDoublesAccounts()
+
+    await actAs('authenticated', A)
+    const created = await db.query(
+      `select public.create_doubles_friendly_challenge('${P4}', '${P3}', null) as result`,
+    )
+    const matchId = created.rows[0].result.id
+
+    await actAs('authenticated', FD1)
+    await expectQueryError(
+      `select public.respond_doubles_friendly_challenge('${matchId}', true, '${P5}')`,
+      /only the challenged player/i,
+    )
+
+    await actAs('authenticated', D)
+    await expectQueryError(
+      `select public.respond_doubles_friendly_challenge('${matchId}', true, null)`,
+      /choose a doubles partner/i,
+    )
+    await expectQueryError(
+      `select public.respond_doubles_friendly_challenge('${matchId}', true, '${P1}')`,
+      /different partner/i,
+    )
+
+    const accepted = await db.query(
+      `select public.respond_doubles_friendly_challenge('${matchId}', true, '${P5}') as result`,
+    )
+    assert(accepted.rows[0].result.status === 'accepted', 'the challenged captain accepts')
+
+    const stored = await db.query(
+      `select opponent_partner_id from public.friendly_matches where id = '${matchId}'`,
+    )
+    assert(stored.rows[0].opponent_partner_id === P5, 'the opposing partner is stored')
+
+    await expectQueryError(
+      `select public.respond_doubles_friendly_challenge('${matchId}', true, '${P5}')`,
+      /no longer pending/i,
+    )
+  })
+})
+
+await test('D20: both losing partners may approve and the result confirms once', async () => {
+  await inTransaction(async () => {
+    await enableTestRule('test-doubles-both', {
+      baseChange: 10,
+      strengthSensitivity: 0,
+      minGainPerMatch: 2,
+      maxGainPerMatch: 20,
+    })
+    const matchId = await playDoublesFriendly({ approve: 'none' })
+
+    await actAs('authenticated', D)
+    const first = await db.query(
+      `select public.approve_friendly_result('${matchId}') as result`,
+    )
+    assert(first.rows[0].result.status === 'awaiting_approval', 'one partner does not confirm')
+    assert(first.rows[0].result.approvals === 1, 'the first approval is recorded')
+
+    const state = await db.query(
+      `select status, opponent_approved_at, opponent_partner_approved_at
+         from public.friendly_matches where id = '${matchId}'`,
+    )
+    assert(state.rows[0].status === 'awaiting_approval', 'the match is still awaiting approval')
+    assert(state.rows[0].opponent_approved_at !== null, 'the captain approval is stored')
+    assert(state.rows[0].opponent_partner_approved_at === null, 'the partner has not approved')
+
+    await actAs('authenticated', FD2)
+    const second = await db.query(
+      `select public.approve_friendly_result('${matchId}') as result`,
+    )
+    assert(second.rows[0].result.status === 'confirmed', 'both approvals confirm the result')
+
+    await actAs('postgres')
+    const rows = await db.query(
+      `select player_id, sp_delta from public.sp_transactions
+        where reference_id = '${matchId}' order by player_id`,
+    )
+    assert(rows.rows.length === 4, 'all four players move')
+    const byPlayer = new Map(rows.rows.map((row) => [row.player_id, row.sp_delta]))
+    assert(byPlayer.get(P1) === 5, 'the winning captain gains half')
+    assert(byPlayer.get(P3) === 5, 'the winning partner gains half')
+    assert(byPlayer.get(P4) === -5, 'the losing captain loses half')
+    assert(byPlayer.get(P5) === -5, 'the losing partner loses half')
+  })
+})
+
+await test('D20: either losing partner can dispute and freeze the result', async () => {
+  await inTransaction(async () => {
+    await enableTestRule('test-doubles-dispute', {
+      baseChange: 10,
+      strengthSensitivity: 0,
+    })
+    const matchId = await playDoublesFriendly({ approve: 'none' })
+
+    await actAs('authenticated', FD2)
+    await expectQueryError(
+      `select public.dispute_friendly_result('${matchId}', 'no')`,
+      /between 5 and 500/i,
+    )
+    const disputed = await db.query(
+      `select public.dispute_friendly_result('${matchId}', 'The score was recorded wrong') as result`,
+    )
+    assert(disputed.rows[0].result.status === 'disputed', 'the losing partner disputes')
+
+    await actAs('authenticated', D)
+    await expectQueryError(
+      `select public.approve_friendly_result('${matchId}')`,
+      /no longer awaiting approval/i,
+    )
+
+    await actAs('postgres')
+    const rows = await db.query(
+      `select count(*)::int as n from public.sp_transactions where reference_id = '${matchId}'`,
+    )
+    assert(rows.rows[0].n === 0, 'a disputed result awards nothing')
+  })
+})
+
+await test('D20: either winning partner may submit once for the team', async () => {
+  await inTransaction(async () => {
+    await ensureDoublesAccounts()
+
+    await actAs('authenticated', A)
+    const created = await db.query(
+      `select public.create_doubles_friendly_challenge('${P4}', '${P3}', null) as result`,
+    )
+    const matchId = created.rows[0].result.id
+
+    await actAs('authenticated', D)
+    await db.query(
+      `select public.respond_doubles_friendly_challenge('${matchId}', true, '${P5}')`,
+    )
+    await expectQueryError(
+      `select public.submit_friendly_result('${matchId}', '${P1}')`,
+      /only the winning team/i,
+    )
+
+    await actAs('authenticated', FD1)
+    const submitted = await db.query(
+      `select public.submit_friendly_result('${matchId}', '${P1}') as result`,
+    )
+    assert(
+      submitted.rows[0].result.status === 'awaiting_approval',
+      'the winning partner submits for the team',
+    )
+  })
+})
+
+await test('D20: an odd team adjustment goes to the lower player id on each side', async () => {
+  await inTransaction(async () => {
+    await enableTestRule('test-doubles-odd', {
+      baseChange: 11,
+      strengthSensitivity: 0,
+      minGainPerMatch: 2,
+      maxGainPerMatch: 20,
+    })
+    const matchId = await playDoublesFriendly({ approve: 'both' })
+
+    await actAs('postgres')
+    const rows = await db.query(
+      `select player_id, sp_delta from public.sp_transactions
+        where reference_id = '${matchId}' order by player_id`,
+    )
+    const byPlayer = new Map(rows.rows.map((row) => [row.player_id, row.sp_delta]))
+    assert(byPlayer.get(P3) === 6, 'the lower winning id takes the odd point')
+    assert(byPlayer.get(P1) === 5, 'the higher winning id takes the smaller share')
+    assert(byPlayer.get(P4) === -6, 'the lower losing id takes the odd loss')
+    assert(byPlayer.get(P5) === -5, 'the higher losing id takes the smaller loss')
+  })
+})
+
+await test('D19: a doubles placement moves only the Unrated partner own share', async () => {
+  await inTransaction(async () => {
+    await enableTestRule('test-doubles-placement', {
+      baseChange: 10,
+      strengthSensitivity: 0,
+      minGainPerMatch: 2,
+      maxGainPerMatch: 20,
+    })
+    await ensureDoublesAccounts()
+    await actAs('postgres')
+    await db.query(`update public.players set rating_status = 'unrated' where id = '${P3}'`)
+
+    const matchId = await playDoublesFriendly({ approve: 'both' })
+
+    await actAs('postgres')
+    const rows = await db.query(
+      `select player_id, sp_delta from public.sp_transactions
+        where reference_id = '${matchId}' order by player_id`,
+    )
+    assert(rows.rows.length === 1, 'only the Unrated partner moves')
+    assert(rows.rows[0].player_id === P3, 'the Unrated partner is the one who moves')
+    assert(rows.rows[0].sp_delta === 5, 'the Unrated partner keeps their own share')
+
+    const credit = await db.query(
+      `select count(*)::int as n from public.placement_credits
+        where source = 'friendly' and match_id = '${matchId}' and player_id = '${P3}'`,
+    )
+    assert(credit.rows[0].n === 1, 'the Unrated partner earns one placement credit')
+  })
+})
+
+await test('D20: the 24-hour deadline confirms with one approval and a silent partner', async () => {
+  await inTransaction(async () => {
+    await enableTestRule('test-doubles-auto', {
+      baseChange: 10,
+      strengthSensitivity: 0,
+    })
+    const matchId = await playDoublesFriendly({ approve: 'one' })
+
+    await actAs('postgres')
+    await db.query(
+      `update public.friendly_matches
+          set auto_approval_due_at = now() - interval '1 minute'
+        where id = '${matchId}'`,
+    )
+    await db.exec(`set local request.jwt.claim.sub = ''`)
+
+    const first = await db.query(`select public.auto_approve_friendly_matches() as result`)
+    const second = await db.query(`select public.auto_approve_friendly_matches() as result`)
+
+    assert(first.rows[0].result === 1, 'the overdue doubles match is approved')
+    assert(second.rows[0].result === 0, 'a replay approves nothing')
+
+    const rows = await db.query(
+      `select count(*)::int as n from public.sp_transactions where reference_id = '${matchId}'`,
+    )
+    assert(rows.rows[0].n === 4, 'the job awards exactly once per player')
+  })
+})
+
+await test('D20: doubles partners can read the match, non-participants cannot', async () => {
+  await inTransaction(async () => {
+    const matchId = await playDoublesFriendly({ approve: 'none' })
+
+    await actAs('authenticated', FD1)
+    const partnerRead = await db.query(
+      `select id from public.friendly_matches where id = '${matchId}'`,
+    )
+    assert(partnerRead.rows.length === 1, 'a doubles partner reads the match')
+
+    await actAs('authenticated', E)
+    const outsiderRead = await db.query(
+      `select id from public.friendly_matches where id = '${matchId}'`,
+    )
+    assert(outsiderRead.rows.length === 0, 'an outsider reads nothing')
+  })
+})
+
+await test('D20: anon cannot execute the doubles RPCs', async () => {
+  const { rows } = await db.query(`
+    select
+      has_function_privilege(
+        'anon', 'public.create_doubles_friendly_challenge(uuid,uuid,text)', 'EXECUTE'
+      ) as anon_create,
+      has_function_privilege(
+        'anon', 'public.respond_doubles_friendly_challenge(uuid,boolean,uuid)', 'EXECUTE'
+      ) as anon_respond,
+      has_function_privilege(
+        'authenticated', 'public.create_doubles_friendly_challenge(uuid,uuid,text)', 'EXECUTE'
+      ) as member_create
+  `)
+  assert(rows[0].anon_create === false, 'anon cannot create a doubles challenge')
+  assert(rows[0].anon_respond === false, 'anon cannot respond to a doubles challenge')
+  assert(rows[0].member_create === true, 'an authenticated member can create a doubles challenge')
+})
+
+/** Links a player to a fresh active profile for the seasonal and doubles rules. */
 async function linkActivePlayer(playerId, profileId, fullName) {
   await actAs('postgres')
   await db.query(
@@ -4963,6 +5357,11 @@ async function linkActivePlayer(playerId, profileId, fullName) {
     `insert into public.profiles (id, full_name, status)
      values ('${profileId}', '${fullName}', 'active')
      on conflict (id) do update set status = 'active'`,
+  )
+  await db.query(
+    `insert into public.user_roles (profile_id, role_id, granted_by)
+     select '${profileId}', id, '${C}' from public.roles where key = 'player'
+     on conflict (profile_id, role_id) do nothing`,
   )
   await db.query(`update public.players set profile_id = '${profileId}' where id = '${playerId}'`)
 }

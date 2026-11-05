@@ -2,14 +2,13 @@ import { BarChart3, Plus } from 'lucide-react'
 import * as React from 'react'
 import { toast } from 'sonner'
 
-import { ArenaStatStrip } from '@/components/arena/arena-ui'
+import { ProgressTrack, SectionHeading } from '@/components/arena/arena-ui'
 import { EmptyState } from '@/components/shared/empty-state'
 import { ErrorState } from '@/components/shared/error-state'
 import { LoadingState } from '@/components/shared/loading-state'
 import { PageHeader } from '@/components/shared/page-header'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -106,7 +105,8 @@ export function PollsPage() {
 
   const reload = React.useCallback(() => setReloadKey((current) => current + 1), [])
 
-  const openPolls = views.filter((view) => view.poll.status === 'open').length
+  const openViews = views.filter((view) => view.poll.status === 'open')
+  const closedViews = views.filter((view) => view.poll.status !== 'open')
   const voted = views.filter((view) => view.results.my_option_ids.length > 0).length
 
   async function closePoll(poll: PollRecord) {
@@ -148,6 +148,12 @@ export function PollsPage() {
         kicker="Club vote"
         title="Polls"
         description="Club votes. One response per player; tallies never reveal who voted unless the poll says otherwise."
+        stats={[
+          { label: 'Polls', value: String(views.length) },
+          { label: 'Open', value: String(openViews.length) },
+          { label: 'Closed', value: String(closedViews.length) },
+          { label: 'You voted', value: String(voted) },
+        ]}
         actions={
           isStaff ? (
             <Button onClick={() => setCreateOpen(true)}>
@@ -158,109 +164,119 @@ export function PollsPage() {
         }
       />
 
-      <ArenaStatStrip
-        className="mt-5"
-        stats={[
-          { label: 'Polls', value: String(views.length), detail: 'On the club record' },
-          { label: 'Open', value: String(openPolls), detail: 'Taking responses' },
-          { label: 'Closed', value: String(views.length - openPolls), detail: 'Results final' },
-          { label: 'You voted', value: String(voted), detail: 'Responses recorded' },
-        ]}
-      />
-
       {views.length === 0 ? (
-        <Card className="mt-4">
-          <CardContent className="p-5">
-            <EmptyState
-              icon={BarChart3}
-              title="No polls yet"
-              description={
-                isStaff
-                  ? 'Create a poll with at least two options and open it for the club.'
-                  : 'Club staff have not opened a poll yet.'
-              }
+        <EmptyState
+          className="mt-6"
+          icon={BarChart3}
+          title="No polls yet"
+          description={
+            isStaff
+              ? 'Create a poll with at least two options and open it for the club.'
+              : 'Club staff have not opened a poll yet.'
+          }
+          action={
+            isStaff ? (
+              <Button onClick={() => setCreateOpen(true)}>
+                <Plus aria-hidden="true" />
+                New poll
+              </Button>
+            ) : null
+          }
+        />
+      ) : (
+        <>
+          <div className="mt-6">
+            <SectionHeading
+              index="01"
+              title="Open ballots"
+              description="One response per player. Your vote can be updated until the poll closes."
               action={
-                isStaff ? (
-                  <Button onClick={() => setCreateOpen(true)}>
-                    <Plus aria-hidden="true" />
-                    New poll
-                  </Button>
-                ) : null
+                <span className="font-mono text-[11px] tabular-nums text-text-faint">
+                  {openViews.length} open
+                </span>
               }
             />
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="mt-4 grid gap-4 xl:grid-cols-2">
-          {views.map(({ poll, options, results }) => (
-            <Card key={poll.id}>
-              <CardHeader>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <CardTitle>{poll.question}</CardTitle>
-                  <div className="flex items-center gap-1.5">
-                    {poll.is_anonymous ? <Badge tone="neutral">Anonymous</Badge> : null}
-                    <Badge tone={poll.status === 'open' ? 'accent' : 'neutral'}>
-                      {POLL_STATUS_LABELS[poll.status]}
-                    </Badge>
+          </div>
+
+          {openViews.length === 0 ? (
+            <p className="mt-4 text-sm text-text-muted">
+              No open votes right now.
+              {closedViews.length > 0 ? ' The last closed ballots are below.' : ''}
+            </p>
+          ) : (
+            <div className="mt-1 divide-y divide-border">
+              {openViews.map(({ poll, options, results }) => (
+                <article key={poll.id} className="py-5">
+                  <div className="pb-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h2 className="text-base font-semibold tracking-tight text-text">
+                        {poll.question}
+                      </h2>
+                      <div className="flex items-center gap-1.5">
+                        {poll.is_anonymous ? <Badge tone="neutral">Anonymous</Badge> : null}
+                        <Badge tone="accent">{POLL_STATUS_LABELS[poll.status]}</Badge>
+                      </div>
+                    </div>
+                    <p className="mt-1 text-sm leading-relaxed text-text-muted">
+                      {poll.description ?? `${POLL_MODE_LABELS[poll.mode]} poll.`}
+                      {poll.closes_at ? ` Closes ${formatDateTime(poll.closes_at)}.` : ''}
+                    </p>
                   </div>
-                </div>
-                <CardDescription>
-                  {poll.description ?? `${POLL_MODE_LABELS[poll.mode]} poll.`}
-                  {poll.closes_at ? ` Closes ${formatDateTime(poll.closes_at)}.` : ''}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-3">
-                <PollBallot
-                  poll={poll}
-                  options={options}
-                  results={results}
-                  canVote={hasPlayer && poll.status === 'open'}
-                  onVoted={reload}
-                />
 
-                {results.results_visible ? (
-                  <div className="flex flex-col gap-2">
-                    {results.options.map((option) => {
-                      const total = results.options.reduce(
-                        (sum, entry) => sum + (entry.count ?? 0),
-                        0,
-                      )
-                      const share =
-                        total === 0 ? 0 : Math.round(((option.count ?? 0) / total) * 100)
+                  <div className="flex flex-col gap-3">
+                    <PollBallot
+                      poll={poll}
+                      options={options}
+                      results={results}
+                      canVote={hasPlayer && poll.status === 'open'}
+                      onVoted={reload}
+                    />
 
-                      return (
-                        <div key={option.id} className="flex items-center gap-2 text-sm">
-                          <span className="w-40 truncate text-text-muted">{option.label}</span>
-                          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-2">
-                            <div className="h-full bg-accent" style={{ width: `${share}%` }} />
-                          </div>
-                          <span className="w-16 text-right font-mono text-xs tabular-nums text-text-muted">
-                            {option.count} · {share}%
-                          </span>
-                        </div>
-                      )
-                    })}
+                    {results.results_visible ? (
+                      <PollResultsBars results={results} />
+                    ) : (
+                      <p className="text-xs text-text-muted">
+                        Results stay hidden until the poll closes.
+                      </p>
+                    )}
+
+                    {isStaff && poll.status === 'open' ? (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="self-start"
+                        onClick={() => void closePoll(poll)}
+                      >
+                        Close poll
+                      </Button>
+                    ) : null}
                   </div>
-                ) : (
-                  <p className="text-xs text-text-muted">
-                    Results stay hidden until the poll closes.
-                  </p>
-                )}
+                </article>
+              ))}
+            </div>
+          )}
 
-                {isStaff && poll.status === 'open' ? (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="self-start"
-                    onClick={() => void closePoll(poll)}
-                  >
-                    Close poll
-                  </Button>
-                ) : null}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+          {closedViews.length > 0 ? (
+            <section className="mt-8" aria-label="Closed ballots">
+              <SectionHeading
+                index="02"
+                title="Closed"
+                description="Final tallies. Rows stay compact; open a ballot to read its result."
+                action={
+                  <span className="font-mono text-[11px] tabular-nums text-text-faint">
+                    {closedViews.length} closed
+                  </span>
+                }
+              />
+
+              <ul className="mt-1 divide-y divide-border">
+                {closedViews.map(({ poll, results }) => (
+                  <ClosedPoll key={poll.id} poll={poll} results={results} />
+                ))}
+              </ul>
+            </section>
+          ) : null}
+        </>
       )}
 
       {createOpen ? (
@@ -274,6 +290,80 @@ export function PollsPage() {
         />
       ) : null}
     </>
+  )
+}
+
+/** One tally, as a labelled track. Shared by open and closed ballots. */
+function PollResultsBars({ results }: { results: PollResults }) {
+  const total = results.options.reduce((sum, option) => sum + (option.count ?? 0), 0)
+
+  return (
+    <div className="flex flex-col gap-2">
+      {results.options.map((option) => {
+        const share = total === 0 ? 0 : Math.round(((option.count ?? 0) / total) * 100)
+
+        return (
+          <div key={option.id} className="flex items-center gap-2 text-sm">
+            <span className="w-40 truncate text-text-muted">{option.label}</span>
+            <ProgressTrack
+              className="flex-1"
+              value={share / 100}
+              edge={false}
+              label={`${option.label} share`}
+            />
+            <span className="w-16 text-right font-mono text-xs tabular-nums text-text-muted">
+              {option.count} · {share}%
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+/** A settled ballot: the headline numbers, then the tally on demand. */
+function ClosedPoll({ poll, results }: { poll: PollRecord; results: PollResults }) {
+  const total = results.options.reduce((sum, option) => sum + (option.count ?? 0), 0)
+  let leader: { label: string; count: number } | null = null
+
+  for (const option of results.options) {
+    if (option.count === null) continue
+    if (!leader || option.count > leader.count) {
+      leader = { label: option.label, count: option.count }
+    }
+  }
+
+  return (
+    <li className="py-4">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h3 className="text-sm font-medium text-text">{poll.question}</h3>
+          <p className="mt-0.5 font-mono text-[10px] uppercase tracking-[0.06em] text-text-faint">
+            {total} vote{total === 1 ? '' : 's'}
+            {leader ? ` · ${leader.label} led` : ' · no votes cast'}
+            {poll.closes_at ? ` · closed ${formatDateTime(poll.closes_at)}` : ''}
+          </p>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1.5">
+          {poll.is_anonymous ? <Badge tone="neutral">Anonymous</Badge> : null}
+          <Badge tone="neutral">{POLL_STATUS_LABELS[poll.status]}</Badge>
+        </div>
+      </div>
+
+      {results.results_visible ? (
+        <details className="mt-2">
+          <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-sm text-[11px] font-medium text-text-muted transition-colors duration-fast hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring [&::-webkit-details-marker]:hidden">
+            Read results
+          </summary>
+          <div className="mt-2">
+            <PollResultsBars results={results} />
+          </div>
+        </details>
+      ) : (
+        <p className="mt-1 text-[11px] text-text-muted">Results were not published.</p>
+      )}
+    </li>
   )
 }
 

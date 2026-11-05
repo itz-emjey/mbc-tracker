@@ -138,6 +138,31 @@ describe('arenaRecord', () => {
     expect(record.streak).toEqual({ kind: 'win', length: 2 })
   })
 
+  it('counts doubles partners as participants and winning partners as winners', () => {
+    const record = arenaRecord(
+      [
+        doubles({
+          id: 'win',
+          status: 'confirmed',
+          winner_id: 'p1',
+          confirmed_at: '2026-11-01T10:00:00Z',
+        }),
+        doubles({
+          id: 'loss',
+          status: 'confirmed',
+          winner_id: 'p2',
+          confirmed_at: '2026-10-30T10:00:00Z',
+        }),
+      ],
+      'p4',
+    )
+
+    expect(record.played).toBe(2)
+    expect(record.wins).toBe(1)
+    expect(record.losses).toBe(1)
+    expect(record.form).toEqual(['win', 'loss'])
+  })
+
   it('has no record without a linked player or decided matches', () => {
     expect(arenaRecord([], null)).toEqual({
       played: 0,
@@ -197,6 +222,49 @@ describe('arenaMatches', () => {
     expect(rows[0]?.result).toBeNull()
   })
 
+  it('asks each losing doubles partner once and never the winning team', () => {
+    const rows = arenaMatches(
+      [
+        doubles({
+          id: 'review',
+          status: 'awaiting_approval',
+          winner_id: 'p1',
+          auto_approval_due_at: '2026-11-02T20:00:00Z',
+        }),
+        doubles({
+          id: 'approved',
+          status: 'awaiting_approval',
+          winner_id: 'p1',
+          opponent_partner_approved_at: '2026-11-01T11:00:00Z',
+        }),
+        doubles({ id: 'winner', status: 'awaiting_approval', winner_id: 'p2' }),
+      ],
+      'p5',
+      NOW,
+    )
+
+    expect(rows.find((row) => row.id === 'review')?.needsYou).toBe(true)
+    expect(rows.find((row) => row.id === 'approved')?.needsYou).toBe(false)
+    expect(rows.find((row) => row.id === 'winner')?.needsYou).toBe(false)
+  })
+
+  it('gives a doubles partner the result and opposing captain', () => {
+    const rows = arenaMatches(
+      [
+        doubles({
+          id: 'win',
+          status: 'confirmed',
+          winner_id: 'p1',
+          confirmed_at: '2026-11-01T10:00:00Z',
+        }),
+      ],
+      'p4',
+      NOW,
+    )
+
+    expect(rows[0]).toMatchObject({ opponentId: 'p2', direction: 'outgoing', result: 'win' })
+  })
+
   it('ignores matches the player is not part of and caps the list', () => {
     const rows = arenaMatches(
       [
@@ -253,13 +321,29 @@ describe('daysBetween', () => {
 function match(overrides: Partial<ArenaMatchLike>): ArenaMatchLike {
   return {
     id: 'match',
+    match_type: 'singles',
     challenger_id: 'p1',
+    challenger_partner_id: null,
     opponent_id: 'p2',
+    opponent_partner_id: null,
     status: 'pending',
     winner_id: null,
+    challenger_approved_at: null,
+    challenger_partner_approved_at: null,
+    opponent_approved_at: null,
+    opponent_partner_approved_at: null,
     created_at: '2026-11-01T10:00:00Z',
     confirmed_at: null,
     auto_approval_due_at: null,
     ...overrides,
   }
+}
+
+function doubles(overrides: Partial<ArenaMatchLike> = {}): ArenaMatchLike {
+  return match({
+    match_type: 'doubles',
+    challenger_partner_id: 'p4',
+    opponent_partner_id: 'p5',
+    ...overrides,
+  })
 }

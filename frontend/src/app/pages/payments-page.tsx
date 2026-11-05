@@ -2,14 +2,13 @@ import { Plus, Receipt, Wallet } from 'lucide-react'
 import * as React from 'react'
 import { toast } from 'sonner'
 
-import { ArenaStatStrip } from '@/components/arena/arena-ui'
+import { SectionHeading } from '@/components/arena/arena-ui'
 import { EmptyState } from '@/components/shared/empty-state'
 import { ErrorState } from '@/components/shared/error-state'
 import { LoadingState } from '@/components/shared/loading-state'
 import { PageHeader } from '@/components/shared/page-header'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -64,6 +63,7 @@ import {
   type TrainingPaymentRecord,
 } from '@/features/training/types'
 import { feePeriodFormSchema, paymentFormSchema } from '@/features/training/validation'
+import { cn } from '@/lib/cn'
 import { formatDate } from '@/lib/format'
 
 const STATE_TONES: Record<PaymentState, 'accent' | 'warning' | 'danger'> = {
@@ -74,6 +74,32 @@ const STATE_TONES: Record<PaymentState, 'accent' | 'warning' | 'danger'> = {
 
 function today(): string {
   return new Date().toISOString().slice(0, 10)
+}
+
+function MoneyField({
+  label,
+  value,
+  muted = false,
+}: {
+  label: string
+  value: string
+  muted?: boolean
+}) {
+  return (
+    <div>
+      <dt className="text-[10px] font-semibold uppercase tracking-[0.12em] text-text-faint">
+        {label}
+      </dt>
+      <dd
+        className={cn(
+          'mt-0.5 font-mono text-sm tabular-nums',
+          muted ? 'text-text-muted' : 'text-text',
+        )}
+      >
+        {value}
+      </dd>
+    </div>
+  )
 }
 
 export function PaymentsPage() {
@@ -157,6 +183,29 @@ export function PaymentsPage() {
     return grouped
   }, [visiblePayments])
 
+  const periodRows = React.useMemo(
+    () =>
+      periods.map((period) => {
+        const paid = sumRecorded(paymentsByPeriod.get(period.id) ?? [])
+        return { period, paid, state: paymentState(period.amount, paid) }
+      }),
+    [periods, paymentsByPeriod],
+  )
+
+  const periodsById = React.useMemo(
+    () => new Map(periods.map((period) => [period.id, period])),
+    [periods],
+  )
+
+  const paymentRows = React.useMemo(
+    () =>
+      visiblePayments.map((payment) => ({
+        payment,
+        periodLabel: periodsById.get(payment.fee_period_id)?.label ?? null,
+      })),
+    [visiblePayments, periodsById],
+  )
+
   const collectedTotal = sumRecorded(visiblePayments)
   const latestPeriod = periods[0]
   const ownPaidLatest =
@@ -204,6 +253,15 @@ export function PaymentsPage() {
         kicker="Club ledger"
         title="Payments"
         description="Manual training fee records. Payments are never edited: a mistake is voided and recorded again."
+        stats={[
+          { label: 'Fee periods', value: String(periods.length) },
+          { label: 'Payments', value: String(visiblePayments.length) },
+          { label: 'Collected', value: formatMoney(collectedTotal) },
+          {
+            label: isStaff ? 'Voided' : 'Still due',
+            value: isStaff ? String(voidedCount) : ownDue === null ? '—' : formatMoney(ownDue),
+          },
+        ]}
         actions={
           isStaff ? (
             <Button onClick={() => setPeriodOpen(true)}>
@@ -214,82 +272,98 @@ export function PaymentsPage() {
         }
       />
 
-      <ArenaStatStrip
-        className="mt-5"
-        stats={[
-          {
-            label: 'Fee periods',
-            value: String(periods.length),
-            detail: latestPeriod?.label ?? 'None created yet',
-          },
-          {
-            label: 'Payments',
-            value: String(visiblePayments.length),
-            detail: isStaff ? 'Across all players' : 'On your record',
-          },
-          {
-            label: 'Collected',
-            value: formatMoney(collectedTotal),
-            detail: isStaff ? 'Recorded, non-voided' : 'Your recorded payments',
-          },
-          {
-            label: isStaff ? 'Voided' : 'Still due',
-            value: isStaff ? String(voidedCount) : ownDue === null ? '—' : formatMoney(ownDue),
-            detail: isStaff ? 'Kept in history' : (latestPeriod?.label ?? 'No open period'),
-          },
-        ]}
-      />
-
-      <Card className="mt-4">
-        <CardHeader>
-          <CardTitle>Fee periods</CardTitle>
-          <CardDescription>
-            {isStaff
+      <div className="mt-6">
+        <SectionHeading
+          index="01"
+          title="Fee periods"
+          description={
+            isStaff
               ? 'Collected totals count recorded payments only. Voided rows stay in history.'
-              : 'What each period costs, what you have paid, and what is still due.'}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {periods.length === 0 ? (
-            <EmptyState
-              icon={Wallet}
-              title="No fee periods yet"
-              description={
-                isStaff
-                  ? 'Create a period (for example 2026-11), then record payments against it.'
-                  : 'Training staff have not published a fee period yet.'
-              }
-              action={
-                isStaff ? (
-                  <Button onClick={() => setPeriodOpen(true)}>
-                    <Plus aria-hidden="true" />
-                    New fee period
-                  </Button>
-                ) : null
-              }
-            />
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Period</TableHead>
-                  <TableHead className="hidden md:table-cell">Dates</TableHead>
-                  <TableHead className="text-right">Fee</TableHead>
-                  <TableHead className="text-right">Collected</TableHead>
-                  <TableHead className="text-right">Status</TableHead>
-                  {isStaff ? <TableHead className="text-right">Action</TableHead> : null}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {periods.map((period) => {
-                  const rows = paymentsByPeriod.get(period.id) ?? []
-                  const paid = sumRecorded(rows)
-                  const state = paymentState(period.amount, paid)
+              : 'What each period costs, what you have paid, and what is still due.'
+          }
+        />
+      </div>
 
-                  return (
+      <div className="mt-4">
+        {periods.length === 0 ? (
+          <EmptyState
+            icon={Wallet}
+            title="No fee periods yet"
+            description={
+              isStaff
+                ? 'Create a period (for example 2026-11), then record payments against it.'
+                : 'Training staff have not published a fee period yet.'
+            }
+            action={
+              isStaff ? (
+                <Button onClick={() => setPeriodOpen(true)}>
+                  <Plus aria-hidden="true" />
+                  New fee period
+                </Button>
+              ) : null
+            }
+          />
+        ) : (
+          <>
+            <ul className="divide-y divide-border overflow-hidden rounded-md border border-border md:hidden">
+              {periodRows.map(({ period, paid, state }) => (
+                <li key={period.id} className="px-3 py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-text">{period.label}</p>
+                      <p className="mt-0.5 font-mono text-[11px] text-text-faint">
+                        {formatDate(period.starts_on)} – {formatDate(period.ends_on)}
+                      </p>
+                    </div>
+                    {isStaff ? null : <Badge tone={STATE_TONES[state]}>{state}</Badge>}
+                  </div>
+
+                  <dl className="mt-2.5 grid grid-cols-3 gap-2">
+                    <MoneyField label="Fee" value={formatMoney(period.amount)} />
+                    <MoneyField
+                      label={isStaff ? 'Collected' : 'Paid'}
+                      value={formatMoney(paid)}
+                      muted
+                    />
+                    <MoneyField
+                      label="Left"
+                      value={formatMoney(remainingAmount(period.amount, paid))}
+                      muted
+                    />
+                  </dl>
+
+                  {isStaff ? (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="mt-3 w-full"
+                      onClick={() => setPayTarget(period)}
+                    >
+                      <Receipt aria-hidden="true" />
+                      Record payment
+                    </Button>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+
+            <div className="hidden md:block">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Period</TableHead>
+                    <TableHead>Dates</TableHead>
+                    <TableHead className="text-right">Fee</TableHead>
+                    <TableHead className="text-right">Collected</TableHead>
+                    <TableHead className="text-right">Status</TableHead>
+                    {isStaff ? <TableHead className="text-right">Action</TableHead> : null}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {periodRows.map(({ period, paid, state }) => (
                     <TableRow key={period.id}>
                       <TableCell className="font-medium text-text">{period.label}</TableCell>
-                      <TableCell className="hidden whitespace-nowrap text-text-muted md:table-cell">
+                      <TableCell className="whitespace-nowrap text-text-muted">
                         {formatDate(period.starts_on)} – {formatDate(period.ends_on)}
                       </TableCell>
                       <TableCell className="text-right font-mono text-sm tabular-nums">
@@ -320,56 +394,98 @@ export function PaymentsPage() {
                         </TableCell>
                       ) : null}
                     </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
-          )}
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </>
+        )}
 
-          {!isStaff && ownPlayer === null ? (
-            <p className="mt-3 text-xs text-text-muted">
-              Your payments appear once your account is linked to a player record.
-            </p>
-          ) : null}
-        </CardContent>
-      </Card>
+        {!isStaff && ownPlayer === null ? (
+          <p className="mt-3 text-xs text-text-muted">
+            Your payments appear once your account is linked to a player record.
+          </p>
+        ) : null}
+      </div>
 
-      <Card className="mt-5">
-        <CardHeader>
-          <CardTitle>{isStaff ? 'Recorded payments' : 'Your payments'}</CardTitle>
-          <CardDescription>
-            Newest first. A voided row stays visible with its reason.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {visiblePayments.length === 0 ? (
-            <EmptyState
-              icon={Receipt}
-              title={isStaff ? 'No payments recorded' : 'No payments recorded yet'}
-              description={
-                isStaff
-                  ? 'Record a payment from a fee period above.'
-                  : 'Payments recorded by training staff will appear here.'
-              }
-            />
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  {isStaff ? <TableHead>Player</TableHead> : null}
-                  <TableHead className="hidden sm:table-cell">Period</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                  <TableHead className="hidden md:table-cell">Method</TableHead>
-                  <TableHead className="text-right">Status</TableHead>
-                  {isStaff ? <TableHead className="text-right">Action</TableHead> : null}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {visiblePayments.map((payment) => {
-                  const period = periods.find((entry) => entry.id === payment.fee_period_id)
+      <div className="mt-8">
+        <SectionHeading
+          index="02"
+          title={isStaff ? 'Recorded payments' : 'Your payments'}
+          description="Newest first. A voided row stays visible with its reason."
+        />
+      </div>
 
-                  return (
+      <div className="mt-4">
+        {visiblePayments.length === 0 ? (
+          <EmptyState
+            icon={Receipt}
+            title={isStaff ? 'No payments recorded' : 'No payments recorded yet'}
+            description={
+              isStaff
+                ? 'Record a payment from a fee period above.'
+                : 'Payments recorded by training staff will appear here.'
+            }
+          />
+        ) : (
+          <>
+            <ul className="divide-y divide-border overflow-hidden rounded-md border border-border md:hidden">
+              {paymentRows.map(({ payment, periodLabel }) => (
+                <li key={payment.id} className="px-3 py-2.5">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <p className="min-w-0 truncate text-sm text-text">
+                      {isStaff ? playerName(payment.player_id) : (periodLabel ?? 'Training fee')}
+                    </p>
+                    <span className="shrink-0 font-mono text-sm tabular-nums text-text">
+                      {formatMoney(payment.amount)}
+                    </span>
+                  </div>
+
+                  <div className="mt-1 flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                      <Badge tone={payment.status === 'recorded' ? 'accent' : 'neutral'}>
+                        {payment.status}
+                      </Badge>
+                      <span className="min-w-0 truncate font-mono text-[11px] text-text-faint">
+                        {[
+                          formatDate(payment.paid_on),
+                          isStaff ? (periodLabel ?? '—') : null,
+                          PAYMENT_METHOD_LABELS[payment.method],
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </span>
+                    </div>
+                    {isStaff && payment.status === 'recorded' ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="shrink-0"
+                        onClick={() => setVoidTarget(payment)}
+                      >
+                        Void
+                      </Button>
+                    ) : null}
+                  </div>
+                </li>
+              ))}
+            </ul>
+
+            <div className="hidden md:block">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    {isStaff ? <TableHead>Player</TableHead> : null}
+                    <TableHead>Period</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                    <TableHead>Method</TableHead>
+                    <TableHead className="text-right">Status</TableHead>
+                    {isStaff ? <TableHead className="text-right">Action</TableHead> : null}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paymentRows.map(({ payment, periodLabel }) => (
                     <TableRow key={payment.id}>
                       <TableCell className="whitespace-nowrap text-text-muted">
                         {formatDate(payment.paid_on)}
@@ -379,13 +495,11 @@ export function PaymentsPage() {
                           {playerName(payment.player_id)}
                         </TableCell>
                       ) : null}
-                      <TableCell className="hidden text-text-muted sm:table-cell">
-                        {period?.label ?? '—'}
-                      </TableCell>
+                      <TableCell className="text-text-muted">{periodLabel ?? '—'}</TableCell>
                       <TableCell className="text-right font-mono text-sm tabular-nums text-text">
                         {formatMoney(payment.amount)}
                       </TableCell>
-                      <TableCell className="hidden text-text-muted md:table-cell">
+                      <TableCell className="text-text-muted">
                         {PAYMENT_METHOD_LABELS[payment.method]}
                       </TableCell>
                       <TableCell className="text-right">
@@ -409,13 +523,13 @@ export function PaymentsPage() {
                         </TableCell>
                       ) : null}
                     </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </>
+        )}
+      </div>
 
       {periodOpen ? (
         <FeePeriodDialog

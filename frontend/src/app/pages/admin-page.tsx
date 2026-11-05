@@ -14,7 +14,7 @@ import * as React from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
-import { ArenaStatStrip } from '@/components/arena/arena-ui'
+import { SectionHeading } from '@/components/arena/arena-ui'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { EmptyState } from '@/components/shared/empty-state'
 import { ErrorState } from '@/components/shared/error-state'
@@ -139,6 +139,12 @@ export function AdminPage() {
         kicker="Operations"
         title="Administration"
         description="Approve registrations, link player records, assign roles, and manage account access."
+        stats={[
+          { label: 'Pending', value: String(pending.length) },
+          { label: 'Members', value: String(members.length) },
+          { label: 'Active', value: String(activeMembers) },
+          { label: 'Unlinked players', value: String(players.length) },
+        ]}
         actions={
           <div className="flex items-center gap-2">
             <Button variant="secondary" size="sm" asChild>
@@ -163,23 +169,13 @@ export function AdminPage() {
         />
       ) : null}
 
-      <ArenaStatStrip
-        className="mt-5"
-        stats={[
-          {
-            label: 'Pending requests',
-            value: String(pending.length),
-            detail: pending.length > 0 ? 'Waiting for review' : 'Queue is clear',
-          },
-          { label: 'Members', value: String(members.length), detail: 'Approved accounts' },
-          { label: 'Active', value: String(activeMembers), detail: 'Can sign in now' },
-          {
-            label: 'Unlinked players',
-            value: String(players.length),
-            detail: 'Records without an account',
-          },
-        ]}
-      />
+      <div className="mt-6">
+        <SectionHeading
+          index="01"
+          title="Members & access"
+          description="Approvals, roles, and account links for the club roster."
+        />
+      </div>
 
       <Tabs value={tab} onValueChange={setTab} className="mt-4">
         <TabsList>

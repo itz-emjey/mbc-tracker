@@ -5,10 +5,9 @@ import { cn } from '@/lib/cn'
 /**
  * Arena surfaces.
  *
- * Cards are HUD panels: a flat surface with a ruled header and compact,
- * evenly-weighted padding. Everything built from these primitives — including
- * feature panels written before the arena redesign — inherits the same look,
- * so no module drifts back to the old card style.
+ * Cards are scoreboard panels: a flat surface with a ruled header, a thin
+ * highlight on the top edge, and compact padding. Anything built from these
+ * inherits the same materials, so no module drifts back to a different look.
  */
 
 const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(function Card(
@@ -18,7 +17,10 @@ const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElemen
   return (
     <div
       ref={ref}
-      className={cn('overflow-hidden rounded-md border border-border bg-surface-1', className)}
+      className={cn(
+        'relative overflow-hidden rounded-md border border-border bg-surface-1 shadow-panel',
+        className,
+      )}
       {...props}
     />
   )
@@ -45,7 +47,7 @@ const CardTitle = React.forwardRef<HTMLHeadingElement, React.HTMLAttributes<HTML
     return (
       <h3
         ref={ref}
-        className={cn('text-sm font-semibold leading-tight text-text', className)}
+        className={cn('text-sm font-semibold tracking-tight leading-tight text-text', className)}
         {...props}
       />
     )
